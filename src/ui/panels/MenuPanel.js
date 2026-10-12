@@ -19,6 +19,7 @@ export class MenuPanel extends Panel {
         <button data-action="go" data-panel="fish" data-tab="collection"><span>📘</span><b>สมุดสะสม</b><small>${game.state.collectionCount}/${FISH_SPECIES.length} สายพันธุ์</small></button>
         <button data-action="go" data-panel="help"><span>❓</span><b>วิธีเล่น</b><small>เริ่มต้นเลี้ยงปลา</small></button>
         <button data-action="go" data-panel="settings"><span>⚙️</span><b>ตั้งค่า</b><small>เสียง · กราฟิก</small></button>
+        ${game.cloud ? '<button data-action="go" data-panel="cloud"><span>☁️</span><b>เซฟคลาวด์</b><small>สำรอง · กู้คืน · ออกจากระบบ</small></button>' : ''}
       </div>`;
   }
 

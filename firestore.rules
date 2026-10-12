@@ -1,0 +1,152 @@
+rules_version = '2';
+
+// Security Rules ของเซฟกลาง — แผน Spark (ฟรี ไม่มี Cloud Functions) · ค่าเริ่มต้นของโปรเจกต์
+//
+// หน้าเว็บเขียนเซฟเองผ่าน Firestore transaction โดยใช้กฎเกมชุดเดียวกัน (src/shared/) และ Rules นี้บังคับว่า:
+// - ต้องเข้าสู่ระบบด้วย "บัญชีผู้เล่นหลัก" เท่านั้น (เทียบ UID ตรงตัวใน playerUid() ข้างล่าง)
+// - revision ต้องเพิ่มทีละ 1 จากค่าบนเซิร์ฟเวอร์ → เขียนทับด้วยข้อมูลที่อ่านมาเก่าไม่ได้ (กันข้อมูลหาย)
+// - updatedAt ต้องเป็นเวลาของเซิร์ฟเวอร์, createdAt ห้ามเปลี่ยน, ห้ามลบเซฟ
+// - โครงสร้างและช่วงค่าต้องถูกต้อง (เงินไม่ติดลบ, ชนิดตู้/จำนวนปลาไม่เกินความจุ ฯลฯ)
+// - จุดสำรองสร้างได้อย่างเดียว แก้/ลบไม่ได้
+//
+// ข้อจำกัด: Rules พิสูจน์ไม่ได้ว่าการซื้อขายแต่ละครั้งถูกต้อง ผู้ที่รู้รหัสผ่านและเขียน Firestore เองยังแก้ค่าได้
+// ภายในขอบเขตข้างต้น (ถ้าต้องการให้เซิร์ฟเวอร์ตรวจทุกการซื้อขาย ต้องใช้แผน Blaze: firestore.blaze.rules)
+// deploy: npm run deploy (ตรวจว่าตั้ง UID แล้วก่อน deploy ทุกครั้ง)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // UID ของบัญชีผู้เล่นหลัก (ไม่ใช่ความลับ) — ตั้งด้วยคำสั่ง: npm run set-player-uid -- <UID>
+    // ค่าเริ่มต้นเป็นข้อความที่ไม่มีทางตรงกับ UID จริง → ถ้ายังไม่ตั้ง จะไม่มีใครอ่าน/เขียนเซฟได้เลย
+    function playerUid() {
+      return 'SET_PLAYER_UID_BEFORE_DEPLOY';
+    }
+
+    // ต้องเป็นบัญชีหลัก และเข้าสู่ระบบด้วย Email/Password (ไม่รับ token แบบอื่น เช่น custom/anonymous)
+    function isPlayer() {
+      return request.auth != null
+        && playerUid() != 'SET_PLAYER_UID_BEFORE_DEPLOY'
+        && request.auth.uid == playerUid()
+        && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function isCount(v, max) {
+      return v is int && v >= 0 && v <= max;
+    }
+
+    function capacityOf(typeId) {
+      return typeId == 'starter' ? 14 : (typeId == 'classic' ? 20 : (typeId == 'large' ? 28 : 40));
+    }
+
+    function validTank(t) {
+      return t is map
+        && t.keys().hasAll(['id', 'typeId', 'cleanliness', 'fish', 'decor'])
+        && t.keys().hasOnly(['id', 'typeId', 'name', 'cleanliness', 'fish', 'decor', 'lastUpdate'])
+        && t.id is string && t.id.size() <= 64
+        && t.typeId in ['starter', 'classic', 'large', 'panorama']
+        && t.cleanliness is number && t.cleanliness >= 0 && t.cleanliness <= 100
+        && t.fish is list && t.fish.size() <= capacityOf(t.typeId)
+        && t.decor is list && t.decor.size() <= 150;
+    }
+
+    function validInventory(inv) {
+      return inv is map
+        && inv.keys().hasOnly(['flakes', 'pellets', 'bloodworm', 'medicine'])
+        && isCount(inv.get('flakes', 0), 1000000)
+        && isCount(inv.get('pellets', 0), 1000000)
+        && isCount(inv.get('bloodworm', 0), 1000000)
+        && isCount(inv.get('medicine', 0), 1000000);
+    }
+
+    function validMissions(m) {
+      return m is map
+        && m.keys().hasAll(['day', 'progress', 'claimed'])
+        && m.keys().hasOnly(['day', 'progress', 'claimed'])
+        && m.day is string && m.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && m.progress is map && m.claimed is map;
+    }
+
+    function validStats(s) {
+      return s is map
+        && s.keys().hasAll(['feeds', 'coinsCollected', 'fishBorn', 'fishBought'])
+        && s.keys().hasOnly(['feeds', 'coinsCollected', 'fishBorn', 'fishBought'])
+        && isCount(s.feeds, 1000000000000)
+        && isCount(s.coinsCollected, 1000000000000)
+        && isCount(s.fishBorn, 1000000000000)
+        && isCount(s.fishBought, 1000000000000);
+    }
+
+    function validGame(g) {
+      return g is map
+        && g.keys().hasOnly(['version', 'coins', 'gems', 'inventory', 'selectedFood', 'collection', 'tanks', 'activeTankId',
+          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved'])
+        && g.version == 1
+        && isCount(g.coins, 1000000000)
+        && isCount(g.gems, 10000000)
+        && validInventory(g.inventory)
+        && g.selectedFood in ['flakes', 'pellets', 'bloodworm']
+        && g.collection is map && g.collection.size() <= 30
+        && g.tanks is list && g.tanks.size() >= 1 && g.tanks.size() <= 4
+        && validTank(g.tanks[0])
+        && (g.tanks.size() < 2 || validTank(g.tanks[1]))
+        && (g.tanks.size() < 3 || validTank(g.tanks[2]))
+        && (g.tanks.size() < 4 || validTank(g.tanks[3]))
+        && g.activeTankId is string
+        && validMissions(g.missions) && validStats(g.stats);
+    }
+
+    function validMeta(m) {
+      return m is map
+        && m.keys().hasOnly(['writers', 'tanks', 'lastBackupDay'])
+        && m.writers is map && m.writers.size() <= 500
+        && m.tanks is map && m.tanks.size() <= 8;
+    }
+
+    function validSave(d) {
+      return d.keys().hasOnly(['schemaVersion', 'revision', 'epoch', 'createdAt', 'updatedAt', 'updatedBy', 'game', 'meta'])
+        && d.keys().hasAll(['schemaVersion', 'revision', 'epoch', 'createdAt', 'updatedAt', 'game', 'meta'])
+        && d.schemaVersion == 1
+        && d.revision is int
+        && d.epoch is int && d.epoch >= 0
+        && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 64))
+        && d.updatedAt == request.time
+        && validGame(d.game)
+        && validMeta(d.meta);
+    }
+
+    match /gameSaves/{saveId} {
+      allow get: if saveId == 'global' && isPlayer();
+      allow list: if false;
+
+      // สร้างเซฟกลางครั้งแรก (ทำใน transaction: ถ้ามีอยู่แล้วจะเป็น update ไม่ใช่ create)
+      allow create: if saveId == 'global' && isPlayer()
+        && validSave(request.resource.data)
+        && request.resource.data.revision == 1
+        && request.resource.data.epoch == 0
+        && request.resource.data.createdAt == request.time;
+
+      // ทุกการบันทึก: revision ต่อจากค่าปัจจุบันพอดี (ข้อมูลเก่าเขียนทับไม่ได้), epoch เพิ่มได้ทีละ 1 (รีเซ็ต/กู้คืน)
+      allow update: if saveId == 'global' && isPlayer()
+        && validSave(request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (request.resource.data.epoch == resource.data.epoch || request.resource.data.epoch == resource.data.epoch + 1);
+
+      allow delete: if false;
+
+      match /backups/{backupId} {
+        allow read: if saveId == 'global' && isPlayer();
+        allow create: if saveId == 'global' && isPlayer()
+          && request.resource.data.keys().hasOnly(['createdAt', 'reason', 'revision', 'epoch', 'schemaVersion', 'by', 'summary', 'game'])
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.reason in ['daily', 'manual', 'before-reset', 'before-restore', 'before-replace', 'before-migration']
+          && request.resource.data.revision is int
+          && request.resource.data.game is map;
+        allow update, delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

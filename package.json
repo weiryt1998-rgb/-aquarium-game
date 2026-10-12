@@ -6,14 +6,34 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emulators": "vite --mode emulator",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:functions": "vite build --config vite.functions.config.js",
+    "preview": "vite preview",
+    "firebase": "npx --yes firebase-tools@15.31.0",
+    "emulators": "npm run firebase -- emulators:start --project demo-aquarium",
+    "emulators:blaze": "npm run build:functions && npm run firebase -- emulators:start --project demo-aquarium --config firebase.blaze.json",
+    "seed:emulator": "node scripts/seed-emulator.mjs",
+    "set-player-uid": "node scripts/player-uid.mjs set",
+    "check:firebase": "node scripts/check-firebase.mjs",
+    "account:check": "node functions/scripts/update-player-account.mjs --check",
+    "account:update": "node functions/scripts/update-player-account.mjs",
+    "test": "node --test \"tests/unit/*.test.js\"",
+    "test:rules": "npm run firebase -- emulators:exec --project demo-aquarium --only firestore \"node --test --test-concurrency=1 tests/rules/*.test.js\"",
+    "test:e2e": "npm run firebase -- emulators:exec --project demo-aquarium --only auth,firestore \"node tests/e2e/run.mjs --mode rules\"",
+    "test:functions": "npm run build:functions && npm run firebase -- emulators:exec --project demo-aquarium --config firebase.blaze.json --only auth,firestore,functions \"node --test --test-concurrency=1 tests/integration/*.test.js\"",
+    "test:e2e:blaze": "npm run build:functions && npm run firebase -- emulators:exec --project demo-aquarium --config firebase.blaze.json --only auth,firestore,functions \"node tests/e2e/run.mjs --mode functions\"",
+    "deploy": "npm run firebase -- deploy --only firestore",
+    "deploy:blaze": "npm run firebase -- deploy --only firestore,functions --config firebase.blaze.json"
   },
   "dependencies": {
     "@fontsource/kanit": "^5.3.0",
+    "firebase": "^12.19.0",
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "playwright-core": "~1.63.0",
     "vite": "^8.3.4"
   }
 }

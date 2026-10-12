@@ -36,7 +36,7 @@ export class MissionSystem {
 
   progress(m) {
     const stored = this.data.progress[m.id] ?? 0;
-    const live = m.gauge ? m.gauge(this.game) : 0;
+    const live = m.gauge ? m.gauge(this.game.state.data) : 0;
     return Math.min(m.target, Math.max(stored, live));
   }
 
@@ -78,7 +78,7 @@ export class MissionSystem {
     this.ensureDay();
     for (const m of MISSIONS) {
       if (!m.gauge || this.isClaimed(m) || (this.data.progress[m.id] ?? 0) >= m.target) continue;
-      if (m.gauge(this.game) >= m.target) {
+      if (m.gauge(this.game.state.data) >= m.target) {
         this.data.progress[m.id] = m.target;
         this.#completed(m);
       }
@@ -90,6 +90,7 @@ export class MissionSystem {
     if (!m || !this.canClaim(m)) return false;
     this.data.claimed[m.id] = true;
     this.game.state.earn(m.reward);
+    this.game.state.record({ type: 'claimMission', missionId: m.id });
     this.game.sound.play('buy');
     this.game.events.emit(EV.MISSION_CLAIMED, { mission: m });
     return true;
@@ -103,6 +104,7 @@ export class MissionSystem {
     if (!this.canClaimDaily()) return false;
     this.game.state.data.dailyRewardDay = todayKey();
     this.game.state.earn(CONFIG.dailyReward);
+    this.game.state.record({ type: 'claimDaily' });
     this.game.sound.play('buy');
     return true;
   }

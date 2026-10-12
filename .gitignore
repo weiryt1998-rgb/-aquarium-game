@@ -5,3 +5,26 @@ dist/
 
 # ไฟล์โมเดลต้นฉบับ (เกมใช้สำเนาใน public/models/fish/)
 /Fish/
+
+# ค่าตั้ง Firebase ของแต่ละเครื่อง (ใช้ .env.example เป็นแม่แบบ)
+.env.local
+.env.*.local
+
+# Cloud Functions: ไฟล์ที่ build แล้ว / dependencies
+functions/lib/
+functions/node_modules/
+
+# Firebase CLI / Emulator
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+database-debug.log*
+
+# ห้าม commit กุญแจ service account เด็ดขาด
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+
+# ผลการทดสอบ
+test-results/

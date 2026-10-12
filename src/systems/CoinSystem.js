@@ -75,6 +75,7 @@ export class CoinSystem {
     this.coins.splice(i, 1);
     this.group.remove(coin.mesh);
     this.game.state.earn({ coins: coin.value });
+    this.game.state.record({ type: 'collectCoins', tankId: this.game.state.activeTank.id, count: 1, value: coin.value });
     this.game.ui.floatText(coin.mesh.position, `+${coin.value}`, 'coin');
     if (!auto) this.game.sound.play('coin');
     this.game.events.emit(EV.COIN_COLLECTED, { amount: 1, value: coin.value, auto });

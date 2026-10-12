@@ -1,7 +1,9 @@
 import { CONFIG } from '../config.js';
 import { EV } from './EventBus.js';
+import { loadSettings, saveSettings } from './settings.js';
 import { FISH_NAMES, FISH_SPECIES, getSpecies } from '../data/fish.js';
 import { getTankType } from '../data/tanks.js';
+import { earn, offlineCoins, offlineSeconds } from '../shared/economy.js';
 import { clamp, pick, rand, todayKey, uid } from '../utils/math.js';
 
 /** ของตกแต่งเริ่มต้น: [itemId, u, v, rotY] โดย u,v อยู่ในช่วง -1..1 (สัดส่วนของความกว้าง/ลึกตู้) */
@@ -85,64 +87,39 @@ export function createDefaultState() {
     dailyRewardDay: null,
     lastCleanAt: 0,
     stats: { feeds: 0, coinsCollected: 0, fishBorn: 0, fishBought: 0 },
-    settings: { sound: true, ambient: true, quality: 'high' },
     lastSaved: Date.now(),
   };
 }
 
 /**
- * สถานะเกมทั้งหมดที่ต้องบันทึก (เงิน ปลา ของตกแต่ง ภารกิจ การตั้งค่า)
- * entity ในฉาก (Fish, Decoration) อ้างอิง record ในนี้โดยตรง ดังนั้นการบันทึกคือ JSON.stringify(data)
+ * สถานะเกมทั้งหมดที่ต้องบันทึก (เงิน ปลา ของตกแต่ง ภารกิจ)
+ * entity ในฉาก (Fish, Decoration) อ้างอิง record ในนี้โดยตรง
+ * ข้อมูลจริงอยู่ในเซฟกลางบน Cloud Firestore — คลาสนี้ถือสำเนาที่กำลังเล่น แล้วส่ง "คำสั่ง" (ซื้อ ขาย เก็บเหรียญ ฯลฯ)
+ * ให้ระบบเซฟกลาง (sink) ตรวจและบันทึก ส่วนการตั้งค่าเสียง/กราฟิกเป็นของแต่ละอุปกรณ์ (core/settings.js)
  */
 export class GameState {
-  constructor(events) {
+  constructor(events, { data, isNewGame = false } = {}) {
     this.events = events;
-    const loaded = this.load();
-    this.isNewGame = !loaded;
-    this.data = loaded ?? createDefaultState();
+    this.isNewGame = isNewGame;
+    this.data = data ?? createDefaultState();
+    this.settings = loadSettings();
+    /** ระบบเซฟกลาง (cloud/CloudSync.js) — รับคำสั่งและคำขอบันทึก */
+    this.sink = null;
   }
 
-  // ── บันทึก / โหลด ───────────────────────────────────────────
+  // ── บันทึก ──────────────────────────────────────────────────
 
-  load() {
-    try {
-      const raw = localStorage.getItem(CONFIG.saveKey);
-      if (!raw) return null;
-      const saved = JSON.parse(raw);
-      if (saved?.version !== CONFIG.saveVersion || !Array.isArray(saved.tanks) || saved.tanks.length === 0) return null;
-      const defaults = createDefaultState();
-      // รวมกับค่าเริ่มต้น เผื่อเวอร์ชันใหม่เพิ่มฟิลด์
-      return {
-        ...defaults,
-        ...saved,
-        inventory: { ...defaults.inventory, ...saved.inventory },
-        missions: { ...defaults.missions, ...saved.missions },
-        stats: { ...defaults.stats, ...saved.stats },
-        settings: { ...defaults.settings, ...saved.settings },
-      };
-    } catch (err) {
-      console.warn('โหลดเซฟไม่สำเร็จ เริ่มเกมใหม่', err);
-      return null;
-    }
-  }
-
-  save() {
-    this.data.lastSaved = Date.now();
+  /** ขอให้บันทึก: เซฟกลางจะรวมการบันทึกให้ไม่ถี่เกินไป, urgent = ส่งทันที (เช่น ตอนปิดแท็บ) */
+  save({ urgent = false } = {}) {
+    saveSettings(this.settings);
     const tank = this.activeTank;
-    if (tank) tank.lastUpdate = this.data.lastSaved;
-    try {
-      localStorage.setItem(CONFIG.saveKey, JSON.stringify(this.data));
-    } catch (err) {
-      console.warn('บันทึกเกมไม่สำเร็จ', err);
-    }
+    if (tank) tank.lastUpdate = Date.now();
+    this.sink?.requestSave({ urgent });
   }
 
-  reset() {
-    try {
-      localStorage.removeItem(CONFIG.saveKey);
-    } catch {
-      /* ไม่เป็นไร */
-    }
+  /** ส่งการกระทำที่มีผลกับเงิน/ของ/ปลา ให้เซิร์ฟเวอร์ตรวจซ้ำแล้วบันทึกลงเซฟกลาง */
+  record(command) {
+    this.sink?.record(command);
   }
 
   // ── ตู้ปลา ──────────────────────────────────────────────────
@@ -172,11 +149,12 @@ export class GameState {
    */
   catchUpTank(tank, now = Date.now(), { giveCoins = false } = {}) {
     const off = CONFIG.offline;
-    const seconds = clamp((now - (tank.lastUpdate ?? now)) / 1000, 0, off.maxSeconds) * CONFIG.timeScale;
+    const seconds = offlineSeconds(tank.lastUpdate, now);
     tank.lastUpdate = now;
     if (seconds < 5) return { seconds: 0, coins: 0 };
 
-    let coinRate = 0;
+    // คิดเหรียญก่อนปรับค่าปลา (สูตรเดียวกับที่เซิร์ฟเวอร์ใช้ตรวจ ดู shared/economy.js)
+    const coins = giveCoins ? offlineCoins(tank, seconds) : 0;
     for (const fish of tank.fish) {
       const species = getSpecies(fish.speciesId);
       if (!species) continue;
@@ -188,16 +166,11 @@ export class GameState {
       fish.satiety = Math.max(before - rate * seconds, Math.min(before, off.minSatiety));
       fish.breedCooldown = Math.max(0, (fish.breedCooldown ?? 0) - seconds);
       fish.age = (fish.age ?? 0) + seconds;
-      coinRate += (species.economy.coinValue / species.economy.coinInterval) * (0.5 + fish.growth * 0.5);
     }
     const dirt = (CONFIG.care.dirtBase + CONFIG.care.dirtPerFish * tank.fish.length) * seconds;
     tank.cleanliness = Math.max(tank.cleanliness - dirt, Math.min(tank.cleanliness, off.minCleanliness));
 
-    let coins = 0;
-    if (giveCoins) {
-      coins = Math.floor(coinRate * Math.min(seconds, off.coinSeconds) * off.coinRate);
-      if (coins > 0) this.earn({ coins });
-    }
+    if (coins > 0) this.earn({ coins });
     return { seconds, coins };
   }
 
@@ -226,8 +199,7 @@ export class GameState {
 
   earn(reward) {
     if (!reward) return;
-    this.data.coins += Math.floor(reward.coins ?? 0);
-    this.data.gems += Math.floor(reward.gems ?? 0);
+    earn(this.data, reward);
     this.events.emit(EV.CURRENCY, { coins: this.data.coins, gems: this.data.gems, reward });
   }
 

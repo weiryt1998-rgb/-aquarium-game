@@ -9,7 +9,7 @@ import { SceneManager } from '../world/SceneManager.js';
 import { Room } from '../world/Room.js';
 import { Aquarium } from '../world/Aquarium.js';
 import { Bubbles } from '../world/Bubbles.js';
-import { FishManager } from '../systems/FishManager.js';
+import { FishManager, fishIdentity } from '../systems/FishManager.js';
 import { FoodSystem } from '../systems/FoodSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
 import { CareSystem } from '../systems/CareSystem.js';
@@ -23,17 +23,22 @@ import { getSpecies } from '../data/fish.js';
 import { getFood, CARE_ITEMS } from '../data/food.js';
 import { TANK_TYPES, getTankType, tankTier } from '../data/tanks.js';
 import { rand } from '../utils/math.js';
+import { LIMITS } from '../shared/constants.js';
 
 /**
  * ตัวควบคุมหลักของเกม — สร้างทุกระบบ, game loop และคำสั่งระดับเกม (ซื้อ ขาย ให้อาหาร ฯลฯ)
  * เปิด DevTools แล้วพิมพ์ `game` เพื่อสำรวจ/ดีบักได้
+ *
+ * save  = { data, isNewGame } ข้อมูลเกมที่โหลดจากเซฟกลางแล้ว (เกมเริ่มหลังโหลดสำเร็จเท่านั้น)
+ * cloud = ระบบเซฟกลาง (cloud/CloudSync.js) — รับคำสั่งจาก state.record() ไปตรวจและบันทึกบนคลาวด์
  */
 export class Game {
-  constructor({ canvas, uiRoot }) {
+  constructor({ canvas, uiRoot, save = {}, cloud = null }) {
     this.config = CONFIG; // เปิดให้ปรับจาก DevTools ได้ เช่น game.config.timeScale = 20
     this.events = new EventBus();
-    this.state = new GameState(this.events);
-    this.settings = this.state.data.settings;
+    this.state = new GameState(this.events, save);
+    this.cloud = cloud;
+    this.settings = this.state.settings;
     this.sound = new Sound(this.settings);
 
     this.sceneMgr = new SceneManager(canvas, this.settings);
@@ -65,15 +70,18 @@ export class Game {
 
     this.sceneMgr.onResize = (_w, h) => this.bubbles.setViewport(h, this.sceneMgr.camera.fov, this.sceneMgr.renderer.getPixelRatio());
     this.sceneMgr.resize(true);
-    const saveNow = () => !this.resetting && this.state.save();
+    const saveNow = () => !this.resetting && this.state.save({ urgent: true });
     window.addEventListener('beforeunload', saveNow);
     document.addEventListener('visibilitychange', () => document.hidden && saveNow());
   }
 
   async init() {
     await this.assets.preload(this.models.allModelUrls(), (p) => this.ui.start.setProgress(p));
-    const offline = this.state.catchUpTank(this.state.activeTank, Date.now(), { giveCoins: !this.state.isNewGame });
-    this.loadTank(this.state.activeTank);
+    const tank = this.state.activeTank;
+    const offline = this.state.catchUpTank(tank, Date.now(), { giveCoins: !this.state.isNewGame });
+    this.loadTank(tank);
+    // เริ่มซิงก์หลังคำนวณช่วงออฟไลน์แล้ว — เหรียญออฟไลน์ให้เซิร์ฟเวอร์คำนวณยืนยันเอง
+    this.cloud?.attach(this, this.state.isNewGame ? [] : [{ type: 'offlineIncome', tankId: tank.id }]);
     this.lastFrame = performance.now();
     requestAnimationFrame((t) => this.#loop(t));
     this.ui.start.ready(offline);
@@ -83,6 +91,7 @@ export class Game {
   begin() {
     this.started = true;
     this.sound.unlock();
+    (this.notices ?? []).forEach((text, i) => setTimeout(() => this.ui.toast(text), 300 + i * 700));
     if (this.state.isNewGame) {
       setTimeout(() => this.ui.toast('👋 ยินดีต้อนรับ! ลองกดปุ่ม "ให้อาหาร" มุมขวาล่าง แล้วแตะเหรียญที่ปลาผลิตออกมา'), 800);
     }
@@ -118,9 +127,11 @@ export class Game {
     const next = this.state.getTank(tankId);
     if (!next || next === current) return;
     current.lastUpdate = Date.now();
+    this.cloud?.noteSimulated(current.id); // บันทึกค่าล่าสุดของตู้เดิมด้วย
     this.state.data.activeTankId = next.id;
     this.state.catchUpTank(next);
     this.loadTank(next);
+    this.state.record({ type: 'switchTank', tankId: next.id });
     this.state.save();
     this.events.emit(EV.TANK_SWITCHED, { tank: next });
     this.ui.toast(`🏠 ย้ายมาที่${next.name}แล้ว`);
@@ -134,6 +145,7 @@ export class Game {
       return false;
     }
     const tank = this.state.addTank(typeId);
+    this.state.record({ type: 'buyTank', typeId, tankId: tank.id });
     this.sound.play('buy');
     this.events.emit(EV.TANK_UNLOCKED, { tank });
     this.ui.toast(`🎉 ปลดล็อก${type.name}แล้ว! ไปซื้อปลามาเลี้ยงกันเลย`, 'success');
@@ -160,6 +172,7 @@ export class Game {
     }
     this.state.spend(species.price);
     const fish = this.fish.addNew(speciesId);
+    this.state.record({ type: 'buyFish', tankId: this.state.activeTank.id, speciesId, fish: fishIdentity(fish.data) });
     const isNew = this.state.discover(speciesId);
     this.sound.play('splash');
     this.events.emit(EV.FISH_BOUGHT, { fish });
@@ -177,6 +190,7 @@ export class Game {
     const refund = this.sellValue(fish);
     this.fish.remove(fish);
     this.state.earn(refund);
+    this.state.record({ type: 'sellFish', tankId: this.state.activeTank.id, fishId: fish.id, growth: fish.data.growth });
     this.sound.play('coin');
     this.ui.toast(`ขาย "${fish.data.name}" แล้ว`);
     this.events.emit(EV.FISH_SOLD, { fish });
@@ -208,14 +222,17 @@ export class Game {
     this.food.sprinkle(food, x ?? rand(-w * 0.32, w * 0.32), z ?? rand(-d * 0.25, d * 0.2));
     this.sound.play('splash');
     state.data.stats.feeds++;
+    state.record({ type: 'feed', tankId: state.activeTank.id, foodId: food.id });
     this.events.emit(EV.FEED, { amount: 1, food });
     return true;
   }
 
   buyFood(foodId) {
     const food = getFood(foodId);
+    if (this.state.itemCount(food.id) + food.pack > LIMITS.maxItem) return this.#denied('คลังอาหารเต็มแล้ว');
     if (!this.state.spend(food.price)) return this.#denied('เงินไม่พอ');
     this.state.addItem(food.id, food.pack);
+    this.state.record({ type: 'buyFood', foodId: food.id });
     this.sound.play('buy');
     this.ui.toast(`ซื้อ${food.name} ${food.pack} ห่อแล้ว`);
     return true;
@@ -223,8 +240,10 @@ export class Game {
 
   buyMedicine() {
     const item = CARE_ITEMS.find((c) => c.id === 'medicine');
+    if (this.state.itemCount('medicine') >= LIMITS.maxItem) return this.#denied('คลังยาเต็มแล้ว');
     if (!this.state.spend(item.price)) return this.#denied('เงินไม่พอ');
     this.state.addItem('medicine', 1);
+    this.state.record({ type: 'buyMedicine' });
     this.sound.play('buy');
     return true;
   }
@@ -232,6 +251,7 @@ export class Game {
   useMedicine() {
     if (!this.state.useItem('medicine')) return this.#denied('ไม่มียาแล้ว');
     for (const f of this.fish.alive) f.data.health = Math.min(100, f.data.health + CONFIG.care.medicineHeal);
+    this.state.record({ type: 'useMedicine', tankId: this.state.activeTank.id });
     this.sound.play('clean');
     this.ui.toast('💊 ให้ยาแล้ว ปลาทุกตัวแข็งแรงขึ้น', 'success');
     this.events.emit(EV.MEDICINE_USED, { amount: 1 });
@@ -240,6 +260,7 @@ export class Game {
 
   cleanTank() {
     if (this.care.clean()) {
+      this.state.record({ type: 'cleanTank', tankId: this.state.activeTank.id });
       this.ui.toast('✨ ทำความสะอาดตู้แล้ว น้ำใสปิ๊ง!', 'success');
       return true;
     }
@@ -289,10 +310,19 @@ export class Game {
     this.events.emit(EV.SCREENSHOT);
   }
 
-  resetGame() {
+  /** เริ่มเกมใหม่ทั้งหมด = รีเซ็ตเซฟกลาง (ทุกอุปกรณ์) — ระบบสำรองเซฟเดิมบนคลาวด์ให้ก่อนเสมอ */
+  async resetGame() {
+    if (!this.cloud) return false;
+    this.ui.toast('กำลังสำรองและรีเซ็ตเซฟกลาง…');
+    try {
+      await this.cloud.resetSave();
+    } catch (err) {
+      this.#denied(`รีเซ็ตไม่สำเร็จ: ${err.message}`);
+      return false;
+    }
     this.resetting = true;
-    this.state.reset();
     location.reload();
+    return true;
   }
 
   // ── game loop ───────────────────────────────────────────────

@@ -13,6 +13,8 @@ import { FoodPanel } from './panels/FoodPanel.js';
 import { MissionsPanel } from './panels/MissionsPanel.js';
 import { SettingsPanel } from './panels/SettingsPanel.js';
 import { HelpPanel, MenuPanel } from './panels/MenuPanel.js';
+import { CloudPanel } from './panels/CloudPanel.js';
+import { SaveStatus } from '../cloud/SaveStatus.js';
 
 const TEMPLATE = /* html */ `
   <div class="hud">
@@ -27,6 +29,7 @@ const TEMPLATE = /* html */ `
       <button class="btn-round" data-action="screenshot" title="ถ่ายภาพตู้ปลา">${ICONS.camera}</button>
       <button class="btn-round" data-action="menu" title="เมนู">${ICONS.menu}<i class="badge" data-ref="menuBadge"></i></button>
     </div>
+    <button class="save-status hidden" data-ref="saveStatus" type="button"></button>
 
     <nav class="sidebar">
       <button data-action="fish"><span class="ico">🐠</span><span>ปลา</span></button>
@@ -86,11 +89,16 @@ export class UI {
       settings: new SettingsPanel(this),
       menu: new MenuPanel(this),
       help: new HelpPanel(this),
+      ...(game.cloud ? { cloud: new CloudPanel(this) } : {}),
     };
     this.activePanel = null;
     this.decorToolbar = new DecorToolbar(this, root.querySelector('.decor-toolbar'));
     this.fishCard = new FishCard(this, root.querySelector('.fish-card'));
     this.start = new StartScreen(this, root.querySelector('.start-screen'));
+    if (game.cloud) {
+      this.refs.saveStatus.classList.remove('hidden');
+      this.saveStatus = new SaveStatus(this, this.refs.saveStatus, game.cloud);
+    }
     this.hudTimer = 0;
     this.shown = { coins: game.state.coins, gems: game.state.gems };
 

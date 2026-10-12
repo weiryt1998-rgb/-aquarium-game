@@ -50,6 +50,40 @@ export class DecorManager {
     this.refresh();
   }
 
+  /**
+   * ทำให้ของตกแต่งในฉากตรงกับ record ของตู้ (หลังรับข้อมูลจากเซฟกลาง)
+   * skipId = ชิ้นที่ผู้เล่นกำลังลากอยู่ ไม่ย้ายตามข้อมูลจากคลาวด์
+   */
+  syncRecords(tank, { skipId = null } = {}) {
+    const records = new Map(tank.decor.map((r) => [r.id, r]));
+    let changed = false;
+    for (const decor of [...this.items]) {
+      const record = records.get(decor.id);
+      if (!record) {
+        if (this.game.placement.selected === decor) this.game.placement.select(null);
+        this.remove(decor);
+        changed = true;
+        continue;
+      }
+      decor.data = record;
+      if (decor.id === skipId) continue;
+      if (decor.group.position.x !== record.x || decor.group.position.z !== record.z) {
+        decor.setPosition(record.x, record.z);
+        changed = true;
+      }
+      if (decor.group.rotation.y !== record.rotY) {
+        decor.setRotation(record.rotY);
+        changed = true;
+      }
+    }
+    for (const record of tank.decor) {
+      if (this.items.some((d) => d.id === record.id)) continue;
+      if (this.spawn(record)) changed = true;
+    }
+    if (changed) this.refresh();
+    return changed;
+  }
+
   /** คำนวณค่าที่ขึ้นกับของตกแต่งใหม่ (เรียกหลังเพิ่ม/ลบ/ย้าย) */
   refresh() {
     this.obstacles = this.items.map((d) => d.obstacle).filter(Boolean);

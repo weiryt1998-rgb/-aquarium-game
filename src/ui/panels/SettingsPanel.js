@@ -35,11 +35,15 @@ export class SettingsPanel extends Panel {
           <span>🎥 มุมกล้อง</span>
           <button class="btn" data-action="camera">กลับมุมมองเริ่มต้น</button>
         </div>
-        <div class="setting-row danger">
-          <span>🗑️ เริ่มเกมใหม่ทั้งหมด</span>
-          <button class="btn-danger" data-action="reset">${this.confirmReset ? 'กดอีกครั้งเพื่อยืนยัน' : 'ลบเซฟ'}</button>
+        <div class="setting-row">
+          <span>☁️ เซฟคลาวด์ (สำรอง/กู้คืน/ออกจากระบบ)</span>
+          <button class="btn" data-action="cloud">จัดการเซฟ</button>
         </div>
-        <p class="hint">ความคืบหน้าบันทึกอัตโนมัติในเบราว์เซอร์นี้ · ลากเพื่อหมุนกล้อง · ล้อเมาส์/สองนิ้วเพื่อซูม</p>
+        <div class="setting-row danger">
+          <span>🗑️ เริ่มเกมใหม่ทั้งหมด (รีเซ็ตเซฟกลางของทุกอุปกรณ์ · สำรองให้ก่อนอัตโนมัติ)</span>
+          <button class="btn-danger" data-action="reset">${this.confirmReset ? 'กดอีกครั้งเพื่อยืนยัน' : 'รีเซ็ตเซฟ'}</button>
+        </div>
+        <p class="hint">ความคืบหน้าบันทึกอัตโนมัติบนเซฟกลาง (คลาวด์) เล่นต่อได้ทุกอุปกรณ์ · เสียง/กราฟิกตั้งแยกแต่ละอุปกรณ์ · ลากเพื่อหมุนกล้อง · ล้อเมาส์/สองนิ้วเพื่อซูม</p>
       </div>`;
   }
 
@@ -63,6 +67,8 @@ export class SettingsPanel extends Panel {
     } else if (action === 'camera') {
       game.sceneMgr.flyTo(game.sceneMgr.home.position, game.sceneMgr.home.target);
       this.ui.closeAll();
+    } else if (action === 'cloud') {
+      this.ui.open('cloud');
     } else if (action === 'reset') {
       if (!this.confirmReset) {
         this.confirmReset = true;

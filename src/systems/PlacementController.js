@@ -134,6 +134,7 @@ export class PlacementController {
       if (!this.game.state.spend(item.price)) return;
       const { x, z, rotY } = this.preview.data;
       const decor = this.game.decor.add(item.id, x, z, rotY);
+      this.game.state.record({ type: 'placeDecor', tankId: this.game.state.activeTank.id, decor: { ...decor.data } });
       this.game.bubbles.emit(x, decor.group.position.y + 0.2, z, 6, { spread: item.radius * 0.5 });
       this.game.sound.play('place');
       this.game.events.emit(EV.DECOR_PLACED, { decor });
@@ -189,6 +190,7 @@ export class PlacementController {
       this.game.ui.toast('ตำแหน่งนั้นวางไม่ได้ ย้ายกลับที่เดิมแล้ว', 'warn');
     } else if (this.moved) {
       this.game.sound.play('place');
+      this.#recordMove(decor);
     }
     this.game.decor.refresh();
     this.game.aquarium.showMarker(decor.data.x, decor.data.z, decor.item.radius, true);
@@ -200,7 +202,13 @@ export class PlacementController {
       this.preview.setRotation(this.rotation);
     } else if (this.selected) {
       this.selected.setRotation(this.selected.data.rotY + delta);
+      this.#recordMove(this.selected);
     }
+  }
+
+  #recordMove(decor) {
+    const { id, x, z, rotY } = decor.data;
+    this.game.state.record({ type: 'moveDecor', tankId: this.game.state.activeTank.id, decorId: id, x, z, rotY });
   }
 
   sellValue(decor) {
@@ -215,6 +223,7 @@ export class PlacementController {
     this.select(null);
     this.game.decor.remove(decor);
     this.game.state.earn(refund);
+    this.game.state.record({ type: 'sellDecor', tankId: this.game.state.activeTank.id, decorId: decor.id });
     this.game.sound.play('coin');
     this.game.ui.toast(`ขาย${decor.item.name}ได้ ${refund.coins} เหรียญ`);
     this.game.events.emit(EV.DECOR_SOLD, { item: decor.item });

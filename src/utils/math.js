@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 export const clamp = (v, min, max) => (v < min ? min : v > max ? max : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const rand = (min, max) => min + Math.random() * (max - min);
@@ -52,11 +54,14 @@ export function formatNumber(n) {
   return Math.floor(n).toLocaleString('en-US');
 }
 
+let dayFormat = null;
+
+/** วันที่ YYYY-MM-DD ตามเขตเวลาของเกม (CONFIG.timeZone) — เครื่องและเซิร์ฟเวอร์ขึ้นวันใหม่พร้อมกัน */
 export function todayKey(date = new Date()) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  dayFormat ??= new Intl.DateTimeFormat('en-US', { timeZone: CONFIG.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const parts = {};
+  for (const p of dayFormat.formatToParts(date)) parts[p.type] = p.value;
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 export function escapeHtml(str) {

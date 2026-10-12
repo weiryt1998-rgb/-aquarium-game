@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Security Rules ของเซฟกลาง — โหมด "functions" (ทางเลือกเสริม ใช้คู่กับ Cloud Functions บนแผน Blaze เท่านั้น)
+//
+// - อ่านเซฟได้เฉพาะผู้เล่นที่เข้าสู่ระบบแล้ว และ UID อยู่ในรายชื่อ gameAccess/{uid}
+// - หน้าเว็บ "เขียนไม่ได้เลย": ทุกการเปลี่ยนแปลงต้องผ่าน Cloud Functions (Admin SDK) ที่ตรวจราคา/เงิน/สิทธิ์ฝั่งเซิร์ฟเวอร์
+//   → ผู้เล่นที่รู้รหัสผ่านและเปิด DevTools ก็แก้เงินหรือของในเซฟโดยตรงไม่ได้
+// - รายชื่อ gameAccess แก้ได้เฉพาะผู้ดูแลผ่าน Firebase Console (ไม่มีใครเขียนจากหน้าเว็บได้)
+//
+// ค่าเริ่มต้นของโปรเจกต์คือแผน Spark (firestore.rules) — ไฟล์นี้ใช้เฉพาะเมื่อย้ายไปแผน Blaze
+// deploy: npm run deploy:blaze (ใช้ firebase.blaze.json)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isPlayer() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/gameAccess/$(request.auth.uid));
+    }
+
+    // ผู้ใช้ตรวจได้เฉพาะสิทธิ์ของตัวเอง (หน้าเว็บใช้แสดง "ยังไม่ได้รับสิทธิ์")
+    match /gameAccess/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /gameSaves/{saveId} {
+      allow get: if saveId == 'global' && isPlayer();
+      allow list, create, update, delete: if false;
+
+      match /backups/{backupId} {
+        allow read: if saveId == 'global' && isPlayer();
+        allow create, update, delete: if false;
+      }
+    }
+
+    // อย่างอื่นปิดทั้งหมด
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

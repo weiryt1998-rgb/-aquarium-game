@@ -21,6 +21,7 @@ export class FishCard {
       if (!e.target.matches('.fc-name') || !this.fish) return;
       this.fish.data.name = e.target.value.trim().slice(0, 16) || this.fish.species.name;
       e.target.value = this.fish.data.name;
+      this.game.state.record({ type: 'renameFish', tankId: this.game.state.activeTank.id, fishId: this.fish.id, name: this.fish.data.name });
       this.game.state.save();
     });
     root.addEventListener('keydown', (e) => {

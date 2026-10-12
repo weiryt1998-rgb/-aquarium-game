@@ -70,6 +70,7 @@ export class FoodPanel extends Panel {
     switch (action) {
       case 'select-food':
         game.state.data.selectedFood = el.dataset.id;
+        game.state.record({ type: 'selectFood', foodId: el.dataset.id });
         game.sound.play('click');
         game.ui.refreshFeedButton();
         break;

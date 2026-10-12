@@ -7,6 +7,9 @@ import { getSpecies } from '../data/fish.js';
 import { getTankType } from '../data/tanks.js';
 import { rand } from '../utils/math.js';
 
+/** ค่าที่สุ่มในเครื่องตอนสร้างปลาใหม่ — ส่งไปกับคำสั่งให้เซิร์ฟเวอร์สร้างปลาตัวเดียวกัน */
+export const fishIdentity = (r) => ({ id: r.id, name: r.name, gender: r.gender, breedCooldown: r.breedCooldown, coinTimer: r.coinTimer });
+
 /** ดูแลปลาทุกตัวในตู้ที่แสดงอยู่: สร้าง/ลบ อัปเดต การออกลูก และการตาย */
 export class FishManager {
   constructor(game) {
@@ -82,6 +85,31 @@ export class FishManager {
     return this.list.find((f) => f.id === id);
   }
 
+  /**
+   * ทำให้ปลาในฉากตรงกับ record ของตู้ (หลังรับข้อมูลจากเซฟกลาง เช่น อีกเครื่องซื้อ/ขายปลา)
+   * @returns {boolean} มีปลาเพิ่มหรือหายไปไหม
+   */
+  syncRecords(tank) {
+    const records = new Map(tank.fish.map((r) => [r.id, r]));
+    let changed = false;
+    for (const fish of [...this.list]) {
+      if (fish.dying) continue;
+      const record = records.get(fish.id);
+      if (!record) {
+        this.#detach(fish);
+        changed = true;
+        continue;
+      }
+      fish.data = record;
+      fish.updateScale();
+    }
+    for (const record of tank.fish) {
+      if (this.list.some((f) => f.id === record.id && !f.dying)) continue;
+      if (this.spawn(record, { fromTop: true })) changed = true;
+    }
+    return changed;
+  }
+
   update(dt, simDt, time) {
     const game = this.game;
     const care = game.care;
@@ -125,6 +153,7 @@ export class FishManager {
   #die(fish) {
     const tank = this.game.state.activeTank;
     tank.fish = tank.fish.filter((r) => r !== fish.data);
+    this.game.state.record({ type: 'fishDied', tankId: tank.id, fishId: fish.id });
     fish.startDying();
     if (this.game.selectedFish === fish) this.game.selectFish(null);
     this.game.sound.play('sad');
@@ -147,10 +176,12 @@ export class FishManager {
       const mom = group.find((f) => f.data.gender === 'f');
       if (!dad || !mom || Math.random() > mom.species.care.breedChance) continue;
       const record = createFishRecord(speciesId, { growth: 0, satiety: 60 });
-      this.game.state.activeTank.fish.push(record);
+      const tank = this.game.state.activeTank;
+      tank.fish.push(record);
       const pos = dad.position.clone().lerp(mom.position, 0.5);
       const baby = this.spawn(record, { position: pos });
       dad.data.breedCooldown = mom.data.breedCooldown = B.cooldown;
+      this.game.state.record({ type: 'fishBorn', tankId: tank.id, parents: [dad.id, mom.id], fish: fishIdentity(record) });
       this.game.bubbles.emit(pos.x, pos.y, pos.z, 10, { spread: 0.2, minSize: 0.03, maxSize: 0.08 });
       this.game.sound.play('born');
       this.game.ui.toast(`🐣 ${mom.species.name}ออกลูกแล้ว! ยินดีต้อนรับ "${baby.data.name}"`, 'success');
