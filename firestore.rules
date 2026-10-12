@@ -18,7 +18,7 @@ service cloud.firestore {
     // UID ของบัญชีผู้เล่นหลัก (ไม่ใช่ความลับ) — ตั้งด้วยคำสั่ง: npm run set-player-uid -- <UID>
     // ค่าเริ่มต้นเป็นข้อความที่ไม่มีทางตรงกับ UID จริง → ถ้ายังไม่ตั้ง จะไม่มีใครอ่าน/เขียนเซฟได้เลย
     function playerUid() {
-      return 'SET_PLAYER_UID_BEFORE_DEPLOY';
+      return 'nkOplSQagocHBfkM5T4FPwp8OYB3';
     }
 
     // ต้องเป็นบัญชีหลัก และเข้าสู่ระบบด้วย Email/Password (ไม่รับ token แบบอื่น เช่น custom/anonymous)
