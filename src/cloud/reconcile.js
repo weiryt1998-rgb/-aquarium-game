@@ -71,6 +71,7 @@ export function reconcileGame(game, next, { adopt = {}, server = next, sent = nu
 
     lt.decor = mergeRecords(lt.decor, nt.decor, (rec, src) => {
       rec.itemId = src.itemId;
+      if (src.pearlAt !== undefined) rec.pearlAt = src.pearlAt;
       if (rec.id === movingDecorId) return; // กำลังลากอยู่ในเครื่องนี้ — ให้ผลการลากชนะ
       rec.x = src.x;
       rec.z = src.z;

@@ -12,6 +12,8 @@
  * obstacle    = ปลาว่ายหลบหรือไม่ (พืชน้ำปลาว่ายผ่านได้)
  * happiness   = คะแนนความสุขที่ปลาได้รับ
  * cleanBonus  = ช่วยลดความสกปรกของน้ำ (0..1)
+ * maxPerTank  = วางได้สูงสุดกี่ชิ้นต่อตู้ (ไม่ระบุ = ไม่จำกัด)
+ * pearl       = ผลิตไข่มุกเป็นระยะ (ดู shared/economy.js → pearlReadyAt)
  */
 
 const decorModel = (id, extra = {}) => ({ url: `models/decor/${id}.glb`, rotation: [0, 0, 0], fit: 'height', ...extra });
@@ -170,14 +172,48 @@ export const DECOR_ITEMS = [
     color: '#8a5a2b',
   },
   {
+    id: 'temple_ruin',
+    name: 'ซากวิหารโบราณ',
+    category: 'ornament',
+    price: { coins: 220 },
+    model: decorModel('temple_ruin'), // จาก Fish/aquarium/temple_ruin_aquarium_decoration_-_photoscan.glb
+    placeholder: 'castle',
+    height: 2.2,
+    radius: 0.8,
+    obstacle: true,
+    happiness: 6,
+    cleanBonus: 0,
+    color: '#9c9178',
+  },
+  {
+    id: 'seashell',
+    name: 'เปลือกหอย',
+    category: 'ornament',
+    price: { coins: 600 },
+    // จาก Fish/aquarium/sea_shell.glb แยกชิ้นแล้ว: shell_top (ฝาบน เปิด-ปิดได้), pearl (ไข่มุก)
+    model: decorModel('seashell'),
+    placeholder: 'rock',
+    height: 1.1,
+    radius: 0.8,
+    obstacle: true,
+    obstacleHeight: 0.5,
+    happiness: 3,
+    cleanBonus: 0,
+    maxPerTank: 1,
+    // ฝาปิดอยู่ interval วินาที (เวลาจริง) แล้วเปิดออกพร้อมไข่มุก แตะเก็บได้ reward
+    pearl: { interval: 120, reward: { coins: 25 } },
+    color: '#f2b8c8',
+  },
+  {
     id: 'coral',
     name: 'ปะการัง',
     category: 'ornament',
     price: { coins: 150 },
-    model: decorModel('coral'),
+    // จาก Fish/aquarium/staghorn_coral.glb (บีบอัดแล้ว) โมเดลแผ่กว้างกว่าสูง จึงกำหนดขนาดตามความกว้าง
+    model: decorModel('coral', { fit: 'width', size: 1.7 }),
     placeholder: 'coral',
-    height: 1.5,
-    radius: 0.6,
+    height: 1.2,
+    radius: 0.75,
     obstacle: false,
     happiness: 5,
     cleanBonus: 0.02,

@@ -24,6 +24,7 @@ import { getFood, CARE_ITEMS } from '../data/food.js';
 import { TANK_TYPES, getTankType, tankTier } from '../data/tanks.js';
 import { rand } from '../utils/math.js';
 import { LIMITS } from '../shared/constants.js';
+import { pearlReadyAt } from '../shared/economy.js';
 
 /**
  * ตัวควบคุมหลักของเกม — สร้างทุกระบบ, game loop และคำสั่งระดับเกม (ซื้อ ขาย ให้อาหาร ฯลฯ)
@@ -275,12 +276,32 @@ export class Game {
 
   // ── อื่น ๆ ──────────────────────────────────────────────────
 
-  /** แตะในฉาก (ไม่ได้ลาก): เก็บเหรียญ → เลือกปลา → ยกเลิกการเลือก */
+  /** เก็บไข่มุกจากหอยที่เปิดฝาอยู่ */
+  collectPearl(decor) {
+    const now = Date.now();
+    if (now < pearlReadyAt(decor.data, decor.item)) return false;
+    const reward = decor.item.pearl.reward;
+    const at = decor.clam.pearlPosition();
+    decor.data.pearlAt = now;
+    this.state.earn(reward);
+    this.state.record({ type: 'collectPearl', tankId: this.state.activeTank.id, decorId: decor.id });
+    this.ui.floatText(at, `+${reward.coins}`, 'coin');
+    this.bubbles.emit(at.x, at.y, at.z, 8, { spread: 0.2 });
+    this.sound.play('coin');
+    return true;
+  }
+
+  /** แตะในฉาก (ไม่ได้ลาก): เก็บเหรียญ → เก็บไข่มุก → เลือกปลา → ยกเลิกการเลือก */
   handleTap(raycaster) {
     const ray = raycaster.ray;
     const coin = this.coins.pick(ray);
     if (coin) {
       this.coins.collect(coin);
+      return;
+    }
+    const clam = this.decor.pickPearl(ray);
+    if (clam) {
+      this.collectPearl(clam);
       return;
     }
     const fish = this.fish.pick(ray);
@@ -344,6 +365,7 @@ export class Game {
     this.fish.update(dt, simDt, this.time);
     this.food.update(dt, this.time);
     this.coins.update(dt, this.time);
+    this.decor.update(dt, this.time);
     this.care.update(simDt);
     this.bubbles.update(dt, this.time);
     this.aquarium.update(dt, this.time, this.sceneMgr.camera);

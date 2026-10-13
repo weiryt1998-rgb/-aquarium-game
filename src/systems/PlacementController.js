@@ -3,6 +3,7 @@ import { CONFIG } from '../config.js';
 import { EV } from '../core/EventBus.js';
 import { Decoration } from '../entities/Decoration.js';
 import { getDecorItem } from '../data/decor.js';
+import { atDecorLimit } from '../shared/economy.js';
 
 /**
  * โหมดตกแต่งตู้: เลือกของ → วางบนพื้นทราย, ลากเพื่อย้าย, หมุน, ขายคืน
@@ -57,6 +58,11 @@ export class PlacementController {
     if (!item) return;
     this.cancelPlacing();
     this.select(null);
+    if (atDecorLimit(this.game.state.activeTank, item)) {
+      this.game.sound.play('error');
+      this.game.ui.toast(`${item.name}วางได้ตู้ละ ${item.maxPerTank} ชิ้น`, 'warn');
+      return;
+    }
     if (!this.game.state.canAfford(item.price)) {
       this.game.sound.play('error');
       this.game.ui.toast('เหรียญไม่พอสำหรับของชิ้นนี้', 'warn');
@@ -139,7 +145,7 @@ export class PlacementController {
       this.game.sound.play('place');
       this.game.events.emit(EV.DECOR_PLACED, { decor });
       // กด Shift ค้างไว้เพื่อวางชิ้นเดิมต่อ
-      if (!(event.shiftKey && this.game.state.canAfford(item.price))) {
+      if (!(event.shiftKey && this.game.state.canAfford(item.price) && !atDecorLimit(this.game.state.activeTank, item))) {
         this.cancelPlacing();
         this.select(decor);
       }

@@ -9,6 +9,7 @@ import { clamp } from '../utils/math.js';
 import { FEED_WINDOW_MS, LIMITS } from './constants.js';
 import {
   addItem,
+  atDecorLimit,
   bumpMissions,
   cleanName,
   coinBankCap,
@@ -31,6 +32,7 @@ import {
   needTank,
   offlineCoins,
   offlineSeconds,
+  pearlReadyAt,
   spend,
   tankMeta,
   useItem,
@@ -237,10 +239,11 @@ const HANDLERS = {
     const item = getDecorItem(input.itemId) ?? fail('invalid', 'item');
     const id = needId(input.id, 'decor.id');
     if (findDecorAnywhere(game, id)) fail('invalid', 'duplicate-id');
-    if (tank.decor.length >= LIMITS.decorPerTank) fail('limit');
+    if (tank.decor.length >= LIMITS.decorPerTank || atDecorLimit(tank, item)) fail('limit');
     const pos = needPosition(tank, item, input);
     spend(game, item.price);
-    tank.decor.push({ id, itemId: item.id, ...pos });
+    // หอยเริ่มแบบปิดฝา: นับเวลาไข่มุกจากตอนวาง (เวลาฝั่งที่ตรวจ ไม่ใช้ค่าที่เครื่องส่งมา)
+    tank.decor.push(item.pearl ? { id, itemId: item.id, ...pos, pearlAt: ctx.now } : { id, itemId: item.id, ...pos });
     bumpMissions(game, EV.DECOR_PLACED, 1, ctx.day);
   },
 
@@ -285,6 +288,18 @@ const HANDLERS = {
     game.stats.coinsCollected += acceptedCount;
     if (acceptedCount > 0) bumpMissions(game, EV.COIN_COLLECTED, acceptedCount, ctx.day);
     return accepted < value ? { accepted, requested: value } : null;
+  },
+
+  /** เก็บไข่มุกจากหอย: ได้เมื่อครบเวลาตั้งแต่วาง/เก็บครั้งก่อน (เผื่อนาฬิกาต่างกัน 3 วินาทีเหมือนทำความสะอาดตู้) */
+  collectPearl(game, meta, c, ctx) {
+    const tank = needTank(game, c.tankId);
+    const decor = needDecor(tank, c.decorId);
+    const item = getDecorItem(decor.itemId);
+    if (!item?.pearl) fail('invalid', 'not-pearl');
+    if (!ctx.predict && ctx.now < pearlReadyAt(decor, item) - 3000) fail('cooldown', 'pearl');
+    decor.pearlAt = ctx.now;
+    earn(game, item.pearl.reward);
+    return { reward: item.pearl.reward };
   },
 
   /** เหรียญช่วงออฟไลน์: เซิร์ฟเวอร์คำนวณเองจากเวลาที่ตู้ถูกจำลองครั้งล่าสุด ไม่รับตัวเลขจากเครื่อง */
@@ -335,6 +350,7 @@ export const URGENT_COMMANDS = new Set([
   'claimDaily',
   'offlineIncome',
   'fishBorn',
+  'collectPearl',
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */

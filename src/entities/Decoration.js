@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { disposeObject, forEachMaterial } from '../assets/AssetLoader.js';
 import { hashString } from '../utils/math.js';
+import { PearlClam } from './PearlClam.js';
 
 const HIGHLIGHT = new THREE.Color('#2f6f3f');
 const BLACK = new THREE.Color('#000000');
@@ -16,6 +17,7 @@ export class Decoration {
     this.group = new THREE.Group();
     this.group.userData.decor = this;
     this.object = game.models.createDecor(item, hashString(data.id)).object;
+    this.clam = item.pearl && !preview ? new PearlClam(this.object, item) : null;
     this.group.add(this.object);
     this.bubbleId = null;
     this.setPosition(data.x, data.z);

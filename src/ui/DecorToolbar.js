@@ -1,4 +1,5 @@
 import { DECOR_CATEGORIES, DECOR_ITEMS } from '../data/decor.js';
+import { atDecorLimit } from '../shared/economy.js';
 import { ICONS } from './icons.js';
 import { priceHtml } from './helpers.js';
 
@@ -35,12 +36,14 @@ export class DecorToolbar {
     const items = DECOR_ITEMS.filter((i) => i.category === this.category)
       .map((item) => {
         const active = placement.previewItem?.id === item.id;
-        const poor = !state.canAfford(item.price);
+        const full = atDecorLimit(state.activeTank, item);
+        const poor = full || !state.canAfford(item.price);
+        const title = item.pearl ? `${item.name} — เปิดฝาพร้อมไข่มุกทุก ${item.pearl.interval / 60} นาที แตะเก็บได้ ${item.pearl.reward.coins} เหรียญ` : item.name;
         return `
-          <button class="decor-item ${active ? 'active' : ''} ${poor ? 'poor' : ''}" data-action="place" data-id="${item.id}" title="${item.name}">
+          <button class="decor-item ${active ? 'active' : ''} ${poor ? 'poor' : ''}" data-action="place" data-id="${item.id}" title="${title}">
             <img src="${this.game.thumbs.decor(item)}" alt="" draggable="false">
             <span>${item.name}</span>
-            ${priceHtml(item.price)}
+            ${full ? '<small>ตู้ละ 1 ชิ้น</small>' : priceHtml(item.price)}
           </button>`;
       })
       .join('');

@@ -2,6 +2,7 @@ import { CONFIG } from '../config.js';
 import { EV } from './EventBus.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { FISH_NAMES, FISH_SPECIES, getSpecies } from '../data/fish.js';
+import { getDecorItem } from '../data/decor.js';
 import { getTankType } from '../data/tanks.js';
 import { earn, offlineCoins, offlineSeconds } from '../shared/economy.js';
 import { clamp, pick, rand, todayKey, uid } from '../utils/math.js';
@@ -46,7 +47,9 @@ export function createFishRecord(speciesId, { growth = 1, satiety = 75, name } =
 }
 
 export function createDecorRecord(itemId, x, z, rotY = 0) {
-  return { id: uid('decor'), itemId, x, z, rotY };
+  const record = { id: uid('decor'), itemId, x, z, rotY };
+  if (getDecorItem(itemId)?.pearl) record.pearlAt = Date.now(); // หอยเริ่มแบบปิดฝา
+  return record;
 }
 
 export function createTankRecord(typeId, withStarterContent = false) {

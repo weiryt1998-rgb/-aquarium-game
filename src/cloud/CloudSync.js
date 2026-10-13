@@ -23,6 +23,7 @@ const COMMAND_LABEL = {
   buyTank: 'ปลดล็อกตู้',
   placeDecor: 'วางของตกแต่ง',
   sellDecor: 'ขายของตกแต่ง',
+  collectPearl: 'เก็บไข่มุก',
   claimMission: 'รับรางวัลภารกิจ',
   claimDaily: 'รับรางวัลประจำวัน',
 };

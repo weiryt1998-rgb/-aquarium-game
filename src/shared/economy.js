@@ -124,6 +124,16 @@ export function isInsideTank(tank, item, x, z) {
   return Math.abs(x) <= w / 2 - r + 0.01 && Math.abs(z) <= d / 2 - r + 0.01;
 }
 
+/** ของชิ้นนี้ในตู้ครบจำนวนที่วางได้แล้วหรือยัง (item.maxPerTank) */
+export function atDecorLimit(tank, item) {
+  return item.maxPerTank != null && tank.decor.filter((d) => d.itemId === item.id).length >= item.maxPerTank;
+}
+
+/** เวลา (ms) ที่ไข่มุกของหอยชิ้นนี้จะพร้อมเก็บ — pearlAt = เวลาที่วางหรือเก็บไข่มุกครั้งล่าสุด (ไม่มี = พร้อมแล้ว) */
+export function pearlReadyAt(decor, item) {
+  return (decor.pearlAt ?? 0) + item.pearl.interval * 1000;
+}
+
 /** อาหารที่ช่วยให้โตไวที่สุด — ใช้คำนวณเพดานการเติบโต */
 export const MAX_GROWTH_BOOST = Math.max(1, ...FOOD_TYPES.map((f) => f.growth ?? 1));
 

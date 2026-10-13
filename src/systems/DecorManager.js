@@ -3,6 +3,8 @@ import { createDecorRecord } from '../core/GameState.js';
 import { Decoration } from '../entities/Decoration.js';
 import { getDecorItem } from '../data/decor.js';
 
+const _pearl = new THREE.Vector3();
+
 /** ของตกแต่งทั้งหมดในตู้ที่แสดงอยู่ + ข้อมูลสิ่งกีดขวางสำหรับปลา */
 export class DecorManager {
   constructor(game) {
@@ -82,6 +84,33 @@ export class DecorManager {
     }
     if (changed) this.refresh();
     return changed;
+  }
+
+  /** เปิด-ปิดฝาหอยตามเวลาไข่มุก */
+  update(dt, time) {
+    for (const d of this.items) {
+      if (!d.clam?.update(dt, time, d.data)) continue;
+      const p = d.clam.pearlPosition();
+      this.game.bubbles.emit(p.x, p.y, p.z, 10, { spread: 0.3 });
+      this.game.sound.play('bubble');
+    }
+  }
+
+  /** หอยที่ไข่มุกพร้อมเก็บและถูกแตะ (ใช้ทรงกลมครอบให้แตะง่ายเหมือนเหรียญ) */
+  pickPearl(ray) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const d of this.items) {
+      if (!d.clam?.pearl.visible) continue;
+      const p = d.clam.pearlPosition(_pearl);
+      if (ray.distanceSqToPoint(p) > 0.45 * 0.45) continue;
+      const dist = p.distanceTo(ray.origin);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = d;
+      }
+    }
+    return best;
   }
 
   /** คำนวณค่าที่ขึ้นกับของตกแต่งใหม่ (เรียกหลังเพิ่ม/ลบ/ย้าย) */

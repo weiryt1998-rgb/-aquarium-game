@@ -4,6 +4,22 @@ import { createInitialGame, sanitizeGame } from '../../src/shared/sanitize.js';
 import { isId } from '../../src/shared/economy.js';
 import { T0 } from '../helpers/fixtures.js';
 
+test('เปลือกหอย: เก็บเวลาไข่มุกไว้ ตัดชิ้นที่เกินตู้ละ 1 และไม่เพิ่ม pearlAt ให้ของชิ้นอื่น', () => {
+  const raw = legacySave();
+  raw.tanks[0].decor.push(
+    { id: 'decor_s1', itemId: 'seashell', x: 0, z: 0, rotY: 0, pearlAt: T0 - 5000 },
+    { id: 'decor_s2', itemId: 'seashell', x: 2, z: 0, rotY: 0, pearlAt: T0 },
+    { id: 'decor_s3', itemId: 'seashell', x: -2, z: 0, rotY: 0, pearlAt: T0 + 9e9 },
+  );
+  const decor = sanitizeGame(raw, { now: T0 }).tanks[0].decor;
+  assert.deepEqual(decor.map((d) => d.id), ['decor_1', 'decor_s1']);
+  assert.equal(decor[1].pearlAt, T0 - 5000);
+  assert.equal('pearlAt' in decor[0], false);
+  // เวลาในอนาคตถูกบีบไม่ให้เกินตอนนี้
+  raw.tanks[0].decor = [{ id: 'decor_s3', itemId: 'seashell', x: 0, z: 0, rotY: 0, pearlAt: T0 + 9e9 }];
+  assert.equal(sanitizeGame(raw, { now: T0 }).tanks[0].decor[0].pearlAt, T0);
+});
+
 /** เซฟรูปแบบเดิมใน localStorage (เวอร์ชัน 1) */
 const legacySave = () => ({
   version: 1,

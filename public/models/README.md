@@ -40,6 +40,8 @@
 | `decor/driftwood.glb` | ขอนไม้โค้ง |
 | `decor/chest.glb` | หีบสมบัติ |
 | `decor/coral.glb` | ปะการัง |
+| `decor/temple_ruin.glb` | ซากวิหารโบราณ |
+| `decor/seashell.glb` | เปลือกหอย |
 | `decor/bubbler.glb` | หัวทรายออกซิเจน |
 | `decor/<id>.glb` | ไฟล์ของแต่ละชิ้นตาม `id` ใน `src/data/decor.js` เช่น `plant_fern.glb` (ถ้ามีจะใช้แทนไฟล์กลาง) |
 

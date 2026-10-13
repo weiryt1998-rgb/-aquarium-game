@@ -49,7 +49,7 @@ function sanitizeFish(raw, taken) {
   };
 }
 
-function sanitizeDecor(raw, type, taken) {
+function sanitizeDecor(raw, type, taken, now) {
   const item = getDecorItem(raw?.itemId);
   if (!item) return null;
   const id = isId(raw.id) && !taken.has(raw.id) ? raw.id : freshId('decor', taken);
@@ -57,13 +57,25 @@ function sanitizeDecor(raw, type, taken) {
   const r = item.radius * 0.7;
   const maxX = Math.max(0, type.size.w / 2 - r);
   const maxZ = Math.max(0, type.size.d / 2 - r);
-  return {
+  const record = {
     id,
     itemId: item.id,
     x: num(raw.x, -maxX, maxX, 0),
     z: num(raw.z, -maxZ, maxZ, 0),
     rotY: num(raw.rotY, -1e6, 1e6, 0),
   };
+  if (item.pearl) record.pearlAt = num(raw.pearlAt, 0, now, now);
+  return record;
+}
+
+/** ตัดของที่เกินจำนวนต่อตู้ (item.maxPerTank) — เก็บชิ้นที่มาก่อน */
+function withinItemLimits(decor) {
+  const counts = new Map();
+  return decor.filter((d) => {
+    const n = (counts.get(d.itemId) ?? 0) + 1;
+    counts.set(d.itemId, n);
+    return n <= (getDecorItem(d.itemId).maxPerTank ?? Infinity);
+  });
 }
 
 function sanitizeTanks(rawTanks, now) {
@@ -77,10 +89,9 @@ function sanitizeTanks(rawTanks, now) {
     const id = isId(raw.id) && !tankIds.has(raw.id) ? raw.id : freshId('tank', tankIds);
     tankIds.add(id);
     const fish = (Array.isArray(raw.fish) ? raw.fish : []).map((f) => sanitizeFish(f, fishIds)).filter(Boolean).slice(0, type.capacity);
-    const decor = (Array.isArray(raw.decor) ? raw.decor : [])
-      .map((d) => sanitizeDecor(d, type, decorIds))
-      .filter(Boolean)
-      .slice(0, LIMITS.decorPerTank);
+    const decor = withinItemLimits(
+      (Array.isArray(raw.decor) ? raw.decor : []).map((d) => sanitizeDecor(d, type, decorIds, now)).filter(Boolean),
+    ).slice(0, LIMITS.decorPerTank);
     tanks.push({
       id,
       typeId: type.id,

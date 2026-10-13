@@ -6,6 +6,7 @@ import { getSpecies } from '../../src/data/fish.js';
 import { CONFIG } from '../../src/config.js';
 import { LIMITS } from '../../src/shared/constants.js';
 import { getFood } from '../../src/data/food.js';
+import { getDecorItem } from '../../src/data/decor.js';
 import { todayKey } from '../../src/utils/math.js';
 import { T0, ctxAt, fishRecord, makeGame } from '../helpers/fixtures.js';
 
@@ -186,6 +187,30 @@ test('ของตกแต่ง: วางในตู้ได้ หัก�
   run(game, { type: 'sellDecor', tankId: tank.id, decorId: 'decor_t1' });
   assert.equal(game.coins, 875);
   assert.equal(tank.decor.length, 0);
+});
+
+test('เปลือกหอย: วางได้ตู้ละ 1 ชิ้น เริ่มแบบปิดฝา เก็บไข่มุกได้เมื่อครบ 2 นาที', () => {
+  const game = makeGame({ coins: 5000 });
+  const tank = game.tanks[0];
+  const reward = getDecorItem('seashell').pearl.reward.coins;
+  run(game, { type: 'placeDecor', tankId: tank.id, decor: { id: 'decor_s1', itemId: 'seashell', x: 0, z: 0, rotY: 0, pearlAt: 0 } });
+  const shell = tank.decor.find((d) => d.id === 'decor_s1');
+  assert.equal(shell.pearlAt, T0); // ใช้เวลาฝั่งที่ตรวจ ไม่ใช้ค่าที่เครื่องส่งมา
+  rejects(() => run(game, { type: 'placeDecor', tankId: tank.id, decor: { id: 'decor_s2', itemId: 'seashell', x: 2, z: 0, rotY: 0 } }), 'limit');
+
+  const coins = game.coins;
+  const pearl = { type: 'collectPearl', tankId: tank.id, decorId: 'decor_s1' };
+  rejects(() => run(game, pearl, ctxAt(T0 + 60_000)), 'cooldown');
+  run(game, pearl, ctxAt(T0 + 120_000));
+  assert.equal(game.coins, coins + reward);
+  assert.equal(shell.pearlAt, T0 + 120_000);
+  rejects(() => run(game, pearl, ctxAt(T0 + 130_000)), 'cooldown');
+  // โหมดทำนายผลในเครื่อง: ไม่ตรวจเวลา (เซิร์ฟเวอร์ตรวจแล้ว) แต่ยังบันทึกเวลาเก็บ
+  run(game, pearl, ctxAt(T0 + 130_000, { predict: true }));
+  assert.equal(shell.pearlAt, T0 + 130_000);
+
+  run(game, { type: 'placeDecor', tankId: tank.id, decor: { id: 'decor_c1', itemId: 'castle', x: 3, z: 0, rotY: 0 } });
+  rejects(() => run(game, { type: 'collectPearl', tankId: tank.id, decorId: 'decor_c1' }, ctxAt(T0 + 999_999)), 'invalid');
 });
 
 test('ปลดล็อกตู้: ชนิดละครั้ง และต้องมีเงินพอ', () => {

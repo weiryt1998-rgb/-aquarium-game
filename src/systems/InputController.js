@@ -43,7 +43,7 @@ export class InputController {
     if (this.down || now - this.lastHover < 60) return;
     this.lastHover = now;
     const ray = this.#updateRay(e).ray;
-    const hover = this.game.coins.pick(ray) || this.game.fish.pick(ray);
+    const hover = this.game.coins.pick(ray) || this.game.decor.pickPearl(ray) || this.game.fish.pick(ray);
     this.canvas.style.cursor = hover ? 'pointer' : '';
   }
 

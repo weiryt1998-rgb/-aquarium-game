@@ -35,4 +35,28 @@ export const MODEL_CREDITS = [
     authorUrl: 'https://sketchfab.com/7plus',
     source: 'https://sketchfab.com/3d-models/koi-fish-236859b809984f52b70c94fd040b9c59',
   },
+  {
+    file: 'models/decor/coral.glb',
+    usedAs: 'ปะการัง',
+    title: 'Staghorn Coral',
+    author: 'PixForge',
+    authorUrl: 'https://sketchfab.com/pixforge.id',
+    source: 'https://sketchfab.com/3d-models/staghorn-coral-ede640745c16457a9345ef1fa9e8d4d4',
+  },
+  {
+    file: 'models/decor/temple_ruin.glb',
+    usedAs: 'ซากวิหารโบราณ',
+    title: 'Temple ruin aquarium decoration - Photoscan',
+    author: 'DonCoasn',
+    authorUrl: 'https://sketchfab.com/DonCoasn',
+    source: 'https://sketchfab.com/3d-models/temple-ruin-aquarium-decoration-photoscan-fad156666c33460a9074ceaa6ed6c93e',
+  },
+  {
+    file: 'models/decor/seashell.glb',
+    usedAs: 'เปลือกหอย',
+    title: 'Sea shell',
+    author: 'Solcito3D',
+    authorUrl: 'https://sketchfab.com/solcito3D',
+    source: 'https://sketchfab.com/3d-models/sea-shell-99d1091293a64fbe97bbef45d564a28e',
+  },
 ].map((c) => ({ license: 'CC-BY-4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', ...c }));
