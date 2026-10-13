@@ -7,7 +7,9 @@ import { reconcileGame } from './reconcile.js';
 import { CloudError, errorCode } from './transports.js';
 
 const URGENT_DELAY = 400; // ms — รวมการคลิกซื้อรัว ๆ เป็นการบันทึกเดียว
-const BATCH_DELAY = 15_000; // ms — ค่าจำลองและคำสั่งทั่วไป (เก็บเหรียญ ให้อาหาร) บันทึกอย่างน้อยทุก 15 วินาทีขณะเล่น
+// ms — ค่าจำลองและคำสั่งทั่วไป (เก็บเหรียญ ให้อาหาร) บันทึกภายใน 25 วินาที
+// รวมกับ autoSaveInterval 15 วินาที → ขณะเล่นเฉย ๆ บันทึกทุก ~30 วินาที (~120 ครั้ง/ชั่วโมง ประหยัดโควตาเขียน Firestore)
+const BATCH_DELAY = 25_000;
 const RETRY_DELAYS = [2000, 4000, 8000, 15000, 30000];
 const MAX_PENDING = 60;
 const round = (v) => Math.round(v * 10000) / 10000;
@@ -210,7 +212,7 @@ export class CloudSync {
     this.simTanks.add(tankId);
   }
 
-  /** เกมขอให้บันทึก (ทุก ~10 วินาที, ปิดแท็บ, ออกจากโหมดตกแต่ง ฯลฯ) */
+  /** เกมขอให้บันทึก (ทุก ~15 วินาที, ปิดแท็บ, ออกจากโหมดตกแต่ง ฯลฯ) */
   requestSave({ urgent = false } = {}) {
     if (urgent) this.flushNow();
     else if (!this.retryTimer) this.schedule(BATCH_DELAY);
