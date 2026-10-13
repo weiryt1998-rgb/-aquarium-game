@@ -48,7 +48,8 @@ export class Decoration {
   }
 
   setHighlight(on) {
-    forEachMaterial(this.object, (m) => m.emissive?.copy(on ? HIGHLIGHT : BLACK));
+    // ของที่เรืองแสงเอง (คริสตัล ลาวา) เก็บค่าเดิมไว้ใน userData.baseEmissive
+    forEachMaterial(this.object, (m) => m.emissive?.copy(on ? HIGHLIGHT : (m.userData.baseEmissive ?? BLACK)));
   }
 
   #bubblePoint() {

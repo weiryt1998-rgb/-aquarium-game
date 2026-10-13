@@ -103,6 +103,12 @@ const BACKDROPS = {
   planted: { sky: ['#c9f2d8', '#5fc0a0', '#22806e', '#0d3d3a'], haze: '#4aa88e', layers: ['#3f8f6a', '#2a6b4c', '#174a33'], shafts: 0.22 },
   reef: { sky: ['#b8f4ff', '#45c4f0', '#1683cc', '#0a3f86'], haze: '#4cb2e6', layers: ['#7a6cc8', '#c25b8e', '#3d3f8f'], shafts: 0.26 },
   abyss: { sky: ['#5fb8e6', '#1b5e9e', '#0b2a5c', '#040c24'], haze: '#174a80', layers: ['#123a6a', '#0b2448', '#05122a'], shafts: 0.32 },
+  // ทะเลสาบซากุระ: น้ำใสอมชมพู เนินปะการังชมพู พุ่มดอกซากุระ กลีบดอกปลิว
+  sakura: { sky: ['#ffe6f0', '#f8b4cf', '#8fc4e0', '#2c5b86'], haze: '#e9a6c4', layers: ['#d99ab8', '#b8698e', '#6a3f6e'], shafts: 0.28 },
+  // ใต้น้ำแสงเหนือ: ม่านแสงเขียว-ม่วงพลิ้วด้านบน ยอดน้ำแข็งเป็นเงา จุดเรืองแสง
+  aurora: { sky: ['#123a5c', '#0c2848', '#081a33', '#030a18'], haze: '#0f3050', layers: ['#16405e', '#0d2a44', '#061626'], shafts: 0.12, light: true },
+  // ห้วงจักรวาล: เนบิวลา ดาวนับพัน ดาวเคราะห์มีวงแหวน หินต่างดาวมีคริสตัลเรืองแสง
+  galaxy: { sky: ['#2a1660', '#1c0d4a', '#100732', '#040212'], haze: '#1a0c40', layers: ['#24124d', '#170a36', '#0a0420'], shafts: 0, light: true },
 };
 
 export function getTankBackdropTexture(kind = 'ocean') {
@@ -263,6 +269,140 @@ export function getTankBackdropTexture(kind = 'ocean') {
         ctx.fillRect(x - r * 4, y - r * 4, r * 8, r * 8);
       }
       ctx.globalCompositeOperation = 'source-over';
+    } else if (kind === 'sakura') {
+      hills(H * 0.66, 70, far, 3);
+      // พุ่มดอกซากุระบนเนินไกล ๆ
+      for (let i = 0; i < 12; i++) bush(rnd() * W, H * (0.62 + rnd() * 0.06), 34 + rnd() * 30, ['#f7b8d2', '#f29cc0', '#ffd3e4'][i % 3]);
+      haze(0.3);
+      hills(H * 0.8, 50, mid, 3);
+      for (let i = 0; i < 9; i++) branch(rnd() * W, H * 0.84, 36 + rnd() * 26, Math.PI / 2 + (rnd() - 0.5) * 0.5, 8, 4, ['#f58fb8', '#ffc0d8', '#e070a0'][i % 3]);
+      for (let i = 0; i < 6; i++) fan(rnd() * W, H * 0.88, 60 + rnd() * 50, '#ffd0e4');
+      haze(0.12);
+      hills(H * 0.93, 28, near, 2);
+      // กลีบดอกลอยอยู่ในน้ำ
+      for (let i = 0; i < 140; i++) {
+        ctx.fillStyle = ['rgba(255,200,222,0.85)', 'rgba(255,170,205,0.75)', 'rgba(255,240,246,0.9)'][i % 3];
+        ctx.beginPath();
+        ctx.ellipse(rnd() * W, rnd() * H * 0.85, 3 + rnd() * 4, 2 + rnd() * 2, rnd() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (kind === 'aurora') {
+      // ม่านแสงเหนือ: เส้นแนวตั้งไล่สีจางลง ไหลตามคลื่นบนสุดของม่าน
+      ctx.globalCompositeOperation = 'lighter';
+      const curtains = [
+        ['94,255,190', 0.1, 0.42],
+        ['90,184,255', 0.22, 0.28],
+        ['192,138,255', 0.06, 0.3],
+      ];
+      for (const [rgb, top, len] of curtains) {
+        const phase = rnd() * 10;
+        for (let x = 0; x < W; x += 2) {
+          const y = H * top + Math.sin(x * 0.008 + phase) * 26 + Math.sin(x * 0.021 + phase * 2) * 12;
+          const strength = 0.25 + 0.75 * Math.pow(0.5 + 0.5 * Math.sin(x * 0.013 + phase * 3), 2);
+          const lg = ctx.createLinearGradient(0, y, 0, y + H * len);
+          lg.addColorStop(0, `rgba(${rgb},${0.8 * strength})`);
+          lg.addColorStop(1, `rgba(${rgb},0)`);
+          ctx.fillStyle = lg;
+          ctx.fillRect(x, y, 2, H * len);
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      hills(H * 0.7, 50, far, 3);
+      // ยอดน้ำแข็งแหลม ๆ เป็นเงา
+      const spire = (x, base, hgt, wid, color) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x - wid, base);
+        ctx.lineTo(x - wid * 0.2, base - hgt);
+        ctx.lineTo(x + wid * 0.15, base - hgt * 0.82);
+        ctx.lineTo(x + wid, base);
+        ctx.closePath();
+        ctx.fill();
+      };
+      for (let i = 0; i < 10; i++) spire(rnd() * W, H * 0.8, 80 + rnd() * 120, 20 + rnd() * 30, mid);
+      haze(0.18);
+      hills(H * 0.88, 40, near, 3);
+      for (let i = 0; i < 8; i++) spire(rnd() * W, H * 0.92, 40 + rnd() * 60, 12 + rnd() * 18, '#0a2238');
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 120; i++) {
+        const x = rnd() * W;
+        const y = H * 0.3 + rnd() * H * 0.65;
+        const r = 1 + rnd() * 2.5;
+        const rg = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+        rg.addColorStop(0, `rgba(${['120,255,210', '150,200,255', '210,170,255'][i % 3]},${0.4 + rnd() * 0.5})`);
+        rg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = rg;
+        ctx.fillRect(x - r * 4, y - r * 4, r * 8, r * 8);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (kind === 'galaxy') {
+      ctx.globalCompositeOperation = 'lighter';
+      // เนบิวลา: กลุ่มเมฆแสงหลายสีซ้อนกัน
+      const nebula = (x, y, r, rgb, a) => {
+        const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+        rg.addColorStop(0, `rgba(${rgb},${a})`);
+        rg.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = rg;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      };
+      for (let i = 0; i < 26; i++) {
+        const t = i / 26;
+        const x = W * (0.1 + 0.8 * t) + (rnd() - 0.5) * 120;
+        const y = H * (0.25 + 0.2 * Math.sin(t * 5)) + (rnd() - 0.5) * 80;
+        nebula(x, y, 60 + rnd() * 110, ['150,70,255', '255,80,200', '60,120,255', '255,150,90'][i % 4], 0.16 + rnd() * 0.14);
+      }
+      // ดาว: เล็กจำนวนมาก + ดวงใหญ่มีแฉก
+      for (let i = 0; i < 900; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${0.3 + rnd() * 0.7})`;
+        const s = rnd() < 0.9 ? 1 : 2;
+        ctx.fillRect(rnd() * W, rnd() * H * 0.85, s, s);
+      }
+      for (let i = 0; i < 22; i++) {
+        const x = rnd() * W;
+        const y = rnd() * H * 0.75;
+        const r = 6 + rnd() * 10;
+        nebula(x, y, r, '255,255,255', 0.9);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillRect(x - r * 1.6, y - 0.5, r * 3.2, 1);
+        ctx.fillRect(x - 0.5, y - r * 1.6, 1, r * 3.2);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      // ดาวเคราะห์ 2 ดวง (ดวงใหญ่มีวงแหวน)
+      const planet = (x, y, r, c1, c2, ring) => {
+        const pg = ctx.createRadialGradient(x - r * 0.4, y - r * 0.4, r * 0.1, x, y, r);
+        pg.addColorStop(0, c1);
+        pg.addColorStop(1, c2);
+        if (ring) {
+          ctx.strokeStyle = 'rgba(255,220,180,0.5)';
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.ellipse(x, y, r * 2, r * 0.45, -0.3, Math.PI, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+        if (ring) {
+          ctx.beginPath();
+          ctx.ellipse(x, y, r * 2, r * 0.45, -0.3, 0, Math.PI);
+          ctx.stroke();
+        }
+      };
+      planet(W * 0.78, H * 0.22, 46, '#ffd9a8', '#a2507a', true);
+      planet(W * 0.18, H * 0.14, 18, '#b8e6ff', '#3a4fa8', false);
+      hills(H * 0.74, 70, far, 3);
+      // หินต่างดาวทรงแหลมมีคริสตัลเรืองแสง
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 14; i++) {
+        const x = rnd() * W;
+        const y = H * (0.76 + rnd() * 0.1);
+        nebula(x, y - 14, 26, ['180,110,255', '90,200,255', '255,120,220'][i % 3], 0.5);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      haze(0.12);
+      hills(H * 0.88, 45, mid, 3);
+      hills(H * 0.95, 22, near, 2);
     } else {
       hills(H * 0.62, 90, far, 3);
       haze(0.35);
@@ -272,7 +412,7 @@ export function getTankBackdropTexture(kind = 'ocean') {
       hills(H * 0.9, 40, near, 2);
     }
     // ฝูงปลาไกล ๆ เป็นเงา
-    ctx.fillStyle = kind === 'abyss' ? 'rgba(160,220,255,0.18)' : 'rgba(10,40,80,0.18)';
+    ctx.fillStyle = kind === 'abyss' || P.light ? 'rgba(160,220,255,0.18)' : 'rgba(10,40,80,0.18)';
     for (let s = 0; s < 2; s++) {
       const cx = W * (0.2 + rnd() * 0.6);
       const cy = H * (0.2 + rnd() * 0.25);

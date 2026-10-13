@@ -112,7 +112,9 @@ async function login(d, password = PASSWORD) {
 /** รอจนเกมโหลดโมเดลเสร็จ แล้วกด "เริ่มเล่น" และรอการบันทึกแรกของเครื่องนี้ */
 async function startGame(d) {
   await state(d, '.start-screen:not(.auth-screen) .btn-start:not(.hidden)', 120_000);
-  await d.page.click('.start-screen:not(.auth-screen) .btn-start', { force: true }); // ปุ่มมีแอนิเมชันเต้นตลอด
+  // Keep real pointer hit-testing: forced clicks can miss a moving button or hit an overlay.
+  await d.page.addStyleTag({ content: '.btn-start, .feed-btn { animation: none !important; transition: none !important; }' });
+  await d.page.click('.start-screen:not(.auth-screen) .btn-start');
   await d.page.waitForFunction(() => window.game?.started === true && !document.querySelector('.start-screen:not(.auth-screen)'), null, { timeout: 10_000 });
   await d.page.waitForFunction(() => window.game.cloud.seq > 0 && window.game.cloud.info.status === 'saved', null, { timeout: 30_000 });
 }
@@ -434,7 +436,9 @@ test('15) มีจุดสำรองบนคลาวด์ (สำรอ�
 test('15b) ให้อาหาร / ขายปลา / รับรางวัลประจำวัน / วางของตกแต่ง ผ่าน UI → เซิร์ฟเวอร์ตรวจผ่านและบันทึกตรงกับในเครื่อง', async () => {
   const before = await cloud();
   // ให้อาหาร (ปุ่มขวาล่าง) → อาหารลด 1 ห่อ และนับภารกิจ
-  await A.page.click('.feed-btn', { force: true });
+  await A.page.click('.feed-btn');
+  // ให้อาหารเป็นคำสั่งทั่วไป ปกติรวมบันทึกภายใน 25 วินาที (BATCH_DELAY) ซึ่งนานกว่า timeout ของ waitCloud → สั่งบันทึกทันที
+  await A.page.evaluate(() => window.game.cloud.flushNow());
   await waitCloud((d) => d.game.inventory.flakes === before.game.inventory.flakes - 1 && d.game.stats.feeds === before.game.stats.feeds + 1, 'feed');
 
   // ขายปลา (ต้องกดยืนยันสองครั้ง) → ได้เงินคืนตามสูตรเดิม

@@ -10,6 +10,7 @@ import { SceneManager } from '../world/SceneManager.js';
 import { Room } from '../world/Room.js';
 import { Aquarium } from '../world/Aquarium.js';
 import { Bubbles } from '../world/Bubbles.js';
+import { Sparkles } from '../world/Sparkles.js';
 import { FishManager, fishIdentity } from '../systems/FishManager.js';
 import { FoodSystem } from '../systems/FoodSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
@@ -53,6 +54,8 @@ export class Game {
     this.aquarium = new Aquarium(this.sceneMgr);
     this.bubbles = new Bubbles();
     this.sceneMgr.scene.add(this.bubbles.points);
+    this.sparkles = new Sparkles();
+    this.sceneMgr.scene.add(this.sparkles.points);
 
     this.food = new FoodSystem(this);
     this.coins = new CoinSystem(this);
@@ -71,7 +74,11 @@ export class Game {
     this.time = 0;
     this.saveTimer = CONFIG.autoSaveInterval;
 
-    this.sceneMgr.onResize = (_w, h) => this.bubbles.setViewport(h, this.sceneMgr.camera.fov, this.sceneMgr.renderer.getPixelRatio());
+    this.sceneMgr.onResize = (_w, h) => {
+      const { camera, renderer } = this.sceneMgr;
+      this.bubbles.setViewport(h, camera.fov, renderer.getPixelRatio());
+      this.sparkles.setViewport(h, camera.fov, renderer.getPixelRatio());
+    };
     this.sceneMgr.resize(true);
     const saveNow = () => !this.resetting && this.state.save({ urgent: true });
     window.addEventListener('beforeunload', saveNow);
@@ -111,11 +118,13 @@ export class Game {
     this.sceneMgr.setupLights(this.aquarium.dims);
     this.sceneMgr.frameTank(this.aquarium.dims);
     this.bubbles.setTank(this.aquarium.dims, (x, z) => this.aquarium.heightAt(x, z));
+    this.sparkles.clear();
     this.food.clear();
     this.coins.clear();
     this.decor.load(tank);
     this.fish.load(tank);
     this.care.lastQuality = -1;
+    this.care.stage = null; // ย้ายตู้ไม่ต้องเตือนสภาพน้ำซ้ำ
     this.care.update(0);
     this.ui.refreshTank();
   }
@@ -394,6 +403,7 @@ export class Game {
     this.decor.update(dt, this.time);
     this.care.update(simDt);
     this.bubbles.update(dt, this.time);
+    this.sparkles.update(dt, this.time);
     this.aquarium.update(dt, this.time, this.sceneMgr.camera);
     this.missions.update(dt);
     this.sound.update(dt);

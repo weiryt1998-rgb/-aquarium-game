@@ -14,6 +14,11 @@ export function stars(rarity, max = 5) {
   return `<span class="stars" title="ความหายาก ${rarity}/${max}">${'★'.repeat(rarity)}<span class="dim">${'★'.repeat(max - rarity)}</span></span>`;
 }
 
+/** ดาวความหายากของสายพันธุ์ + ป้าย "ตำนาน" ถ้าเป็นปลาระดับตำนาน */
+export function rarityHtml(species) {
+  return `${stars(species.rarity)}${species.legendary ? '<b class="legend-label">✦ ตำนาน</b>' : ''}`;
+}
+
 /** แถบค่าสถานะเล็ก ๆ (0..100) */
 export function meter(value, kind = '') {
   const v = Math.round(Math.max(0, Math.min(100, value)));

@@ -11,6 +11,29 @@ export function smoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
+/** เส้นโค้ง Hermite ผ่านจุด [t, ค่า] ที่กำหนด — ใช้กำหนดรูปร่างลำตัวปลาด้วยตาราง แก้ตัวเลขแล้วรูปเปลี่ยนตามได้ง่าย */
+export function hermiteCurve(points) {
+  const ts = points.map((p) => p[0]);
+  const vs = points.map((p) => p[1]);
+  const n = points.length;
+  const m = vs.map((_, i) => {
+    if (i === 0) return (vs[1] - vs[0]) / (ts[1] - ts[0]);
+    if (i === n - 1) return (vs[n - 1] - vs[n - 2]) / (ts[n - 1] - ts[n - 2]);
+    return (vs[i + 1] - vs[i - 1]) / (ts[i + 1] - ts[i - 1]);
+  });
+  return (t) => {
+    if (t <= ts[0]) return vs[0];
+    if (t >= ts[n - 1]) return vs[n - 1];
+    let i = 0;
+    while (t > ts[i + 1]) i++;
+    const h = ts[i + 1] - ts[i];
+    const u = (t - ts[i]) / h;
+    const u2 = u * u;
+    const u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * vs[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * vs[i + 1] + (u3 - u2) * h * m[i + 1];
+  };
+}
+
 /** ค่าหน่วงแบบไม่ขึ้นกับ frame rate: ใช้แทน lerp(a, b, k) ทุกเฟรม */
 export const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
 

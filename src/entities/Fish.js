@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { forEachMaterial, disposeObject } from '../assets/AssetLoader.js';
-import { angleDelta, clamp, damp, lerp, rand, smoothstep } from '../utils/math.js';
+import { angleDelta, clamp, damp, lerp, pick, rand, smoothstep } from '../utils/math.js';
 import { noise2 } from '../utils/noise.js';
 import { pregnancyProgress } from '../shared/breeding.js';
+import { dirtyHealthDamage } from '../systems/CareSystem.js';
 
 const _desired = new THREE.Vector3();
 const _steer = new THREE.Vector3();
@@ -33,6 +34,9 @@ export class Fish {
     this.mixer = visual.mixer;
     this.swim = visual.swimUniforms;
     this.walk = visual.walkUniforms ?? null;
+    // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ปลาอวกาศ) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
+    this.trail = visual.trail ?? null;
+    this.trailAcc = 0;
     // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
     this.footOffset = species.behavior.walker ? -_box.setFromObject(this.visual, true).min.y : 0;
     this.wiggle = new THREE.Group();
@@ -220,7 +224,8 @@ export class Fish {
   }
 
   #pickWanderTarget(ctx) {
-    const zone = this.data.health < 25 ? 'bottom' : this.species.behavior.zone;
+    // ป่วยหนัก → นอนก้นตู้ / น้ำเน่าออกซิเจนต่ำ → ว่ายขึ้นไปฮุบอากาศที่ผิวน้ำ (เหมือนปลาจริง)
+    const zone = this.data.health < 25 ? 'bottom' : ctx.cleanliness < 25 ? 'top' : this.species.behavior.zone;
     for (let i = 0; i < 6; i++) {
       ctx.aquarium.randomPoint(zone, 0.6 + this.radius, this.wanderTarget);
       const blocked = ctx.obstacles.some((o) => {
@@ -331,11 +336,26 @@ export class Fish {
       this.swim.uSwimAmp.value = 0.05 + 0.07 * Math.min(speedRatio, 1.2);
       // โมเดลที่รองรับการโค้งลำตัวตอนเลี้ยว (เช่น Molly)
       if (this.swim.uTurn) this.swim.uTurn.value = damp(this.swim.uTurn.value, clamp(turnRate * 0.35, -1, 1), 5, dt);
+      // โมเดลที่เรืองแสงแรงขึ้นตอนว่ายเร็ว (เช่น ปลาอวกาศ)
+      if (this.swim.uEnergy) this.swim.uEnergy.value = damp(this.swim.uEnergy.value, clamp((speedRatio - 0.5) * 1.6, 0, 1), 3, dt);
     } else if (this.mixer) {
       this.mixer.timeScale = 0.5 + speedRatio;
       this.mixer.update(dt);
     } else {
       this.wiggle.rotation.y = Math.sin(this.wigglePhase) * 0.12 * (0.4 + speedRatio);
+    }
+    if (this.trail) this.#emitTrail(dt, speedRatio);
+  }
+
+  /** ปล่อยประกายดาวจากปลายหาง ยิ่งว่ายเร็วยิ่งถี่ */
+  #emitTrail(dt, speedRatio) {
+    const T = this.trail;
+    this.trailAcc += dt * T.rate * (0.25 + speedRatio);
+    if (this.trailAcc < 1) return;
+    const s = this.group.scale.x;
+    _target.set(0, 0, T.offset * s).applyQuaternion(this.group.quaternion).add(this.group.position);
+    for (; this.trailAcc >= 1; this.trailAcc--) {
+      this.game.sparkles.emit(_target, pick(T.colors), { spread: 0.22 * s, size: 0.1 * s + 0.03, speed: 0.06 + 0.05 * speedRatio });
     }
   }
 
@@ -377,8 +397,9 @@ export class Fish {
     d.age += dt;
     d.satiety = Math.max(0, d.satiety - care.hungerRate * dt);
     if (d.satiety < 15) d.health -= C.starvingDamage * dt * (1.3 - d.satiety / 15);
-    if (ctx.cleanliness < 25) d.health -= C.dirtyDamage * dt * (1.3 - ctx.cleanliness / 25);
-    if (d.satiety > 40 && ctx.cleanliness > 40) d.health += C.regen * dt;
+    // น้ำขุ่น/เน่าทำร้ายปลา (ยิ่งสกปรกยิ่งแรง) และปลาฟื้นตัวไม่ได้จนกว่าน้ำจะสะอาดพอ
+    d.health -= dirtyHealthDamage(ctx.cleanliness) * dt;
+    if (d.satiety > 40 && ctx.cleanliness > C.regenAbove) d.health += C.regen * dt;
     d.health = clamp(d.health, 0, 100);
 
     this.growthBoostTime -= dt;
@@ -430,6 +451,7 @@ export class Fish {
     this.dying = true;
     this.dyingTime = 0;
     this.velocity.set(0, 0, 0);
+    this.visual.traverse((o) => o.isSprite && (o.visible = false)); // แสงฟุ้งรอบตัวดับทันที
     forEachMaterial(this.visual, (m) => {
       m.userData.baseOpacity = m.opacity;
       m.transparent = true;

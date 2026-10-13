@@ -1,7 +1,7 @@
 import { Panel } from '../Panel.js';
 import { AVAILABLE_SPECIES } from '../../data/fish.js';
 import { escapeHtml } from '../../utils/math.js';
-import { genderIcon, meter, priceHtml, stars } from '../helpers.js';
+import { genderIcon, meter, priceHtml, rarityHtml } from '../helpers.js';
 import { isPregnant } from '../../shared/breeding.js';
 import { describeGenes } from '../../models/molly/genetics.js';
 
@@ -68,10 +68,10 @@ export class FishPanel extends Panel {
     const cards = AVAILABLE_SPECIES.map((s) => {
       const known = state.isDiscovered(s.id);
       return `
-        <div class="col-card ${known ? '' : 'unknown'}" ${known ? '' : `title="${s.notForSale ? 'ผสมพันธุ์ปลาสอดต่างสีเพื่อปลดล็อก' : 'ซื้อปลาชนิดนี้เพื่อปลดล็อก'}"`}>
+        <div class="col-card ${known ? '' : 'unknown'} ${s.legendary ? 'legendary' : ''}" ${known ? '' : `title="${s.notForSale ? 'ผสมพันธุ์ปลาสอดต่างสีเพื่อปลดล็อก' : 'ซื้อปลาชนิดนี้เพื่อปลดล็อก'}"`}>
           <img src="${this.game.thumbs.fish(s)}" alt="" draggable="false">
           <b>${known ? s.name : '???'}</b>
-          ${stars(s.rarity)}
+          <span>${rarityHtml(s)}</span>
           <small>${known ? `${s.sizeCm} ซม.` : s.notForSale ? 'ได้จากการผสมพันธุ์' : priceHtml(s.price)}</small>
         </div>`;
     }).join('');

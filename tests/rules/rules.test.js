@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, setLogLevel, updateDoc } from 'firebase/firestore';
 import { createInitialGame } from '../../src/shared/sanitize.js';
+import { TANK_TYPES } from '../../src/data/tanks.js';
+import { FISH_SPECIES } from '../../src/data/fish.js';
 import { createSaveDoc, docToFirestore } from '../../src/shared/saveDoc.js';
 import { PLACEHOLDER, UID_PATTERN, readPlayerUid, withPlayerUid } from '../../scripts/player-uid.mjs';
 
@@ -161,6 +163,32 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
     await assertSucceeds(setDoc(saveRef(), await nextDoc()));
   });
 
+  test('บันทึกตู้ครบทุกชนิดที่ความจุสูงสุดได้ และปฏิเสธปลาเกินความจุในทุกตู้', async () => {
+    await seed(env);
+    const full = await nextDoc((d) => {
+      const template = d.game.tanks[0];
+      d.game.tanks = TANK_TYPES.map((type) => ({
+        ...template,
+        id: `tank_${type.id}`,
+        typeId: type.id,
+        fish: Array.from({ length: type.capacity }, (_, i) => ({ ...template.fish[0], id: `fish_${type.id}_${i}` })),
+      }));
+      d.game.activeTankId = d.game.tanks[0].id;
+      d.game.collection = Object.fromEntries(FISH_SPECIES.map((species) => [species.id, true]));
+      return d;
+    });
+    await assertSucceeds(setDoc(saveRef(), full));
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ({ ...d, epoch: d.epoch + 1 }))));
+    for (let i = 0; i < TANK_TYPES.length; i++) {
+      await assertFails(setDoc(saveRef(), await nextDoc((d) => {
+        d.game.tanks[i].fish.push({ ...d.game.tanks[i].fish[0], id: 'fish_overflow' });
+        return d;
+      })));
+    }
+    await seed(env, { save: false });
+    await assertSucceeds(setDoc(saveRef(), { ...full, revision: 1, epoch: 0, createdAt: serverTimestamp() }));
+  });
+
   test('บันทึกความคืบหน้าภารกิจและสถิติที่มีรูปแบบถูกต้องได้', async () => {
     await seed(env);
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => {
@@ -200,6 +228,34 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
       (d) => ((d.game.stats.feeds = '1'), d),
       (d) => ((d.game.stats.fishBought = -1), d),
       (d) => ((d.game.tanks[0].typeId = 'ocean'), d),
+      (d) => ((d.game.tanks[0].typeId = 1), d),
+      (d) => ((d.game.tanks[0].cleanliness = '100'), d),
+      (d) => ((d.game.tanks[0].cleanliness = -1), d),
+      (d) => ((d.game.tanks[0].cleanliness = 101), d),
+      (d) => ((d.game.tanks[0].fish = {}), d),
+      (d) => ((d.game.tanks[0].decor = ''), d),
+      (d) => ((d.game.tanks[0].hacked = true), d),
+      (d) => ((delete d.game.tanks[0].id), d),
+      (d) => ((delete d.game.tanks[0].fish), d),
+      (d) => ((delete d.game.missions.progress), d),
+      (d) => ((delete d.game.stats.feeds), d),
+      (d) => ((delete d.createdAt), d),
+      (d) => ((delete d.meta), d),
+      // Rules ไม่ได้ตรวจ is map / hasAll แล้ว แต่ฟิลด์ที่ขาดหรือผิดชนิดทำให้ Rules error → ต้องถูกปฏิเสธเสมอ
+      (d) => ((delete d.game.tanks[0].typeId), d),
+      (d) => ((delete d.game.tanks[0].cleanliness), d),
+      (d) => ((d.game.tanks[0] = 'tank'), d),
+      (d) => ((d.game.tanks = { 0: d.game.tanks[0] }), d),
+      (d) => ((d.game.tanks = Array.from({ length: 8 }, (_, i) => ({ ...d.game.tanks[0], id: `tank_x${i}`, fish: [] }))), d),
+      (d) => ((d.game.inventory = 5), d),
+      (d) => ((delete d.game.inventory), d),
+      (d) => ((delete d.game.missions), d),
+      (d) => ((delete d.game.missions.claimed), d),
+      (d) => ((d.game.stats = 'x'), d),
+      (d) => ((delete d.revision), d),
+      (d) => ((delete d.epoch), d),
+      (d) => ((d.epoch = d.epoch - 1), d),
+      (d) => ((d.meta = []), d),
       (d) => ((d.game.tanks[0].fish = Array.from({ length: 15 }, (_, i) => ({ id: `f${i}` }))), d),
       (d) => ((d.game.tanks = []), d),
       (d) => ((d.epoch = d.epoch + 2), d),

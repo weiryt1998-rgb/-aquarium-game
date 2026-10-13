@@ -1027,6 +1027,45 @@ svg {
   background: var(--bad);
 }
 
+/* ปลาระดับตำนาน (เช่น ปลาอวกาศ) */
+.tag-legend {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-style: normal;
+  color: #fff;
+  background: linear-gradient(135deg, #7b4dff, #ff5fd8 60%, #ffc94a);
+  box-shadow: 0 0 8px rgba(190, 120, 255, 0.8);
+}
+
+.item-card.legendary,
+.col-card.legendary:not(.unknown) {
+  background: radial-gradient(ellipse at 50% 35%, rgba(140, 90, 255, 0.28), rgba(30, 20, 70, 0.25) 70%), rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(190, 140, 255, 0.35);
+}
+
+.item-card.legendary.active {
+  border-color: #c58bff;
+}
+
+.legend-label {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(90deg, #7b4dff, #ff5fd8, #ffb84a);
+  vertical-align: 1px;
+}
+
 .shop-detail {
   padding: 14px;
   border-radius: 18px;

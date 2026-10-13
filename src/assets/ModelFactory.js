@@ -7,6 +7,7 @@ import { forEachMaterial, normalizeModel } from './AssetLoader.js';
 import { applyShaderMods, causticsMod, createCrawlMod, createSwayMod, createSwimMod } from '../render/shaderMods.js';
 import { createMolly } from '../models/molly/MollyModel.js';
 import { genesToVariant } from '../models/molly/genetics.js';
+import { createSpaceFish } from '../models/spacefish/SpaceFishModel.js';
 
 /** ความยาวรวม (หัวถึงปลายหาง) ของโมเดล .glb หลังปรับขนาด เทียบกับลำตัวโมเดลชั่วคราวที่ยาว 1 */
 export const FISH_MODEL_LENGTH = 1.35;
@@ -14,6 +15,7 @@ export const FISH_MODEL_LENGTH = 1.35;
 /** โมเดลปลาที่สร้างด้วยโค้ดแบบละเอียด (species.procedural.type) — ใช้แทนโมเดลชั่วคราว ถ้าไม่มีไฟล์ .glb ของสายพันธุ์นั้น */
 const PROCEDURAL_FISH = {
   molly: (species, { animated, detail, genes }) => createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated }),
+  spacefish: (species, { animated, detail }) => createSpaceFish({ variant: species.procedural.variant, detail, animated }),
 };
 
 /**
@@ -34,7 +36,9 @@ export class ModelFactory {
   }
 
   decorModelUrls(item) {
-    return [item.model?.url, getDecorCategory(item.category)?.fallbackModel].filter(Boolean);
+    // model.fallback = false → รูปทรงเฉพาะตัว ห้ามใช้ไฟล์กลางของหมวดแทน (เช่น หินรูปทรงแปลก ๆ)
+    const fallback = item.model?.fallback === false ? null : getDecorCategory(item.category)?.fallbackModel;
+    return [item.model?.url, fallback].filter(Boolean);
   }
 
   allModelUrls() {
@@ -42,8 +46,9 @@ export class ModelFactory {
   }
 
   /**
-   * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, isPlaceholder: boolean }}
+   * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, trail?: object|null, isPlaceholder: boolean }}
    *  object หันหัวไป +Z จุดศูนย์กลางที่กลางลำตัว ลำตัวยาวประมาณ 1 หน่วย
+   *  trail = อนุภาคแสงที่ปลาปล่อยตามหลังขณะว่าย (ปลาอวกาศ) ดู world/Sparkles.js
    */
   /** @param {{ animated?: boolean, genes?: object }} options genes = ยีนสีของปลาลูกผสม (ดู models/molly/genetics.js) */
   createFish(species, { animated = true, genes = null } = {}) {
@@ -84,8 +89,8 @@ export class ModelFactory {
 
     const procedural = PROCEDURAL_FISH[species.procedural?.type];
     if (procedural) {
-      const { object, swimUniforms } = procedural(species, { animated, detail: this.detail(), genes });
-      return { object, mixer: null, swimUniforms, isPlaceholder: false };
+      const { object, swimUniforms, trail = null } = procedural(species, { animated, detail: this.detail(), genes });
+      return { object, mixer: null, swimUniforms, trail, isPlaceholder: false };
     }
 
     const materials = createFishMaterials(species.look);

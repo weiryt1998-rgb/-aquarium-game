@@ -45,8 +45,8 @@ const TEMPLATE = /* html */ `
         <div class="stat-head"><span class="emoji">😊</span>ความสุข<em data-ref="valHappy"></em></div>
         <div class="bar"><i data-ref="barHappy"></i></div>
       </div>
-      <div class="stat clean">
-        <div class="stat-head"><span class="emoji">💧</span>ความสะอาด<em data-ref="valClean"></em>
+      <div class="stat clean" data-ref="statClean">
+        <div class="stat-head"><span class="emoji" data-ref="cleanEmoji">💧</span>ความสะอาด<em data-ref="valClean"></em>
           <button class="mini-btn" data-action="clean" data-ref="cleanBtn" title="ทำความสะอาดตู้">🧽</button>
         </div>
         <div class="bar"><i data-ref="barClean"></i></div>
@@ -214,6 +214,10 @@ export class UI {
     const care = this.game.care;
     this.#setBar('Happy', care.avgHappiness);
     this.#setBar('Clean', care.cleanliness);
+    // ไอคอนบอกสภาพน้ำ (ใส → เริ่มขุ่น → ขุ่นเขียว → เน่า)
+    const water = care.waterStage;
+    this.refs.cleanEmoji.textContent = water.emoji;
+    this.refs.statClean.title = water.name;
     this.#setBar('Health', care.avgHealth);
     const wait = care.cleanCooldownLeft();
     this.refs.cleanBtn.classList.toggle('cooldown', wait > 0);

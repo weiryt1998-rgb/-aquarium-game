@@ -3,11 +3,15 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { Substrate } from './Substrate.js';
 import { LightRays } from './LightRays.js';
 import { getGlassStreakTexture, getLedGlowTexture, getTankBackdropTexture, getWoodTexture } from '../render/textures.js';
-import { sharedUniforms } from '../render/shaderMods.js';
-import { clamp, lerp, rand } from '../utils/math.js';
+import { applyShaderMods, sharedUniforms } from '../render/shaderMods.js';
+import { AmbientMotes } from './AmbientMotes.js';
+import { AlgaeFilm } from './Algae.js';
+import { clamp, lerp, rand, smoothstep } from '../utils/math.js';
 
 const CLEAR_FOG = new THREE.Color('#1b6aa8');
-const MURKY_FOG = new THREE.Color('#4f6f3a');
+const GREEN_FOG = new THREE.Color('#2f7a5e');
+const MURKY_FOG = new THREE.Color('#5c5f30');
+const ALGAE_SAND = new THREE.Color('#7f9150');
 const SURFACE_DEEP = new THREE.Color('#2f8fd0');
 const SURFACE_SHALLOW = new THREE.Color('#9fe6ff');
 const SURFACE_MURKY = new THREE.Color('#7a9a5a');
@@ -48,12 +52,18 @@ void main() {
 /** สไตล์ตู้เริ่มต้น (ถ้าข้อมูลตู้ไม่ได้ระบุ style) */
 const DEFAULT_STYLE = { frame: 'black', trim: null, led: '#cfefff', backdrop: 'ocean', sand: '#ffffff' };
 
-/** วัสดุขอบตู้ตามสไตล์ */
+/** วัสดุขอบตู้ตามสไตล์ (physical = ใช้ MeshPhysicalMaterial สำหรับประกายรุ้ง/เคลือบเงา, stars = ดาวระยิบบนผิว) */
 const FRAME_MATERIALS = {
   black: () => ({ color: '#15181e', roughness: 0.38, metalness: 0.5 }),
   walnut: () => ({ color: '#8a5a36', map: getWoodTexture(), roughness: 0.48, metalness: 0.05 }),
   white: () => ({ color: '#eef2f6', roughness: 0.2, metalness: 0.05 }),
   lacquer: () => ({ color: '#0b0d12', roughness: 0.14, metalness: 0.65 }),
+  // มุกขาวอมชมพู ประกายรุ้งเมื่อมองเฉียง
+  pearl: () => ({ physical: true, color: '#f7eef3', roughness: 0.22, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 1, iridescenceIOR: 1.45, iridescenceThicknessRange: [220, 620] }),
+  // โลหะเข้มเหลือบเขียว-ม่วงแบบแสงเหนือ
+  aurora: () => ({ physical: true, color: '#14283a', roughness: 0.16, metalness: 0.7, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [380, 900] }),
+  // หินออบซิเดียนดำเงา มีดาวกระพริบอยู่ในเนื้อ
+  cosmic: () => ({ physical: true, stars: true, color: '#08060f', roughness: 0.1, metalness: 0.45, clearcoat: 1, clearcoatRoughness: 0.03 }),
 };
 
 /** แถบโลหะตกแต่ง */
@@ -61,11 +71,67 @@ const TRIM_MATERIALS = {
   chrome: { color: '#eef3f8', roughness: 0.12, metalness: 1 },
   brass: { color: '#c9a052', roughness: 0.28, metalness: 1 },
   gold: { color: '#ffd062', roughness: 0.2, metalness: 1 },
+  rosegold: { color: '#f0b09a', roughness: 0.2, metalness: 1 },
+  platinum: { color: '#e9eef7', roughness: 0.07, metalness: 1 },
 };
+
+/**
+ * ดาวระยิบระยับบนผิวขอบตู้ (คำนวณจากตำแหน่งในโลก จึงไม่ยืดตามความยาวของแท่งขอบ)
+ * ดาวแต่ละดวงกระพริบด้วยจังหวะของตัวเอง
+ */
+const frameStarsMod = {
+  key: 'frame-stars',
+  apply(shader) {
+    shader.uniforms.uStarTime = sharedUniforms.uTime;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vStarPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvStarPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uStarTime;
+        varying vec3 vStarPos;
+        float starHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          vec3 sp = vStarPos * 26.0;
+          vec3 cell = floor(sp);
+          float h = starHash(cell);
+          float d = length(fract(sp) - 0.5 - (vec3(starHash(cell + 3.1), starHash(cell + 7.7), starHash(cell + 1.3)) - 0.5) * 0.5);
+          float tw = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(uStarTime * (1.0 + h * 3.0) + h * 50.0), 3.0);
+          float star = step(0.9, h) * smoothstep(0.16, 0.0, d) * tw;
+          vec3 tint = mix(vec3(0.75, 0.8, 1.0), vec3(1.0, 0.85, 0.6), starHash(cell + 9.1));
+          totalEmissiveRadiance += tint * star * 2.4;
+          // เนบิวลาจาง ๆ ใต้ดาว
+          float neb = 0.5 + 0.5 * sin(vStarPos.x * 0.9 + sin(vStarPos.y * 1.7) * 2.0 + vStarPos.z * 0.6);
+          totalEmissiveRadiance += mix(vec3(0.12, 0.03, 0.22), vec3(0.02, 0.06, 0.2), neb) * 0.6;
+        }`,
+      );
+  },
+};
+
+/** ไฟ LED ที่เปลี่ยนสีเอง (style.ledAnim) — คืนสีตามเวลา */
+const LED_ANIMATIONS = {
+  // ไล่สีแสงเหนือ เขียว → ฟ้า → ม่วง ช้า ๆ
+  aurora: (t, out) => {
+    const k = (t * 0.06) % 3;
+    const i = Math.floor(k);
+    const pal = LED_AURORA;
+    return out.copy(pal[i]).lerp(pal[(i + 1) % 3], k - i);
+  },
+  // สีรุ้งวนรอบ
+  rainbow: (t, out) => out.setHSL((t * 0.04) % 1, 0.85, 0.62),
+};
+const LED_AURORA = ['#5dffc0', '#5ab8ff', '#c08aff'].map((c) => new THREE.Color(c));
 
 /**
  * ตู้ปลา: พื้นกรวด กระจก ขอบตู้ ผิวน้ำ พื้นหลัง ลำแสง และเครื่องมือช่วยจัดวาง (กริด/วงกลมบอกตำแหน่ง)
  * รูปลักษณ์ (ขอบตู้ ไฟ LED พื้นหลัง สีทราย) เปลี่ยนตาม tankType.style
+ * ตู้พรีเมียมมีเพิ่ม: ledAnim (ไฟเปลี่ยนสีเอง), neon (ไฟเส้นตามขอบ), edge (ขอบกระจกเรืองแสง), ambient (อนุภาคในน้ำ)
  * พิกัดภายในตู้: กึ่งกลางตู้ที่ x=0,z=0 ก้นตู้ที่ y=0
  */
 export class Aquarium {
@@ -99,12 +165,15 @@ export class Aquarium {
     this.#buildFrame();
     this.#buildWaterSurface();
     this.#buildDebris();
+    this.algae = new AlgaeFilm(this.dims);
+    this.group.add(this.algae.group);
     this.rays = new LightRays(this.dims);
     this.group.add(this.rays.group);
+    if (this.style.ambient) this.group.add(new AmbientMotes(this.dims, this.style.ambient).points);
     this.marker = this.#buildMarker();
     this.marker.visible = false;
     this.group.add(this.marker);
-    this.setWaterQuality(this.quality);
+    this.setWaterQuality(this.quality, { immediate: true });
   }
 
   // ── ส่วนประกอบของตู้ ──────────────────────────────────────
@@ -151,9 +220,10 @@ export class Aquarium {
     streak.renderOrder = 6;
     this.group.add(streak);
     // เส้นขอบกระจก
+    // style.edge = สีเส้นขอบกระจกเรืองแสง (ตู้พรีเมียม)
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)),
-      new THREE.LineBasicMaterial({ color: '#c8f2ff', transparent: true, opacity: 0.35, fog: false }),
+      new THREE.LineBasicMaterial({ color: this.style.edge ?? '#c8f2ff', transparent: true, opacity: this.style.edge ? 0.9 : 0.35, fog: false }),
     );
     edges.position.y = h / 2;
     this.group.add(edges);
@@ -174,7 +244,9 @@ export class Aquarium {
     const { w, h, d } = this.dims;
     const style = this.style;
     const premium = style.trim != null;
-    const mat = new THREE.MeshStandardMaterial({ ...(FRAME_MATERIALS[style.frame] ?? FRAME_MATERIALS.black)(), fog: false });
+    const { physical, stars, ...frameParams } = (FRAME_MATERIALS[style.frame] ?? FRAME_MATERIALS.black)();
+    const mat = physical ? new THREE.MeshPhysicalMaterial({ ...frameParams, fog: false }) : new THREE.MeshStandardMaterial({ ...frameParams, fog: false });
+    if (stars) applyShaderMods(mat, [frameStarsMod]);
     const t = style.frame === 'white' ? 0.13 : 0.16;
     const addBar = (sx, sy, sz, x, y, z, material = mat) => {
       const r = Math.min(0.06, sx / 2, sy / 2, sz / 2) * 0.9;
@@ -216,13 +288,29 @@ export class Aquarium {
       strip.position.set(0, h - 0.06, z);
       this.group.add(strip);
     }
-    const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(w - 0.2, 0.9),
-      new THREE.MeshBasicMaterial({ map: getLedGlowTexture(), color: led, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
-    );
+    const glowMat = new THREE.MeshBasicMaterial({ map: getLedGlowTexture(), color: led, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.2, 0.9), glowMat);
     glow.position.set(0, h - 0.5, d / 2 - 0.14);
     glow.renderOrder = 7;
     this.group.add(glow);
+
+    // ไฟนีออนเส้นบางเรืองแสงตามขอบล่างของฝาและขอบบนของฐาน (สีเดียวกับไฟ LED)
+    let neonMat = null;
+    if (style.neon) {
+      neonMat = new THREE.MeshBasicMaterial({ color: led.clone().multiplyScalar(2), fog: false });
+      const front = d / 2 + t + 0.03;
+      for (const y of [h - 0.07, 0.15]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w + t * 2, 0.035, 0.03), neonMat);
+        bar.position.set(0, y, front + 0.04);
+        this.group.add(bar);
+        for (const side of [-1, 1]) {
+          const sideBar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, d + t * 2), neonMat);
+          sideBar.position.set(side * (w / 2 + t + 0.04), y, 0);
+          this.group.add(sideBar);
+        }
+      }
+    }
+    this.leds = { base: led, ledMat, glowMat, neonMat, anim: LED_ANIMATIONS[style.ledAnim] ?? null, color: new THREE.Color() };
 
     // ซิลิโคนตามมุมตู้
     const post = new THREE.MeshStandardMaterial({ color: style.frame === 'white' ? '#dfe8ef' : '#0c1a26', transparent: true, opacity: 0.55, roughness: 0.3, fog: false });
@@ -344,16 +432,25 @@ export class Aquarium {
     this.marker.visible = false;
   }
 
-  /** ความสะอาดของน้ำ 0..1 → สีหมอก ลายแสง และตะกอน */
-  setWaterQuality(q) {
+  /**
+   * ความสะอาดของน้ำ 0..1 → สีน้ำ (หมอก) ลายแสง ตะกอน สีทราย และตะไคร่บนกระจก
+   * น้ำเปลี่ยนสีเป็นขั้น: ใส → อมเขียว (ตะไคร่ในน้ำ) → เขียวขี้ม้าอมน้ำตาล (สกปรกมาก)
+   * @param {{immediate?: boolean}} options immediate = ตะไคร่แสดงทันที (ตอนโหลดตู้) ไม่ค่อย ๆ ขึ้น
+   */
+  setWaterQuality(q, { immediate = false } = {}) {
     this.quality = clamp(q, 0, 1);
     const dirt = 1 - this.quality;
-    this.sceneMgr.scene.fog.color.copy(CLEAR_FOG).lerp(MURKY_FOG, dirt * 0.85);
+    const fog = this.sceneMgr.scene.fog.color.copy(CLEAR_FOG).lerp(GREEN_FOG, smoothstep(0.15, 0.6, dirt));
+    fog.lerp(MURKY_FOG, smoothstep(0.55, 1, dirt));
     sharedUniforms.uCausticIntensity.value = 0.55 * (0.35 + 0.65 * this.quality);
-    this.surfaceUniforms.uDeep.value.copy(SURFACE_DEEP).lerp(SURFACE_MURKY, dirt * 0.7);
-    this.surfaceUniforms.uShallow.value.copy(SURFACE_SHALLOW).lerp(SURFACE_MURKY, dirt * 0.5);
+    this.surfaceUniforms.uDeep.value.copy(SURFACE_DEEP).lerp(SURFACE_MURKY, dirt * 0.8);
+    this.surfaceUniforms.uShallow.value.copy(SURFACE_SHALLOW).lerp(SURFACE_MURKY, dirt * 0.6);
     if (this.debris) this.debris.material.opacity = Math.max(0, dirt - 0.25) * 1.1;
     if (this.rays) this.rays.intensity.value = 0.22 * (0.3 + 0.7 * this.quality);
+    // ทรายมีคราบเขียวเมื่อสกปรก
+    if (this.substrate) this.substrate.material.color.set(this.style.sand).lerp(ALGAE_SAND, smoothstep(0.35, 1, dirt) * 0.55);
+    // ตะไคร่เริ่มขึ้นเมื่อความสะอาดต่ำกว่า 75% และเต็มกระจกเมื่อใกล้ 0
+    this.algae?.setTarget(smoothstep(0.25, 0.97, dirt), { immediate });
   }
 
   update(dt, time, camera) {
@@ -365,6 +462,15 @@ export class Aquarium {
     fog.far = near + ((this.dims.w + this.dims.d) / 2) * lerp(1.1, 3.0, this.quality);
     this.rays.update(camera);
     if (this.debris) this.debris.rotation.y = Math.sin(time * 0.05) * 0.02;
+    this.algae?.update(dt);
+    // ไฟ LED เปลี่ยนสีเอง
+    const L = this.leds;
+    if (L?.anim) {
+      L.anim(time, L.color);
+      L.ledMat.color.copy(L.color).multiplyScalar(1.6);
+      L.glowMat.color.copy(L.color);
+      L.neonMat?.color.copy(L.color).multiplyScalar(2);
+    }
   }
 
   dispose() {

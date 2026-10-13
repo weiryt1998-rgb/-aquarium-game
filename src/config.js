@@ -29,8 +29,12 @@ export const CONFIG = {
     medicineHeal: 50,
     /** สุขภาพลด/ฟื้นต่อวินาที */
     starvingDamage: 0.25,
+    /** น้ำสกปรกทำร้ายปลา: เริ่มเมื่อความสะอาดต่ำกว่า dirtyFrom แรงขึ้นเรื่อย ๆ จนสูงสุด ~dirtyDamage × 1.3 ตอนน้ำสกปรกสุด */
     dirtyDamage: 0.15,
+    dirtyFrom: 45,
+    /** ปลาฟื้นสุขภาพได้เฉพาะตอนอิ่มและน้ำสะอาดกว่า regenAbove (ห้ามเพิ่ม regen — เซิร์ฟเวอร์ใช้เป็นเพดานการฟื้น) */
     regen: 0.08,
+    regenAbove: 45,
   },
 
   breeding: {

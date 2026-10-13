@@ -64,6 +64,7 @@ export class FishManager {
     const fish = this.spawn(record, { fromTop: true });
     const p = fish.position;
     this.game.bubbles.emit(p.x, p.y - 0.2, p.z, 14, { spread: 0.35, minSize: 0.05, maxSize: 0.14 });
+    if (fish.trail) this.game.sparkles.burst(p, fish.trail.colors, 60); // ปลาระดับตำนานลงตู้พร้อมประกายดาว
     this.game.events.emit(EV.FISH_COUNT, { count: this.count });
     return fish;
   }

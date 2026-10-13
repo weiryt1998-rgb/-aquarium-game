@@ -2,7 +2,7 @@ import { Panel } from '../Panel.js';
 import { SHOP_SPECIES, ZONE_LABEL, getSpecies } from '../../data/fish.js';
 import { breedGroupOf } from '../../shared/breeding.js';
 import { TANK_TYPES } from '../../data/tanks.js';
-import { priceHtml, stars } from '../helpers.js';
+import { priceHtml, rarityHtml } from '../helpers.js';
 import { CONFIG } from '../../config.js';
 import { formatNumber } from '../../utils/math.js';
 
@@ -55,8 +55,9 @@ export class ShopPanel extends Panel {
     const grid = SHOP_SPECIES.map((s) => {
       const isNew = !this.game.state.isDiscovered(s.id);
       return `
-        <button class="item-card ${s.id === this.selectedId ? 'active' : ''}" data-action="select" data-id="${s.id}">
+        <button class="item-card ${s.id === this.selectedId ? 'active' : ''} ${s.legendary ? 'legendary' : ''}" data-action="select" data-id="${s.id}">
           ${isNew ? '<i class="tag-new">ใหม่</i>' : ''}
+          ${s.legendary ? '<i class="tag-legend" title="ปลาระดับตำนาน">✦</i>' : ''}
           <img src="${thumbs.fish(s)}" alt="" draggable="false">
           <span class="item-name">${s.name}</span>
           ${priceHtml(s.price)}
@@ -74,7 +75,7 @@ export class ShopPanel extends Panel {
       <h3>${s.name} <small>${s.nameEn}</small></h3>
       <p class="desc">${s.description}</p>
       <ul class="facts">
-        <li><span>ความหายาก</span>${stars(s.rarity)}</li>
+        <li><span>ความหายาก</span><b>${rarityHtml(s)}</b></li>
         <li><span>ขนาด</span><b>${s.sizeCm} ซม.</b></li>
         <li><span>นิสัย</span><b>${ZONE_LABEL[s.behavior.zone]}${s.behavior.schooling ? ' · ว่ายเป็นฝูง' : ''}</b></li>
         <li><span>รายได้</span><b>~${perMinute} เหรียญ/นาที</b></li>

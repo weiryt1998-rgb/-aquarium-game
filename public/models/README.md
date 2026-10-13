@@ -44,6 +44,9 @@
 | `decor/coral.glb` | ปะการัง |
 | `decor/temple_ruin.glb` | ซากวิหารโบราณ |
 | `decor/seashell.glb` | เปลือกหอย |
+| `decor/greek_ruin.glb` | ซากวิหารกรีก |
+| `decor/snail_coral.glb` | หอยสะสมกับปะการัง |
+| `decor/plant_fern.glb` `plant_red.glb` `plant_grass.glb` `plant_sword.glb` `plant_stem.glb` | พืชน้ำแต่ละชนิด (แยกจากไฟล์พืชรวม 1 ไฟล์) |
 | `decor/bubbler.glb` | หัวทรายออกซิเจน |
 | `decor/<id>.glb` | ไฟล์ของแต่ละชิ้นตาม `id` ใน `src/data/decor.js` เช่น `plant_fern.glb` (ถ้ามีจะใช้แทนไฟล์กลาง) |
 

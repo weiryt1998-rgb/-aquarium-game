@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { hermiteCurve } from '../../utils/math.js';
 
 /**
  * รูปทรง 3 มิติของปลา Balloon Molly (สร้างด้วย BufferGeometry ทั้งหมด ไม่ต้องใช้ไฟล์โมเดล)
@@ -26,28 +27,7 @@ export const FIN_RAYS_PER_TEXTURE = 8;
 
 // ── โปรไฟล์ลำตัว ───────────────────────────────────────────────
 
-/** เส้นโค้ง Hermite ผ่านจุด [t, ค่า] ที่กำหนด — ปรับรูปร่างได้ง่ายโดยแก้ตัวเลขในตาราง */
-function curve(points) {
-  const ts = points.map((p) => p[0]);
-  const vs = points.map((p) => p[1]);
-  const n = points.length;
-  const m = vs.map((_, i) => {
-    if (i === 0) return (vs[1] - vs[0]) / (ts[1] - ts[0]);
-    if (i === n - 1) return (vs[n - 1] - vs[n - 2]) / (ts[n - 1] - ts[n - 2]);
-    return (vs[i + 1] - vs[i - 1]) / (ts[i + 1] - ts[i - 1]);
-  });
-  return (t) => {
-    if (t <= ts[0]) return vs[0];
-    if (t >= ts[n - 1]) return vs[n - 1];
-    let i = 0;
-    while (t > ts[i + 1]) i++;
-    const h = ts[i + 1] - ts[i];
-    const u = (t - ts[i]) / h;
-    const u2 = u * u;
-    const u3 = u2 * u;
-    return (2 * u3 - 3 * u2 + 1) * vs[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * vs[i + 1] + (u3 - u2) * h * m[i + 1];
-  };
-}
+const curve = hermiteCurve;
 
 // แนวสันหลัง: ลาดขึ้นจากปากที่เชิดขึ้นเล็กน้อย หลังโก่งสูงสุดใต้ครีบหลัง แล้วลาดลงสู่โคนหาง
 const TOP = curve([[0, 0.1], [0.06, 0.125], [0.14, 0.165], [0.24, 0.205], [0.36, 0.232], [0.48, 0.238], [0.6, 0.212], [0.72, 0.162], [0.84, 0.112], [0.94, 0.088], [1, 0.084]]);

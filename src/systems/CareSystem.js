@@ -2,6 +2,26 @@ import { CONFIG } from '../config.js';
 import { EV } from '../core/EventBus.js';
 import { clamp } from '../utils/math.js';
 
+/**
+ * ระดับความสกปรกของน้ำ (เรียงจากสะอาดไปสกปรก) — ภาพในตู้ (สีน้ำ ตะไคร่) เปลี่ยนต่อเนื่องตามความสะอาด
+ * ส่วนขั้นเหล่านี้ใช้แจ้งเตือนผู้เล่นและบอกผลต่อปลา
+ */
+export const WATER_STAGES = [
+  { min: 70, name: 'น้ำใส', emoji: '💧' },
+  { min: 45, name: 'น้ำเริ่มขุ่น', emoji: '🌿', warn: '🌿 น้ำเริ่มขุ่น มีตะไคร่เกาะกระจกแล้ว — ปลาเริ่มไม่ค่อยมีความสุข' },
+  { min: 25, name: 'น้ำขุ่นเขียว', emoji: '🟢', warn: '⚠️ น้ำขุ่นเขียว ตะไคร่ลามทั่วตู้ ปลาเริ่มป่วยและไม่ฟื้นตัว — กด 🧽 ทำความสะอาดตู้' },
+  { min: 0, name: 'น้ำเน่า', emoji: '🤢', warn: '🚨 น้ำเน่ามาก! ปลาสุขภาพทรุดลงเร็ว ต้องทำความสะอาดตู้ด่วน' },
+];
+
+export const waterStageIndex = (cleanliness) => WATER_STAGES.findIndex((s) => cleanliness >= s.min);
+
+/** สุขภาพที่ลดต่อวินาทีจากน้ำสกปรก: 0 เมื่อสะอาดกว่า dirtyFrom แล้วแรงขึ้นแบบโค้ง (น้ำเน่าหนักอันตรายกว่าขุ่นนิดหน่อยมาก) */
+export function dirtyHealthDamage(cleanliness) {
+  const C = CONFIG.care;
+  if (cleanliness >= C.dirtyFrom) return 0;
+  return C.dirtyDamage * 1.3 * ((C.dirtyFrom - cleanliness) / C.dirtyFrom) ** 1.6;
+}
+
 /** ค่าสถานะระดับตู้: ความสะอาดของน้ำ ค่าเฉลี่ยความสุข/สุขภาพ และการทำความสะอาด */
 export class CareSystem {
   constructor(game) {
@@ -37,9 +57,25 @@ export class CareSystem {
 
     const quality = tank.cleanliness / 100;
     if (Math.abs(quality - this.lastQuality) > 0.004) {
+      // lastQuality = -1 หลังโหลดตู้ → แสดงตะไคร่ตามสภาพจริงทันที ไม่ค่อย ๆ ขึ้น
+      this.game.aquarium.setWaterQuality(quality, { immediate: this.lastQuality < 0 });
       this.lastQuality = quality;
-      this.game.aquarium.setWaterQuality(quality);
     }
+    this.#checkStage(tank);
+  }
+
+  /** แจ้งเตือนเมื่อน้ำสกปรกลงถึงขั้นใหม่ (ไม่แจ้งตอนเพิ่งโหลดตู้ หรือตอนน้ำใสขึ้น) */
+  #checkStage(tank) {
+    const stage = waterStageIndex(tank.cleanliness);
+    const prev = this.stage;
+    this.stage = stage;
+    if (prev == null || prev === -1 || stage <= prev) return;
+    const info = WATER_STAGES[stage];
+    if (info.warn && this.game.fish.count > 0) this.game.ui.toast(info.warn, stage >= 2 ? 'warn' : 'info');
+  }
+
+  get waterStage() {
+    return WATER_STAGES[waterStageIndex(this.cleanliness)];
   }
 
   addDirt(amount) {

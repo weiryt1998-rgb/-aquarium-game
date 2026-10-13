@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lerp, seededRandom, smoothstep } from '../utils/math.js';
 import { fbm3, noise3 } from '../utils/noise.js';
+import { applyShaderMods, sharedUniforms } from '../render/shaderMods.js';
 
 /**
  * ของตกแต่งชั่วคราวสร้างด้วยโค้ด (ใช้จนกว่าจะมีไฟล์ .glb)
@@ -242,6 +243,166 @@ function buildRock(item, rnd) {
   return [mesh(g, { roughness: 0.92 })];
 }
 
+// ── หินแปลก ๆ ─────────────────────────────────────────────────
+
+/**
+ * แสงเรืองกระพริบช้า ๆ (คริสตัล ลาวา) — คูณความสว่างของ emissive ตามเวลา
+ * ทำให้ของเรืองแสงดูมีชีวิตโดยไม่ต้องอัปเดตอะไรบน CPU
+ */
+function glowPulseMod(speed, depth) {
+  return {
+    key: `glow-pulse-${speed}-${depth}`,
+    apply(shader) {
+      shader.uniforms.uPulseTime = sharedUniforms.uTime;
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPulseTime;').replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        totalEmissiveRadiance *= ${(1 - depth).toFixed(3)} + ${depth.toFixed(3)} * (0.5 + 0.5 * sin(uPulseTime * ${speed.toFixed(3)} + vViewPosition.y * 1.7));`,
+      );
+    },
+  };
+}
+
+/** ชิ้นที่เรืองแสงเอง: เก็บค่าเรืองแสงเดิมไว้ให้ไฮไลต์ตอนเลือกคืนค่าได้ และกระพริบช้า ๆ */
+function glowMesh(geo, params, pulse) {
+  const m = mesh(geo, params);
+  m.material.userData.baseEmissive = m.material.emissive.clone();
+  applyShaderMods(m.material, [pulse]);
+  return m;
+}
+
+/** ก้อนหินขรุขระเล็ก ๆ (ใช้ประกอบชิ้นอื่น) */
+function noisyBlob(radius, scale, center, seed, colorFn, detail = 3) {
+  let geo = new THREE.IcosahedronGeometry(radius, detail);
+  geo.deleteAttribute('normal');
+  geo.deleteAttribute('uv');
+  geo = mergeVertices(geo);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    _v.fromBufferAttribute(pos, i);
+    _v.multiplyScalar(1 + (fbm3(_v.x * 2 + seed, _v.y * 2, _v.z * 2 - seed, 3) - 0.5) * 0.7);
+    pos.setXYZ(i, _v.x * scale.x + center.x, Math.max(_v.y * scale.y + center.y, -0.05), _v.z * scale.z + center.z);
+  }
+  geo.computeVertexNormals();
+  return part(geo, colorFn);
+}
+
+/** ซุ้มหินโค้งธรรมชาติ ลายหินทรายเป็นชั้น ๆ — ปลาว่ายลอดใต้ซุ้มได้ */
+function buildRockArch(item, rnd) {
+  const seed = rnd() * 40;
+  const bands = ['#b0714a', '#c98d5f', '#9c5f3c', '#d6a072', '#b98058'].map((c) => new THREE.Color(c));
+  const moss = new THREE.Color('#6d8a3e');
+  const strata = (p, n, out) => {
+    // ชั้นหินหนาไม่เท่ากันและเอียงเป็นคลื่น ไล่สีนุ่ม ๆ ระหว่างชั้น
+    const w = p.y * 4.2 + p.x * 0.6 + (fbm3(p.x * 1.2 + seed, p.y * 0.6, p.z * 1.2, 2) - 0.5) * 2.6;
+    const i = ((Math.floor(w) % 5) + 5) % 5;
+    out.copy(bands[i]).lerp(bands[(i + 1) % 5], smoothstep(0.55, 1, w - Math.floor(w)));
+    out.multiplyScalar(0.62 + fbm3(p.x * 5 + seed, p.y * 5, p.z * 5, 3) * 0.6);
+    if (n.y > 0.6) out.lerp(moss, smoothstep(0.6, 0.95, n.y) * 0.3);
+  };
+  const R = 0.95;
+  const H = 1.35;
+  const points = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = lerp(-0.08, Math.PI + 0.08, i / 12);
+    points.push(new THREE.Vector3(Math.cos(t) * R, Math.max(Math.sin(t) * H, -0.12), (noise3(i * 0.7 + seed, 0, 0) - 0.5) * 0.25));
+  }
+  // ขาซุ้มหนา ช่วงบนบางลง ผิวขรุขระ
+  const rough = (u, off) => 1 + (fbm3(off.x * 3 + seed, off.y * 3 + u * 9, off.z * 3, 3) - 0.5) * 0.8 + (noise3(off.x * 11, off.y * 11 + u * 30, off.z * 11) - 0.5) * 0.18;
+  const arch = tubeWithRadius(points, 0.32, (u, off) => (1.05 - 0.4 * Math.sin(u * Math.PI)) * rough(u, off), 72, 18);
+  const parts = [
+    part(arch, strata),
+    noisyBlob(0.42, new THREE.Vector3(1.1, 0.75, 1), new THREE.Vector3(-R - 0.05, 0.12, 0.05), seed + 1, strata),
+    noisyBlob(0.38, new THREE.Vector3(1, 0.7, 1.1), new THREE.Vector3(R + 0.05, 0.1, -0.05), seed + 2, strata),
+    noisyBlob(0.18, new THREE.Vector3(1, 0.7, 1), new THREE.Vector3(0.35, 0.03, 0.4), seed + 3, strata, 2),
+  ];
+  return [mesh(merge(parts), { roughness: 0.95 })];
+}
+
+/** หินคริสตัลอเมทิสต์: ก้อนหินสีเข้มมีแท่งคริสตัลหกเหลี่ยมสีม่วงงอกออกมา เรืองแสงระยิบ */
+function buildCrystalRock(item, rnd) {
+  const seed = rnd() * 40;
+  const rockColor = new THREE.Color('#4a4452');
+  const rockFn = (p, _n, out) => out.copy(rockColor).multiplyScalar(0.6 + fbm3(p.x * 3 + seed, p.y * 3, p.z * 3, 3) * 0.7);
+  const rock = noisyBlob(0.62, new THREE.Vector3(1.25, 0.6, 1.05), new THREE.Vector3(0, 0.1, 0), seed, rockFn);
+
+  const deep = new THREE.Color('#5a1aa8');
+  const tip = new THREE.Color('#e9c8ff');
+  const crystals = [];
+  const d = new THREE.Vector3();
+  const crystal = (base, dir, len, r) => {
+    const body = len * 0.78;
+    // ไล่สีจากโคน (ม่วงเข้ม) ไปปลาย (ม่วงอ่อนเกือบขาว)
+    const crystalFn = (p, _n, out) => out.copy(deep).lerp(tip, Math.pow(smoothstep(0, len, d.copy(p).sub(base).dot(dir)), 1.3));
+    const m = alignMatrix(base, dir);
+    crystals.push(
+      part(new THREE.CylinderGeometry(r, r * 1.08, body, 6, 1).translate(0, body / 2, 0), crystalFn, m),
+      part(new THREE.ConeGeometry(r, len - body, 6, 1).translate(0, body + (len - body) / 2, 0), crystalFn, m),
+    );
+  };
+  // กระจุกใหญ่ตรงกลาง + แท่งเล็กรอบ ๆ ชี้ออกไปคนละทิศ
+  for (let i = 0; i < 13; i++) {
+    const a = rnd() * Math.PI * 2;
+    const outer = i >= 5;
+    const r = outer ? lerp(0.25, 0.55, rnd()) : rnd() * 0.18;
+    const base = new THREE.Vector3(Math.cos(a) * r, outer ? 0.22 : 0.3, Math.sin(a) * r);
+    const spread = outer ? lerp(0.6, 1.1, rnd()) : lerp(0.05, 0.35, rnd());
+    const dir = new THREE.Vector3(Math.cos(a) * spread, 1, Math.sin(a) * spread).normalize();
+    crystal(base, dir, outer ? lerp(0.3, 0.6, rnd()) : lerp(0.75, 1.15, rnd()), outer ? lerp(0.05, 0.08, rnd()) : lerp(0.09, 0.13, rnd()));
+  }
+  const glass = { roughness: 0.12, metalness: 0.05, flatShading: true, emissive: new THREE.Color('#7a2cff'), emissiveIntensity: 0.55 };
+  return [mesh(rock, { roughness: 0.9 }), glowMesh(merge(crystals), glass, glowPulseMod(1.3, 0.45))];
+}
+
+/** หินภูเขาไฟลาวา: ภูเขาไฟจิ๋วสีดำ ปล่องมีลาวาเรืองแสง และธารลาวาไหลลงตามไหล่เขา (พ่นฟองเป็นระยะ ดู item.bubbles) */
+function buildVolcanoRock(item, rnd) {
+  const seed = rnd() * 40;
+  // โปรไฟล์ [รัศมี, ความสูง] จากฐานขึ้นไปถึงปากปล่อง แล้วลงไปก้นปล่อง
+  const profile = [[1.0, -0.05], [0.98, 0.12], [0.82, 0.38], [0.62, 0.68], [0.45, 0.95], [0.36, 1.06], [0.3, 1.04], [0.24, 0.92], [0.0, 0.9]];
+  const radiusAt = (y) => {
+    for (let i = 0; i < 5; i++) {
+      const [r0, y0] = profile[i];
+      const [r1, y1] = profile[i + 1];
+      if (y <= y1) return lerp(r0, r1, (y - y0) / (y1 - y0));
+    }
+    return profile[5][0];
+  };
+  const bump = (a, y) => 1 + (fbm3(Math.cos(a) * 1.6 + seed, y * 2.4, Math.sin(a) * 1.6, 3) - 0.5) * 0.38;
+  const lathe = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 56);
+  const pos = lathe.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    _v.fromBufferAttribute(pos, i);
+    const k = bump(Math.atan2(_v.x, _v.z), _v.y);
+    pos.setXYZ(i, _v.x * k, _v.y, _v.z * k);
+  }
+  lathe.computeVertexNormals();
+  const basalt = new THREE.Color('#2b2523');
+  const ember = new THREE.Color('#5a2a1a');
+  const rock = part(lathe, (p, _n, out) => {
+    out.copy(basalt).multiplyScalar(0.55 + fbm3(p.x * 4 + seed, p.y * 4, p.z * 4, 3) * 0.8);
+    out.lerp(ember, smoothstep(0.7, 1.05, p.y) * 0.6); // ขอบปล่องไหม้เป็นสีแดงคล้ำ
+  });
+
+  // ลาวาในปล่อง + ธารลาวาไหลลงตามไหล่เขา (แนบผิวพอดี เพราะใช้สูตรผิวขรุขระ bump เดียวกัน)
+  const hot = new THREE.Color('#ffd25a');
+  const warm = new THREE.Color('#ff4a12');
+  const lava = [part(new THREE.CircleGeometry(0.25, 20).rotateX(-Math.PI / 2).translate(0, 0.93, 0), hot)];
+  for (let f = 0; f < 4; f++) {
+    let a = (f / 4) * Math.PI * 2 + rnd() * 0.8;
+    const pts = [];
+    const end = lerp(0.05, 0.45, rnd());
+    for (let y = 1.0; y >= end; y -= 0.08) {
+      a += (noise3(f * 3.1 + seed, y * 3, 0) - 0.5) * 0.35;
+      const r = radiusAt(y) * bump(a, y) * 1.012;
+      pts.push(new THREE.Vector3(Math.sin(a) * r, y, Math.cos(a) * r));
+    }
+    if (pts.length < 3) continue;
+    lava.push(part(tubeWithRadius(pts, 0.045, (u) => 1 - 0.7 * u, 24, 6), (p, _n, out) => out.copy(hot).lerp(warm, smoothstep(0.9, 0.2, p.y))));
+  }
+  const glow = { roughness: 0.5, emissive: new THREE.Color('#ff5a14'), emissiveIntensity: 1.6 };
+  return [mesh(rock, { roughness: 0.97 }), glowMesh(merge(lava), glow, glowPulseMod(2.1, 0.35))];
+}
+
 // ── ขอนไม้ ─────────────────────────────────────────────────────
 
 function tubeWithRadius(points, radius, radiusFn, tubular = 48, radial = 10) {
@@ -443,6 +604,9 @@ const BUILDERS = {
   stem: buildStemPlant,
   grass: buildGrass,
   rock: buildRock,
+  rock_arch: buildRockArch,
+  crystal: buildCrystalRock,
+  volcano: buildVolcanoRock,
   driftwood: buildDriftwood,
   castle: buildCastle,
   chest: buildChest,

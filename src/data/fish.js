@@ -18,6 +18,7 @@
  *           (ห้ามลบสายพันธุ์ออกจากรายการนี้ ไม่งั้นปลาเดิมในเซฟของผู้เล่นจะหายตอนโหลด)
  * procedural = ใช้โมเดลละเอียดที่สร้างด้วยโค้ดแทนโมเดลชั่วคราว เช่น { type: 'molly', variant: 'dalmatian' }
  *              (ดู src/models/molly/ — ถ้าใส่ไฟล์ .glb ของสายพันธุ์นั้นภายหลัง ไฟล์จะถูกใช้แทน)
+ * legendary = ปลาระดับตำนาน: มีป้าย "ตำนาน" ในร้านค้าและสมุดสะสม (ความหายากเต็ม 5 ดาว)
  */
 
 const fishModel = (id, extra = {}) => ({ url: `models/fish/${id}.glb`, rotation: [0, 0, 0], ...extra });
@@ -52,6 +53,41 @@ function mollySpecies({ variant, name, nameEn, description, rarity, coins, econo
       fins: { color: colors[0], tip: '#ffffff', opacity: 0.6, tail: 'fan', tailLength: 0.45, tailHeight: 0.6, dorsal: 0.3, anal: 0.12, pectoral: 0.15 },
       eyeSize: 0.09,
       shine: 0.5,
+    },
+  };
+}
+
+/**
+ * ปลาอวกาศ (Space Fish) ระดับตำนาน — ปลาแฟนตาซีลายกาแล็กซี เกล็ดเรืองแสง ครีบโปร่งแสงพลิ้วเหมือนพลังงาน
+ * ทิ้งประกายดาวไว้ข้างหลังขณะว่าย (ยิ่งว่ายเร็วยิ่งสว่าง) — ทุกสีใช้โมเดลเดียวกัน ต่างกันที่ชุดสี (src/models/spacefish/variants.js)
+ * แต่ละสีเป็นสายพันธุ์แยก ผสมพันธุ์ได้เฉพาะสีเดียวกัน
+ */
+function spaceFishSpecies({ variant, name, nameEn, description, gems, colors }) {
+  const id = `spacefish_${variant}`;
+  return {
+    id,
+    legendary: true,
+    name,
+    nameEn,
+    description,
+    rarity: 5,
+    price: { gems },
+    sizeCm: 14,
+    length: 0.8,
+    minTank: 0,
+    model: fishModel(id),
+    procedural: { type: 'spacefish', variant },
+    behavior: { speed: 0.65, zone: 'middle', schooling: false, agility: 1.5, tailBeat: 0.7 },
+    care: { hungerRate: 0.09, growTime: 600, breedChance: 0.04 },
+    economy: { coinValue: 55, coinInterval: 120 },
+    // รูปร่างจริงมาจาก src/models/spacefish/ — look ใช้เป็นสีเรืองหลังรูปในร้านค้า และเป็นโมเดลสำรองแบบง่ายเท่านั้น
+    look: {
+      body: { height: 0.6, width: 0.5, peak: 0.42, nose: 0.45, taper: 1.0, peduncle: 0.2 },
+      pattern: { type: 'gradient', colors, belly: colors[1] },
+      fins: { color: colors[0], tip: colors[1], opacity: 0.6, tail: 'veil', tailLength: 0.9, tailHeight: 0.9, dorsal: 0.4, anal: 0.25, pectoral: 0.2 },
+      eyeSize: 0.1,
+      shine: 0.7,
+      iridescence: 0.6,
     },
   };
 }
@@ -220,8 +256,8 @@ export const FISH_SPECIES = [
     description: 'กระเบนลายจุดขาว ครีบกว้างเหมือนปีกนก กระพือว่ายอย่างสง่างาม ต้องใช้ตู้ขนาดใหญ่',
     rarity: 4,
     price: { gems: 35 },
-    sizeCm: 90,
-    length: 1.9,
+    sizeCm: 45,
+    length: 0.95,
     minTank: 1,
     // จาก Fish/New Fish/eagle_stingray.glb (หันหัวไป +X จึงหมุน -90°) มีแอนิเมชัน "Swim cycle"
     model: fishModel('eagle_ray', { rotation: [0, -Math.PI / 2, 0] }),
@@ -278,14 +314,14 @@ export const FISH_SPECIES = [
     sizeCm: 5,
     length: 0.72,
     minTank: 0,
-    model: fishModel('betta'),
+    model: fishModel('betta'), // จาก Fish/New Fish/betta_splendens.glb (ลบกล่องโปร่งใสที่ครอบโมเดลออกแล้ว) มีแอนิเมชันว่าย
     behavior: { speed: 0.5, zone: 'top', schooling: false, agility: 1.5, tailBeat: 0.7 },
     care: { hungerRate: 0.1, growTime: 300, breedChance: 0.15 },
     economy: { coinValue: 6, coinInterval: 70 },
     look: {
       body: { height: 0.34, width: 0.42, peak: 0.36, nose: 0.6, taper: 1.0, peduncle: 0.3 },
-      pattern: { type: 'gradient', colors: ['#2a4dff', '#7d2bff'], belly: '#5f7dff' },
-      fins: { color: '#2f5cff', tip: '#ff3b6b', opacity: 0.86, tail: 'veil', tailLength: 1.05, tailHeight: 1.15, dorsal: 0.55, anal: 0.6, pectoral: 0.14, dorsalStart: 0.4, dorsalEnd: 0.85, analStart: 0.3, analEnd: 0.92 },
+      pattern: { type: 'gradient', colors: ['#25b3a8', '#f08a2c'], belly: '#5fd0c4' },
+      fins: { color: '#2fb8a8', tip: '#f59a3a', opacity: 0.86, tail: 'veil', tailLength: 1.05, tailHeight: 1.15, dorsal: 0.55, anal: 0.6, pectoral: 0.14, dorsalStart: 0.4, dorsalEnd: 0.85, analStart: 0.3, analEnd: 0.92 },
       eyeSize: 0.08,
       shine: 0.55,
       iridescence: 0.6,
@@ -457,6 +493,54 @@ export const FISH_SPECIES = [
       metalness: 0.55,
     },
   },
+  spaceFishSpecies({
+    variant: 'nebula_blue',
+    name: 'ปลาอวกาศฟ้าจักรวาล',
+    nameEn: 'Space Fish · Nebula Blue',
+    description: 'ปลาในตำนานจากห้วงจักรวาล ลำตัวสีน้ำเงินม่วงมีลายกาแล็กซีและดวงดาว เกล็ดเรืองแสงพร้อมแสงวิ่งตามตัว ทิ้งประกายดาวไว้ข้างหลังเมื่อว่าย',
+    gems: 100,
+    colors: ['#3f6bff', '#ff8ad9'],
+  }),
+  spaceFishSpecies({
+    variant: 'galaxy_purple',
+    name: 'ปลาอวกาศม่วงกาแล็กซี',
+    nameEn: 'Space Fish · Galaxy Purple',
+    description: 'ปลาอวกาศสีม่วงชมพูเหมือนใจกลางกาแล็กซี ครีบโปร่งแสงพลิ้วไหวเหมือนพลังงาน ดวงตาสะท้อนแสงดั่งดวงดาว',
+    gems: 100,
+    colors: ['#9a4dff', '#ff5fd8'],
+  }),
+  spaceFishSpecies({
+    variant: 'green_aurora',
+    name: 'ปลาอวกาศเขียวออโรรา',
+    nameEn: 'Space Fish · Green Aurora',
+    description: 'ปลาอวกาศเรืองแสงสีเขียวฟ้าเหมือนแสงเหนือ เส้นพลังงานสีมรกตไหลวนทั่วตัว',
+    gems: 110,
+    colors: ['#14f5b8', '#2a9bff'],
+  }),
+  spaceFishSpecies({
+    variant: 'red_nebula',
+    name: 'ปลาอวกาศแดงเนบิวลา',
+    nameEn: 'Space Fish · Red Nebula',
+    description: 'ปลาอวกาศสีแดงเพลิงเหมือนเนบิวลาที่กำลังก่อตัว ประกายสีทองวิ่งตามลำตัวทุกครั้งที่ว่ายเร็ว',
+    gems: 110,
+    colors: ['#ff2238', '#ffb35a'],
+  }),
+  spaceFishSpecies({
+    variant: 'stardust_white',
+    name: 'ปลาอวกาศขาวประกายดาว',
+    nameEn: 'Space Fish · Stardust White',
+    description: 'ปลาอวกาศสีขาวมุกโปรยด้วยละอองดาว เรืองแสงนวลสีลาเวนเดอร์ หาได้ยากยิ่งกว่าสีอื่น',
+    gems: 130,
+    colors: ['#e4eaff', '#c9a8ff'],
+  }),
+  spaceFishSpecies({
+    variant: 'cosmic_gold',
+    name: 'ปลาอวกาศทองคอสมิก',
+    nameEn: 'Space Fish · Cosmic Gold',
+    description: 'ปลาอวกาศสีทองอำพันดั่งแสงดาวฤกษ์ เชื่อกันว่านำโชคมาให้ผู้เลี้ยง ทิ้งละอองทองไว้ทุกทางที่ว่ายผ่าน',
+    gems: 150,
+    colors: ['#ffaa1e', '#fff0a8'],
+  }),
 ];
 
 const BY_ID = new Map(FISH_SPECIES.map((s) => [s.id, s]));
