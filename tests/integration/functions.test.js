@@ -69,13 +69,13 @@ describe('บันทึกคำสั่ง (saveCommit)', () => {
     const before = await save();
     const r = await callFunction(
       'saveCommit',
-      commitData('w_a', 1, [{ type: 'buyFish', tankId, speciesId: 'neon', fish: { id: 'fish_it1', name: 'ทดสอบ', gender: 'm' } }]),
+      commitData('w_a', 1, [{ type: 'buyFish', tankId, speciesId: 'guppy', fish: { id: 'fish_it1', name: 'ทดสอบ', gender: 'm' } }]),
       player.idToken,
     );
     assert.equal(r.error, undefined, JSON.stringify(r.error));
     assert.deepEqual(r.result.results, [{ ok: true }]);
     const after = await save();
-    assert.equal(after.game.coins, before.game.coins - 50);
+    assert.equal(after.game.coins, before.game.coins - 80);
     assert.equal(after.revision, before.revision + 1);
     assert.ok(after.game.tanks[0].fish.some((f) => f.id === 'fish_it1'));
     assert.ok(after.updatedAt > 0, 'updatedAt เป็นเวลาเซิร์ฟเวอร์');
@@ -85,7 +85,7 @@ describe('บันทึกคำสั่ง (saveCommit)', () => {
     const before = await save();
     const r = await callFunction(
       'saveCommit',
-      commitData('w_a', 1, [{ type: 'buyFish', tankId, speciesId: 'neon', fish: { id: 'fish_it2', name: 'ซ้ำ', gender: 'm' } }]),
+      commitData('w_a', 1, [{ type: 'buyFish', tankId, speciesId: 'guppy', fish: { id: 'fish_it2', name: 'ซ้ำ', gender: 'm' } }]),
       player.idToken,
     );
     assert.equal(r.result.duplicate, true);

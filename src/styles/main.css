@@ -780,6 +780,12 @@ svg {
   color: var(--muted);
 }
 
+.fc-head small.fc-genes {
+  margin-top: 2px;
+  color: #ffd98a;
+  font-size: 0.78rem;
+}
+
 .fc-stats {
   display: grid;
   gap: 6px;
@@ -1084,6 +1090,137 @@ svg {
   text-align: right;
 }
 
+.gender-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.gender-pick > span {
+  margin-right: auto;
+  opacity: 0.8;
+}
+
+.gender-pick .gp {
+  flex: 0 1 auto;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gender-pick .gp.m.active {
+  border-color: #7cc4ff;
+  background: rgba(124, 196, 255, 0.22);
+}
+
+.gender-pick .gp.f.active {
+  border-color: #ff9ad0;
+  background: rgba(255, 154, 208, 0.22);
+}
+
+.gender-hint {
+  margin: 4px 0 8px;
+  font-size: 0.82rem;
+}
+
+/* แลกเพชร */
+button.currency {
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+button.currency:hover {
+  transform: translateY(-1px);
+  border-color: rgba(140, 205, 255, 0.55);
+}
+
+.exchange {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 440px;
+  margin: 8px auto;
+  padding: 20px 18px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(140, 205, 255, 0.15);
+  text-align: center;
+}
+
+.exchange .hint {
+  margin: 0;
+}
+
+.ex-rate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.2rem;
+}
+
+.ex-arrow {
+  opacity: 0.7;
+}
+
+.ex-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.ex-step {
+  min-width: 46px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.ex-step.active {
+  border-color: #7cd0f0;
+  background: rgba(124, 208, 240, 0.22);
+}
+
+.ex-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ex-amount {
+  min-width: 80px;
+  font-size: 1.8rem;
+}
+
+.ex-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.exchange .btn-buy {
+  padding: 10px 34px;
+  font-size: 1.05rem;
+}
+
 .detail-buy {
   display: flex;
   align-items: center;
@@ -1099,7 +1236,7 @@ svg {
 /* ตู้ปลา */
 .tank-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 12px;
 }
 
@@ -1133,36 +1270,147 @@ svg {
   color: var(--muted);
 }
 
-.tank-preview {
-  height: 92px;
+.tank-style {
+  color: #ffd98a !important;
+}
+
+/* ภาพตัวอย่างตู้ (assets/TankPreviewer.js) */
+.tank-shot {
+  position: relative;
   display: grid;
   place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--theme, #2a8fd6) 55%, #bfeaff), color-mix(in srgb, var(--theme, #2a8fd6) 80%, #062a5c));
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
 }
 
-.tp-glass {
-  width: calc(var(--w) * 7px);
-  max-width: 100%;
-  height: 76px;
-  border-radius: 6px;
-  border: 3px solid #12161d;
-  border-bottom-width: 7px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--theme) 60%, #bfeaff), color-mix(in srgb, var(--theme) 80%, #062a5c));
+.tank-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s;
+}
+
+.tank-card:hover .tank-shot img {
+  transform: scale(1.04);
+}
+
+.shot-loading {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+  animation: pulse-fade 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.shot-zoom,
+.shot-lock {
+  position: absolute;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(4, 18, 45, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.shot-zoom {
+  right: 8px;
+  bottom: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tank-card:hover .shot-zoom,
+.tank-shot:focus-visible .shot-zoom {
+  opacity: 1;
+}
+
+.shot-lock {
+  left: 8px;
+  top: 8px;
+}
+
+/* ภาพตัวอย่างขนาดใหญ่ */
+.tank-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.tl-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 10, 26, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.tl-card {
+  position: relative;
+  width: min(960px, 100%);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--panel, #0d2346);
+  border: 1px solid rgba(140, 205, 255, 0.25);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  animation: tl-in 0.25s ease-out;
+}
+
+@keyframes tl-in {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+
+.tl-image {
+  border-radius: 0;
+  cursor: default;
+}
+
+.tl-info {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-around;
-  padding-bottom: 4px;
-  font-size: 1.3rem;
-  box-shadow: inset 0 -10px 0 rgba(220, 200, 160, 0.6);
-}
-
-.tp-glass i {
-  font-style: normal;
-}
-
-.tank-card.locked .tp-glass {
-  filter: grayscale(0.7) brightness(0.7);
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 16px;
+}
+
+.tl-info h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.tl-info h3 small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tl-info p {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.tl-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .tag-active {
@@ -1626,17 +1874,148 @@ input:checked + .switch::after {
   max-width: 640px;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+/* โลโก้ชื่อเกม (ui/brand.js) */
+.brand {
+  position: relative;
+  display: inline-block;
+  padding: 18px 26px 6px 58px;
+  font-family: 'Fredoka', var(--font);
 }
 
-.logo-fish {
-  font-size: clamp(3rem, 9vw, 5rem);
-  animation: swim 3s ease-in-out infinite;
+.brand-title {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  margin: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.brand-my {
+  align-self: flex-start;
+  margin: -0.1em 0.04em 0 0;
+  font-size: clamp(1.3rem, 4.6vw, 2.3rem);
+  font-weight: 600;
+  color: #9ff0ff;
+  transform: rotate(-12deg);
+  text-shadow: 0 2px 0 #0b3a7a, 0 0 18px rgba(120, 230, 255, 0.55);
+}
+
+.brand-aqua {
+  font-size: clamp(2.5rem, 10.5vw, 4.9rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  /* ไล่สีเหมือนผิวน้ำ: ขาวสว่างด้านบน → ฟ้าน้ำทะเลด้านล่าง */
+  background: linear-gradient(180deg, #ffffff 8%, #c8f6ff 38%, #4fd2ff 62%, #1d8fe6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 #0b3a7a) drop-shadow(0 2px 0 #0b3a7a) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+}
+
+.brand-num {
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  width: 1.75em;
+  height: 1.75em;
+  margin: -0.35em 0 0 0.1em;
+  border-radius: 50%;
+  font-size: clamp(1.15rem, 4.2vw, 1.9rem);
+  font-weight: 700;
+  color: #5a3300;
+  background: radial-gradient(circle at 32% 28%, #fff6c8 0 14%, #ffd84a 38%, #f5a510 100%);
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 0 #b86f00, 0 8px 18px rgba(0, 0, 0, 0.35), inset 0 -4px 8px rgba(180, 100, 0, 0.35);
+  transform: rotate(10deg);
+  animation: brand-bob 3.2s ease-in-out infinite;
+}
+
+.brand-fish {
+  position: absolute;
+  left: 0;
+  bottom: 14%;
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
   filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.4));
+  animation: swim 3s ease-in-out infinite;
+}
+
+.brand-wave {
+  display: block;
+  width: 86%;
+  height: 14px;
+  margin: 6px 0 0 auto;
+  overflow: visible;
+}
+
+.brand-wave path {
+  fill: none;
+  stroke: rgba(140, 230, 255, 0.75);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 8 7;
+  animation: brand-wave 2.4s linear infinite;
+}
+
+/* ฟองอากาศลอยขึ้นรอบชื่อ */
+.brand-bubbles i {
+  position: absolute;
+  bottom: 10%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(200, 245, 255, 0.75);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9) 0 18%, rgba(160, 230, 255, 0.15) 45%);
+  opacity: 0;
+  animation: brand-bubble 4.2s ease-in infinite;
+}
+
+.brand-bubbles i:nth-child(1) { left: 6%; animation-delay: 0s; }
+.brand-bubbles i:nth-child(2) { left: 30%; width: 7px; height: 7px; animation-delay: 1.1s; }
+.brand-bubbles i:nth-child(3) { left: 55%; width: 13px; height: 13px; animation-delay: 2.2s; }
+.brand-bubbles i:nth-child(4) { left: 78%; width: 8px; height: 8px; animation-delay: 0.6s; }
+.brand-bubbles i:nth-child(5) { left: 94%; width: 11px; height: 11px; animation-delay: 3s; }
+
+@keyframes brand-bubble {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(6px, -120px) scale(1.1); opacity: 0; }
+}
+
+@keyframes brand-bob {
+  50% { transform: rotate(4deg) translateY(-5px); }
+}
+
+@keyframes brand-wave {
+  to { stroke-dashoffset: -30; }
+}
+
+/* จอแคบ (มือถือ): ชื่อใหญ่ขึ้น ปลาชิดเข้ามา */
+@media (max-width: 480px) {
+  .brand {
+    padding: 16px 14px 4px 42px;
+  }
+
+  .brand-aqua {
+    font-size: 12.5vw;
+  }
+
+  .brand-my {
+    font-size: 5.6vw;
+  }
+
+  .brand-num {
+    font-size: 4.8vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-num,
+  .brand-fish,
+  .brand-wave path,
+  .brand-bubbles i {
+    animation: none;
+  }
 }
 
 @keyframes swim {
@@ -1645,7 +2024,7 @@ input:checked + .switch::after {
   }
 }
 
-.start-inner h1 {
+.start-inner h1:not(.brand-title) {
   margin: 0;
   font-size: clamp(2rem, 7vw, 3.6rem);
   font-weight: 600;
@@ -1711,11 +2090,6 @@ input:checked + .switch::after {
   }
 }
 
-.credit {
-  margin-top: 26px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
 
 .fatal {
   position: absolute;
@@ -1852,13 +2226,6 @@ input:checked + .switch::after {
 .auth-form .btn-start {
   justify-self: center;
   animation: none;
-}
-
-.auth-note {
-  margin: 0;
-  text-align: center;
-  font-size: 0.8rem;
-  color: var(--muted);
 }
 
 .auth-actions {

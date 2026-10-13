@@ -1,4 +1,5 @@
 import { collectRefs } from './helpers.js';
+import { brandLogoHtml } from './brand.js';
 import { formatDuration, formatNumber } from '../utils/math.js';
 
 /** หน้าจอเริ่มเกม: โหลดโมเดล → ปุ่มเริ่มเล่น (ต้องคลิกเพื่อเปิดเสียงได้) */
@@ -9,10 +10,7 @@ export class StartScreen {
     this.offline = null;
     root.innerHTML = `
       <div class="start-inner">
-        <div class="logo">
-          <span class="logo-fish">🐠</span>
-          <h1>เกมเลี้ยงปลาในตู้ปลา</h1>
-        </div>
+        ${brandLogoHtml()}
         <p class="subtitle">เลี้ยงปลา ตกแต่งตู้ ดูแลให้พวกมันมีความสุข</p>
         <div class="loading" data-ref="loading">
           <div class="bar"><i data-ref="progress"></i></div>
@@ -20,7 +18,6 @@ export class StartScreen {
         </div>
         <p class="welcome hidden" data-ref="welcome"></p>
         <button class="btn-start hidden" data-ref="startBtn">▶ เริ่มเล่น</button>
-        <p class="credit">สร้างด้วย Three.js + WebGL · เล่นผ่านเว็บเบราว์เซอร์</p>
       </div>`;
     this.refs = collectRefs(root);
     this.refs.startBtn.addEventListener('click', () => this.#start());

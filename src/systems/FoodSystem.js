@@ -46,10 +46,12 @@ export class FoodSystem {
     }
   }
 
-  findNearest(pos) {
+  /** @param {(pellet) => boolean} [accept] เลือกเฉพาะอาหารที่ผ่านเงื่อนไข (เช่น ปูกินเฉพาะอาหารที่จมถึงพื้น) */
+  findNearest(pos, accept = null) {
     let best = null;
     let bestD = Infinity;
     for (const p of this.pellets) {
+      if (accept && !accept(p)) continue;
       const d = p.position.distanceToSquared(pos);
       if (d < bestD) {
         bestD = d;

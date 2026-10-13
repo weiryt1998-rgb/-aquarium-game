@@ -8,6 +8,8 @@ import { createDefaultState } from '../core/GameState.js';
 import { clamp, todayKey, uid } from '../utils/math.js';
 import { LIMITS } from './constants.js';
 import { isId, isNum } from './economy.js';
+import { sanitizeFetus } from './breeding.js';
+import { sanitizeGenes } from '../models/molly/genetics.js';
 
 /**
  * ทำความสะอาดข้อมูลเกมที่มาจากภายนอก (เซฟเก่าใน localStorage, จุดสำรอง) ให้อยู่ในรูปที่ถูกต้องเสมอ
@@ -30,16 +32,17 @@ function freshId(prefix, taken) {
   return id;
 }
 
-function sanitizeFish(raw, taken) {
+function sanitizeFish(raw, taken, now = Date.now()) {
   const species = getSpecies(raw?.speciesId);
   if (!species) return null;
   const id = isId(raw.id) && !taken.has(raw.id) ? raw.id : freshId('fish', taken);
   taken.add(id);
-  return {
+  const gender = raw.gender === 'm' ? 'm' : 'f';
+  const fish = {
     id,
     speciesId: species.id,
     name: text(raw.name, LIMITS.nameLength, species.name),
-    gender: raw.gender === 'm' ? 'm' : 'f',
+    gender,
     satiety: num(raw.satiety, 0, 100, 70),
     health: num(raw.health, 0, 100, 100),
     growth: num(raw.growth, 0, 1, 1),
@@ -47,6 +50,16 @@ function sanitizeFish(raw, taken) {
     breedCooldown: num(raw.breedCooldown, 0, CONFIG.breeding.cooldown, 60),
     coinTimer: num(raw.coinTimer, 0, species.economy.coinInterval * 1.25, species.economy.coinInterval / 2),
   };
+  // ยีนสีของลูกผสม (เฉพาะสายพันธุ์ที่มีระบบสี)
+  const genes = species.procedural?.type === 'molly' ? sanitizeGenes(raw.genes) : null;
+  if (genes) fish.genes = genes;
+  // ตั้งท้องอยู่ (เฉพาะตัวเมีย) — เวลาต้องไม่ล้ำอนาคต พร้อมลูกในท้อง
+  if (gender === 'f' && isNum(raw.pregnantAt) && raw.pregnantAt > 0) {
+    fish.pregnantAt = Math.min(raw.pregnantAt, now);
+    const fetus = raw.fetus ? sanitizeFetus(raw.fetus, fish) : null;
+    if (fetus) fish.fetus = fetus;
+  }
+  return fish;
 }
 
 function sanitizeDecor(raw, type, taken, now) {
@@ -88,7 +101,7 @@ function sanitizeTanks(rawTanks, now) {
     if (!type || tanks.some((t) => t.typeId === type.id)) continue; // ชนิดละ 1 ตู้
     const id = isId(raw.id) && !tankIds.has(raw.id) ? raw.id : freshId('tank', tankIds);
     tankIds.add(id);
-    const fish = (Array.isArray(raw.fish) ? raw.fish : []).map((f) => sanitizeFish(f, fishIds)).filter(Boolean).slice(0, type.capacity);
+    const fish = (Array.isArray(raw.fish) ? raw.fish : []).map((f) => sanitizeFish(f, fishIds, now)).filter(Boolean).slice(0, type.capacity);
     const decor = withinItemLimits(
       (Array.isArray(raw.decor) ? raw.decor : []).map((d) => sanitizeDecor(d, type, decorIds, now)).filter(Boolean),
     ).slice(0, LIMITS.decorPerTank);

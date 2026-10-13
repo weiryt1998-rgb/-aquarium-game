@@ -7,6 +7,7 @@ import { FISH_SPECIES, getSpecies } from './fish.js';
  * event        = นับจากเหตุการณ์ (ดู EV ใน core/EventBus.js) แต่ละครั้งนับ +payload.amount หรือ +1
  * gauge(data)  = คำนวณจากข้อมูลเซฟโดยตรง (ไม่ต้องนับสะสม) — เซิร์ฟเวอร์ใช้ฟังก์ชันเดียวกันตรวจตอนรับรางวัล
  */
+// นับทุกสายพันธุ์ที่เคยสะสม รวมถึงที่เลิกขายแล้ว (ผู้เล่นที่สะสมไว้ก่อนไม่เสียความคืบหน้า)
 const collectionCount = (data) => FISH_SPECIES.filter((s) => data.collection[s.id]).length;
 const mostFishInTank = (data) => Math.max(0, ...data.tanks.map((t) => t.fish.length));
 const hasRareFish = (data, minRarity) => data.tanks.some((t) => t.fish.some((f) => (getSpecies(f.speciesId)?.rarity ?? 0) >= minRarity));

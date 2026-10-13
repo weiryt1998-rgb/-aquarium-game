@@ -20,6 +20,8 @@ export const DEFAULT_FUNCTIONS_REGION = 'asia-southeast1';
 export const LIMITS = {
   maxCoins: 1_000_000_000,
   maxGems: 10_000_000,
+  /** แลกเพชรได้สูงสุดกี่เม็ดต่อครั้ง */
+  maxExchangeGems: 10_000,
   maxItem: 1_000_000,
   decorPerTank: 150,
   commandsPerCommit: 300,

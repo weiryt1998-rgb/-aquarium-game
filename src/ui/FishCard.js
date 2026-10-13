@@ -1,6 +1,9 @@
 import { ICONS } from './icons.js';
 import { collectRefs, genderIcon } from './helpers.js';
 import { escapeHtml, formatDuration } from '../utils/math.js';
+import { breedGroupOf, dueAt, isPregnant } from '../shared/breeding.js';
+import { describeGenes } from '../models/molly/genetics.js';
+import { getSpecies } from '../data/fish.js';
 
 /** การ์ดข้อมูลปลาที่ถูกแตะ: ตั้งชื่อ ดูค่าสถานะ ติดตามด้วยกล้อง */
 export class FishCard {
@@ -39,10 +42,11 @@ export class FishCard {
     this.root.innerHTML = `
       <button class="btn-close" data-action="close" title="ปิด">${ICONS.close}</button>
       <div class="fc-head">
-        <img src="${this.game.thumbs.fish(s)}" alt="" draggable="false">
+        <img src="${this.game.thumbs.fish(s, fish.data.genes)}" alt="" draggable="false">
         <div>
           <input class="fc-name" value="${escapeHtml(fish.data.name)}" maxlength="16" title="แตะเพื่อเปลี่ยนชื่อ">
           <small>${s.name} ${genderIcon(fish.data.gender)} · <span data-ref="stage"></span></small>
+          ${fish.data.genes ? `<small class="fc-genes">🧬 ${describeGenes(fish.data.genes)}</small>` : ''}
         </div>
       </div>
       <div class="fc-stats">
@@ -68,6 +72,23 @@ export class FishCard {
     this.update();
   }
 
+  /** สถานะการขยายพันธุ์: ตั้งท้อง / ขาดคู่ / พร้อมผสมพันธุ์ */
+  #breedingNotes(f) {
+    const d = f.data;
+    if (isPregnant(d)) {
+      const left = (dueAt(d) - Date.now()) / 1000;
+      const baby = d.fetus?.genes ? ` (${getSpecies(d.fetus.speciesId)?.name ?? 'ลูกผสม'})` : '';
+      return [left > 0 ? `🤰 ตั้งท้อง${baby} คลอดในอีก ${formatDuration(left)}` : `🤰 ครบกำหนดคลอดแล้ว${baby}`];
+    }
+    if (!f.isAdult) return [];
+    const group = breedGroupOf(f.species);
+    const hasMate = this.game.fish.list.some((o) => o !== f && !o.dying && breedGroupOf(o.species) === group && o.data.gender !== d.gender);
+    const kind = f.species.breedGroup ? 'ปลาสอด (สีไหนก็ได้)' : 'ชนิดเดียวกัน';
+    if (!hasMate) return [d.gender === 'f' ? `ต้องมีตัวผู้${kind}ในตู้ถึงจะตั้งท้องได้` : `ต้องมีตัวเมีย${kind}ในตู้ถึงจะมีลูกได้`];
+    if (d.breedCooldown <= 0 && f.happiness >= 70) return ['พร้อมผสมพันธุ์'];
+    return [];
+  }
+
   update() {
     const f = this.fish;
     if (!f || !this.refs) return;
@@ -85,7 +106,7 @@ export class FishCard {
     const notes = [`อายุ ${formatDuration(d.age)}`];
     if (d.satiety < 30) notes.push('หิวแล้ว!');
     if (d.health < 30) notes.push('ป่วย ลองใช้ยา');
-    if (f.isAdult && d.breedCooldown <= 0 && f.happiness >= 70) notes.push('พร้อมออกลูก');
+    notes.push(...this.#breedingNotes(f));
     this.refs.meta.textContent = notes.join(' · ');
     const following = this.game.sceneMgr.followTarget === f.group;
     this.refs.followBtn.classList.toggle('btn-active', following);

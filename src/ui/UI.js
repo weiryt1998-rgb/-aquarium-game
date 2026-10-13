@@ -20,7 +20,7 @@ const TEMPLATE = /* html */ `
   <div class="hud">
     <div class="hud-top-left">
       <div class="currency coins" data-ref="coinPill" title="เหรียญ">${coinIcon}<b data-ref="coins">0</b></div>
-      <div class="currency gems" data-ref="gemPill" title="เพชร">${gemIcon}<b data-ref="gems">0</b></div>
+      <button class="currency gems" data-ref="gemPill" data-action="exchange" title="เพชร — แตะเพื่อแลกเหรียญเป็นเพชร">${gemIcon}<b data-ref="gems">0</b></button>
       <button class="btn-plus" data-action="missions" title="ภารกิจและรางวัล">${ICONS.plus}<i class="badge" data-ref="plusBadge"></i></button>
     </div>
 
@@ -137,6 +137,9 @@ export class UI {
         break;
       case 'clean':
         game.cleanTank();
+        break;
+      case 'exchange':
+        this.open('shop', { tab: 'exchange' });
         break;
       default:
         break;

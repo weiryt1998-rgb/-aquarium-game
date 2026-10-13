@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Substrate } from './Substrate.js';
 import { LightRays } from './LightRays.js';
-import { getGlassStreakTexture, getTankBackdropTexture } from '../render/textures.js';
+import { getGlassStreakTexture, getLedGlowTexture, getTankBackdropTexture, getWoodTexture } from '../render/textures.js';
 import { sharedUniforms } from '../render/shaderMods.js';
 import { clamp, lerp, rand } from '../utils/math.js';
 
@@ -44,8 +45,27 @@ void main() {
   gl_FragColor = vec4(col, alpha);
 }`;
 
+/** สไตล์ตู้เริ่มต้น (ถ้าข้อมูลตู้ไม่ได้ระบุ style) */
+const DEFAULT_STYLE = { frame: 'black', trim: null, led: '#cfefff', backdrop: 'ocean', sand: '#ffffff' };
+
+/** วัสดุขอบตู้ตามสไตล์ */
+const FRAME_MATERIALS = {
+  black: () => ({ color: '#15181e', roughness: 0.38, metalness: 0.5 }),
+  walnut: () => ({ color: '#8a5a36', map: getWoodTexture(), roughness: 0.48, metalness: 0.05 }),
+  white: () => ({ color: '#eef2f6', roughness: 0.2, metalness: 0.05 }),
+  lacquer: () => ({ color: '#0b0d12', roughness: 0.14, metalness: 0.65 }),
+};
+
+/** แถบโลหะตกแต่ง */
+const TRIM_MATERIALS = {
+  chrome: { color: '#eef3f8', roughness: 0.12, metalness: 1 },
+  brass: { color: '#c9a052', roughness: 0.28, metalness: 1 },
+  gold: { color: '#ffd062', roughness: 0.2, metalness: 1 },
+};
+
 /**
  * ตู้ปลา: พื้นกรวด กระจก ขอบตู้ ผิวน้ำ พื้นหลัง ลำแสง และเครื่องมือช่วยจัดวาง (กริด/วงกลมบอกตำแหน่ง)
+ * รูปลักษณ์ (ขอบตู้ ไฟ LED พื้นหลัง สีทราย) เปลี่ยนตาม tankType.style
  * พิกัดภายในตู้: กึ่งกลางตู้ที่ x=0,z=0 ก้นตู้ที่ y=0
  */
 export class Aquarium {
@@ -67,10 +87,12 @@ export class Aquarium {
     this.dispose();
     const { w, h, d } = tankType.size;
     this.dims = { w, h, d, waterTop: h - 0.45 };
+    this.style = { ...DEFAULT_STYLE, ...tankType.style };
     sharedUniforms.uWaterTop.value = this.dims.waterTop;
     this.box.set(new THREE.Vector3(-w / 2, 0, -d / 2), new THREE.Vector3(w / 2, h, d / 2));
 
     this.substrate = new Substrate(this.dims, { pebbles: qualitySettings.pebbles });
+    this.substrate.material.color.set(this.style.sand);
     this.group.add(this.substrate.group);
     this.#buildBackdrop();
     this.#buildGlass();
@@ -89,7 +111,7 @@ export class Aquarium {
 
   #buildBackdrop() {
     const { w, h, d } = this.dims;
-    const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: getTankBackdropTexture() }));
+    const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: getTankBackdropTexture(this.style.backdrop) }));
     backdrop.position.set(0, h / 2, -d / 2 + 0.005);
     this.group.add(backdrop);
   }
@@ -150,25 +172,60 @@ export class Aquarium {
 
   #buildFrame() {
     const { w, h, d } = this.dims;
-    const mat = new THREE.MeshStandardMaterial({ color: '#14171d', roughness: 0.42, metalness: 0.45, fog: false });
-    const t = 0.16;
-    const addBar = (sx, sy, sz, x, y, z) => {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    const style = this.style;
+    const premium = style.trim != null;
+    const mat = new THREE.MeshStandardMaterial({ ...(FRAME_MATERIALS[style.frame] ?? FRAME_MATERIALS.black)(), fog: false });
+    const t = style.frame === 'white' ? 0.13 : 0.16;
+    const addBar = (sx, sy, sz, x, y, z, material = mat) => {
+      const r = Math.min(0.06, sx / 2, sy / 2, sz / 2) * 0.9;
+      const bar = new THREE.Mesh(new RoundedBoxGeometry(sx, sy, sz, 3, r), material);
       bar.position.set(x, y, z);
       bar.castShadow = true;
       bar.receiveShadow = true;
       this.group.add(bar);
+      return bar;
     };
-    const rim = (height, y) => {
-      addBar(w + t * 2, height, t, 0, y, d / 2 + t / 2);
-      addBar(w + t * 2, height, t, 0, y, -d / 2 - t / 2);
-      addBar(t, height, d, -w / 2 - t / 2, y, 0);
-      addBar(t, height, d, w / 2 + t / 2, y, 0);
+    const rim = (height, y, thick = t) => {
+      addBar(w + thick * 2, height, thick, 0, y, d / 2 + thick / 2);
+      addBar(w + thick * 2, height, thick, 0, y, -d / 2 - thick / 2);
+      addBar(thick, height, d, -w / 2 - thick / 2, y, 0);
+      addBar(thick, height, d, w / 2 + thick / 2, y, 0);
     };
-    rim(0.22, h + 0.06); // ขอบบน
-    rim(0.44, -0.1); // ฐานล่าง
+    // ฝาตู้: ตู้รุ่นพรีเมียมสูงกว่าและยื่นออกมาเล็กน้อย
+    const lidH = premium ? 0.34 : 0.22;
+    rim(lidH, h + lidH / 2 - 0.05, premium ? t + 0.04 : t);
+    // ฐานตู้
+    const baseH = premium ? 0.56 : 0.44;
+    rim(baseH, -baseH / 2 + 0.12, premium ? t + 0.06 : t);
+
+    // แถบโลหะตกแต่งด้านหน้าฝาและฐาน
+    if (premium) {
+      const trim = new THREE.MeshStandardMaterial({ ...TRIM_MATERIALS[style.trim], fog: false });
+      const lidFront = d / 2 + t + 0.04;
+      const baseFront = d / 2 + t + 0.06;
+      addBar(w + t * 2 + 0.1, 0.09, 0.04, 0, h + lidH / 2 - 0.05, lidFront + 0.01, trim);
+      addBar(w + t * 2 + 0.14, 0.1, 0.04, 0, 0.06, baseFront + 0.01, trim);
+      addBar(w + t * 2 + 0.14, 0.07, 0.04, 0, -baseH + 0.24, baseFront + 0.01, trim);
+    }
+
+    // ไฟ LED ใต้ฝาตู้ + แสงเรืองลงมาในน้ำ
+    const led = new THREE.Color(style.led);
+    const ledMat = new THREE.MeshBasicMaterial({ color: led.clone().multiplyScalar(1.6), fog: false });
+    for (const z of [d / 2 - 0.12, -d / 2 + 0.12]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, 0.025, 0.07), ledMat);
+      strip.position.set(0, h - 0.06, z);
+      this.group.add(strip);
+    }
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(w - 0.2, 0.9),
+      new THREE.MeshBasicMaterial({ map: getLedGlowTexture(), color: led, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+    );
+    glow.position.set(0, h - 0.5, d / 2 - 0.14);
+    glow.renderOrder = 7;
+    this.group.add(glow);
+
     // ซิลิโคนตามมุมตู้
-    const post = new THREE.MeshStandardMaterial({ color: '#0c1a26', transparent: true, opacity: 0.55, roughness: 0.3, fog: false });
+    const post = new THREE.MeshStandardMaterial({ color: style.frame === 'white' ? '#dfe8ef' : '#0c1a26', transparent: true, opacity: 0.55, roughness: 0.3, fog: false });
     for (const [x, z] of [
       [-w / 2, d / 2],
       [w / 2, d / 2],

@@ -146,6 +146,8 @@ export function forEachMaterial(object, fn) {
 /** ล้างหน่วยความจำ GPU ของ object (ยกเว้น geometry ที่แชร์กัน ซึ่งตั้ง userData.shared = true) */
 export function disposeObject(object) {
   object.traverse((obj) => {
+    obj.userData.release?.(); // ทรัพยากรที่แชร์แบบนับผู้ใช้ (เช่น texture ของปลาลูกผสม)
+
     if (!obj.isMesh && !obj.isPoints && !obj.isLine) return;
     if (obj.geometry && !obj.geometry.userData.shared) obj.geometry.dispose();
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];

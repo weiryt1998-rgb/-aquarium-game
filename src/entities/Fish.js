@@ -3,6 +3,7 @@ import { CONFIG } from '../config.js';
 import { forEachMaterial, disposeObject } from '../assets/AssetLoader.js';
 import { angleDelta, clamp, damp, lerp, rand, smoothstep } from '../utils/math.js';
 import { noise2 } from '../utils/noise.js';
+import { pregnancyProgress } from '../shared/breeding.js';
 
 const _desired = new THREE.Vector3();
 const _steer = new THREE.Vector3();
@@ -10,6 +11,8 @@ const _sep = new THREE.Vector3();
 const _align = new THREE.Vector3();
 const _coh = new THREE.Vector3();
 const _closest = new THREE.Vector3();
+const _target = new THREE.Vector3();
+const _box = new THREE.Box3();
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 /**
@@ -25,10 +28,13 @@ export class Fish {
     this.species = species;
     this.id = data.id;
 
-    const visual = game.models.createFish(species);
+    const visual = game.models.createFish(species, { genes: data.genes });
     this.visual = visual.object;
     this.mixer = visual.mixer;
     this.swim = visual.swimUniforms;
+    this.walk = visual.walkUniforms ?? null;
+    // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
+    this.footOffset = species.behavior.walker ? -_box.setFromObject(this.visual, true).min.y : 0;
     this.wiggle = new THREE.Group();
     this.wiggle.add(this.visual);
     this.group = new THREE.Group();
@@ -81,6 +87,10 @@ export class Fish {
   // ── การเคลื่อนที่ ────────────────────────────────────────────
 
   updateMovement(dt, ctx) {
+    if (this.species.behavior.walker) {
+      this.#walkMovement(dt, ctx);
+      return;
+    }
     const b = this.species.behavior;
     const pos = this.group.position;
     const sick = this.data.health < 25;
@@ -130,6 +140,74 @@ export class Fish {
     }
     pos.addScaledVector(this.velocity, dt);
     ctx.aquarium.clampToWater(pos, this.radius * 0.6 + 0.15);
+  }
+
+  /** เดินบนพื้นทราย (ปู): เดินบ้างหยุดบ้าง เก็บอาหารที่จมถึงพื้น หลบของตกแต่งและขอบตู้ */
+  #walkMovement(dt, ctx) {
+    const b = this.species.behavior;
+    const pos = this.group.position;
+    const aq = ctx.aquarium;
+    const maxSpeed = b.speed * (this.data.health < 25 ? 0.5 : 1) * (this.isAdult ? 1 : 0.85);
+    const active = noise2(this.seed, ctx.time * 0.12) > 0.4;
+    let limit = active ? maxSpeed * lerp(0.5, 1, noise2(this.seed + 7, ctx.time * 0.3)) : 0;
+    _steer.set(0, 0, 0);
+    this.eatCooldown -= dt;
+
+    let seeking = false;
+    if (this.data.satiety < 92 && this.eatCooldown <= 0) {
+      const food = ctx.food.findNearest(pos, (p) => p.settled || p.position.y < aq.heightAt(p.position.x, p.position.z) + 0.5);
+      if (food) {
+        seeking = true;
+        limit = maxSpeed * 1.3;
+        this.#seek(_target.set(food.position.x, pos.y, food.position.z), limit, 0.3, _steer);
+        const reach = 0.15 + this.length * 0.4;
+        const dx = food.position.x - pos.x;
+        const dz = food.position.z - pos.z;
+        if (dx * dx + dz * dz < reach * reach) {
+          ctx.food.consume(food, this);
+          this.eatCooldown = 0.6;
+        }
+      }
+    }
+    if (!seeking) {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0 || pos.distanceToSquared(this.wanderTarget) < 0.3) this.#pickWanderTarget(ctx);
+      this.#seek(_target.set(this.wanderTarget.x, pos.y, this.wanderTarget.z), limit, 0.8, _steer);
+    }
+    this.#flock(ctx.fish, maxSpeed, _steer);
+    this.#walkAround(ctx.obstacles, _steer);
+    this.#avoidBounds(aq, _steer);
+
+    _steer.y = 0;
+    _steer.clampLength(0, maxSpeed * (b.agility ?? 2) * 1.6);
+    this.velocity.addScaledVector(_steer, dt);
+    this.velocity.y = 0;
+    const speed = this.velocity.length();
+    if (speed > Math.max(limit, 0.001)) this.velocity.multiplyScalar(Math.max(limit, 0) / speed);
+    if (!active && !seeking) this.velocity.multiplyScalar(Math.exp(-dt * 4)); // หยุดพัก
+    pos.addScaledVector(this.velocity, dt);
+    aq.clampToWater(pos, this.radius * 0.6 + 0.15);
+    pos.y = aq.heightAt(pos.x, pos.z) + this.footOffset * this.group.scale.y; // ยืนบนทราย
+  }
+
+  /**
+   * หลบของตกแต่งสำหรับสัตว์ที่เดินพื้น — ข้ามไปด้านบนไม่ได้ จึงดันออกพร้อม "ไถลอ้อม" ไปด้านข้าง
+   * (ไม่งั้นจะติดนิ่งในซอกระหว่างของตกแต่ง เมื่อแรงหลบหักล้างกับแรงเดินไปหาเป้าหมายพอดี)
+   */
+  #walkAround(obstacles, out) {
+    const pos = this.group.position;
+    const slide = this.seed % 2 < 1 ? 1 : -1; // แต่ละตัวอ้อมคนละทาง
+    for (const o of obstacles) {
+      const dx = pos.x - o.x;
+      const dz = pos.z - o.z;
+      const range = o.r * 0.75 + this.radius * 0.6;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= range * range) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      const f = (range - d) / range;
+      out.x += (dx / d) * f * 3 - (dz / d) * f * 1.5 * slide;
+      out.z += (dz / d) * f * 3 + (dx / d) * f * 1.5 * slide;
+    }
   }
 
   #seek(target, speed, slowRadius, out) {
@@ -225,27 +303,64 @@ export class Fish {
   // ── ท่าทาง/แอนิเมชัน ────────────────────────────────────────
 
   updateVisual(dt) {
+    if (this.species.behavior.walker) {
+      this.#walkVisual(dt);
+      return;
+    }
     const v = this.velocity;
     const speed = v.length();
+    let turnRate = 0;
     if (speed > 0.02) {
       const step = angleDelta(this.yaw, Math.atan2(v.x, v.z)) * (1 - Math.exp(-4 * dt));
+      turnRate = step / Math.max(dt, 1e-4);
       this.yaw += step;
-      this.roll = damp(this.roll, clamp((-step / Math.max(dt, 1e-4)) * 0.12, -0.45, 0.45), 4, dt);
+      this.roll = damp(this.roll, clamp(-turnRate * 0.12, -0.45, 0.45), 4, dt);
       this.pitch = damp(this.pitch, clamp(-Math.atan2(v.y, Math.hypot(v.x, v.z)), -0.5, 0.5), 4, dt);
     }
     _euler.set(this.pitch, this.yaw, this.roll, 'YXZ');
     this.group.quaternion.setFromEuler(_euler);
+
+    // ตัวเมียตั้งท้อง: ท้องค่อย ๆ ป่องขึ้น (อ้วนออกด้านข้างและลึกลงเล็กน้อย) จนคลอด
+    const belly = pregnancyProgress(this.data);
+    if (belly > 0 || this.visual.scale.x !== 1) this.visual.scale.set(1 + 0.16 * belly, 1 + 0.09 * belly, 1 + 0.03 * belly);
 
     const speedRatio = clamp(speed / this.species.behavior.speed, 0, 1.6);
     this.wigglePhase += dt * (2.5 + speedRatio * 7) * (this.species.behavior.tailBeat ?? 1);
     if (this.swim) {
       this.swim.uSwimPhase.value = this.wigglePhase;
       this.swim.uSwimAmp.value = 0.05 + 0.07 * Math.min(speedRatio, 1.2);
+      // โมเดลที่รองรับการโค้งลำตัวตอนเลี้ยว (เช่น Molly)
+      if (this.swim.uTurn) this.swim.uTurn.value = damp(this.swim.uTurn.value, clamp(turnRate * 0.35, -1, 1), 5, dt);
     } else if (this.mixer) {
       this.mixer.timeScale = 0.5 + speedRatio;
       this.mixer.update(dt);
     } else {
       this.wiggle.rotation.y = Math.sin(this.wigglePhase) * 0.12 * (0.4 + speedRatio);
+    }
+  }
+
+  /** ท่าเดินของสัตว์ที่เดินพื้น: หันข้างไปทางที่เดิน (เดินตะแคงแบบปู) และขยับขาตามความเร็ว */
+  #walkVisual(dt) {
+    const v = this.velocity;
+    const speed = Math.hypot(v.x, v.z);
+    if (speed > 0.03) {
+      const heading = Math.atan2(v.x, v.z);
+      // เลือกด้านที่หมุนน้อยกว่า → เดินกลับทางก็แค่เดินตะแคงไปอีกฝั่ง ไม่ต้องหมุนตัว
+      const left = heading + Math.PI / 2;
+      const right = heading - Math.PI / 2;
+      const target = Math.abs(angleDelta(this.yaw, left)) < Math.abs(angleDelta(this.yaw, right)) ? left : right;
+      this.yaw += angleDelta(this.yaw, target) * (1 - Math.exp(-3 * dt));
+    }
+    this.pitch = damp(this.pitch, 0, 4, dt);
+    this.roll = damp(this.roll, 0, 4, dt);
+    _euler.set(this.pitch, this.yaw, this.roll, 'YXZ');
+    this.group.quaternion.setFromEuler(_euler);
+    const belly = pregnancyProgress(this.data);
+    if (belly > 0 || this.visual.scale.x !== 1) this.visual.scale.set(1 + 0.1 * belly, 1 + 0.08 * belly, 1 + 0.1 * belly);
+    const ratio = clamp(speed / this.species.behavior.speed, 0, 1.5);
+    if (this.walk) {
+      this.walk.uWalkPhase.value += dt * (1.5 + ratio * 10);
+      this.walk.uWalkAmp.value = damp(this.walk.uWalkAmp.value, Math.min(1, ratio * 1.4), 6, dt);
     }
   }
 

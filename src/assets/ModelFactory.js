@@ -4,21 +4,32 @@ import { DECOR_ITEMS, getDecorCategory } from '../data/decor.js';
 import { buildFishPlaceholder, createFishMaterials } from '../placeholders/fishPlaceholder.js';
 import { buildDecorPlaceholder } from '../placeholders/decorPlaceholder.js';
 import { forEachMaterial, normalizeModel } from './AssetLoader.js';
-import { applyShaderMods, causticsMod, createSwayMod, createSwimMod } from '../render/shaderMods.js';
+import { applyShaderMods, causticsMod, createCrawlMod, createSwayMod, createSwimMod } from '../render/shaderMods.js';
+import { createMolly } from '../models/molly/MollyModel.js';
+import { genesToVariant } from '../models/molly/genetics.js';
 
 /** ความยาวรวม (หัวถึงปลายหาง) ของโมเดล .glb หลังปรับขนาด เทียบกับลำตัวโมเดลชั่วคราวที่ยาว 1 */
 export const FISH_MODEL_LENGTH = 1.35;
+
+/** โมเดลปลาที่สร้างด้วยโค้ดแบบละเอียด (species.procedural.type) — ใช้แทนโมเดลชั่วคราว ถ้าไม่มีไฟล์ .glb ของสายพันธุ์นั้น */
+const PROCEDURAL_FISH = {
+  molly: (species, { animated, detail, genes }) => createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated }),
+};
 
 /**
  * จุดเดียวที่ตัดสินใจว่าจะใช้โมเดล .glb หรือโมเดลชั่วคราว
  * ทั้งฉากหลักและรูปตัวอย่างใน UI เรียกผ่านที่นี่
  */
 export class ModelFactory {
-  constructor(assets) {
+  /** @param {{ detail?: () => 'high'|'medium'|'low' }} options detail = ระดับรายละเอียดของโมเดลปลาที่สร้างด้วยโค้ด (ตามคุณภาพกราฟิก) */
+  constructor(assets, { detail = () => 'high' } = {}) {
     this.assets = assets;
+    this.detail = detail;
   }
 
   fishModelUrls(species) {
+    // ปลาที่มีโมเดลจากโค้ดแบบละเอียดแล้ว ไม่ใช้ไฟล์ปลากลาง (fish.glb) แทน
+    if (species.procedural) return [species.model?.url].filter(Boolean);
     return [species.model?.url, GENERIC_FISH_MODEL].filter(Boolean);
   }
 
@@ -34,7 +45,8 @@ export class ModelFactory {
    * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, isPlaceholder: boolean }}
    *  object หันหัวไป +Z จุดศูนย์กลางที่กลางลำตัว ลำตัวยาวประมาณ 1 หน่วย
    */
-  createFish(species, { animated = true } = {}) {
+  /** @param {{ animated?: boolean, genes?: object }} options genes = ยีนสีของปลาลูกผสม (ดู models/molly/genetics.js) */
+  createFish(species, { animated = true, genes = null } = {}) {
     const found = this.assets.first(this.fishModelUrls(species));
     if (found) {
       const { scene, animations } = this.assets.instantiate(found.gltf);
@@ -66,7 +78,14 @@ export class ModelFactory {
         m.alphaTest = Math.max(m.alphaTest, 0.02);
       });
       if (animated) forEachMaterial(root, (m) => m.isMeshStandardMaterial && applyShaderMods(m, [causticsMod]));
-      return { object: root, mixer: animated ? mixer : null, swimUniforms: null, isPlaceholder: false };
+      const walkUniforms = animated && species.model?.crawl ? this.#applyCrawl(root, species.model.crawl) : null;
+      return { object: root, mixer: animated ? mixer : null, swimUniforms: null, walkUniforms, isPlaceholder: false };
+    }
+
+    const procedural = PROCEDURAL_FISH[species.procedural?.type];
+    if (procedural) {
+      const { object, swimUniforms } = procedural(species, { animated, detail: this.detail(), genes });
+      return { object, mixer: null, swimUniforms, isPlaceholder: false };
     }
 
     const materials = createFishMaterials(species.look);
@@ -77,6 +96,20 @@ export class ModelFactory {
       applyShaderMods(materials.fins, [createSwimMod(swimUniforms)]);
     }
     return { object: buildFishPlaceholder(species, materials), mixer: null, swimUniforms, isPlaceholder: true };
+  }
+
+  /** ขาเดินด้วย shader: mesh ที่ชื่อตรงกับ crawl.legs = ขา (กลุ่มแรกของ regex = ลำดับคู่ขา), crawl.claws = ก้าม */
+  #applyCrawl(root, crawl) {
+    const walk = { uWalkPhase: { value: Math.random() * 10 }, uWalkAmp: { value: 0 } };
+    const legRe = new RegExp(crawl.legs);
+    const clawRe = crawl.claws ? new RegExp(crawl.claws) : null;
+    root.traverse((obj) => {
+      if (!obj.isMesh || Array.isArray(obj.material)) return;
+      const m = legRe.exec(obj.name);
+      const leg = m ? Number(m[1] ?? 1) - 1 : clawRe?.test(obj.name) ? -1 : null;
+      if (leg !== null) applyShaderMods(obj.material, [createCrawlMod(walk, { ...crawl, leg })]);
+    });
+    return walk;
   }
 
   /**

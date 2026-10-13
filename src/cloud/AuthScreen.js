@@ -1,5 +1,6 @@
 import { collectRefs } from '../ui/helpers.js';
 import { escapeHtml } from '../utils/math.js';
+import { brandLogoHtml } from '../ui/brand.js';
 
 const BUTTON_CLASS = { primary: 'btn-start auth-primary', secondary: 'btn auth-secondary', danger: 'btn-danger auth-secondary' };
 
@@ -13,13 +14,9 @@ export class AuthScreen {
     root.innerHTML = `
       <div class="start-screen auth-screen">
         <div class="start-inner">
-          <div class="logo">
-            <span class="logo-fish">🐠</span>
-            <h1>เกมเลี้ยงปลาในตู้ปลา</h1>
-          </div>
+          ${brandLogoHtml()}
           <p class="subtitle">เซฟกลางบนคลาวด์ · เล่นต่อได้ทุกอุปกรณ์</p>
           <div class="auth-body" data-ref="body"></div>
-          <p class="credit">สร้างด้วย Three.js + WebGL · เล่นผ่านเว็บเบราว์เซอร์</p>
         </div>
       </div>`;
     this.body = root.querySelector('[data-ref="body"]');
@@ -55,7 +52,6 @@ export class AuthScreen {
             : ''
         }</div>
         <button class="btn-start" type="submit" data-ref="submit">เข้าสู่เกม</button>
-        <p class="auth-note">ผู้เล่นทุกคนใช้รหัสผ่านเดียวกัน และเล่นเซฟกลางชุดเดียวกัน</p>
       </form>`);
     refs.input.focus();
 

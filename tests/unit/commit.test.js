@@ -10,16 +10,16 @@ import { maxGrowthIn } from '../../src/shared/economy.js';
 import { T0, fishRecord, makeDoc, tankId } from '../helpers/fixtures.js';
 
 const commit = (writer, seq, commands, extra = {}) => ({ writer, seq, epoch: 0, commands, snapshot: null, ...extra });
-const buy = (doc, id, speciesId = 'neon') => ({ type: 'buyFish', tankId: tankId(doc), speciesId, fish: { id, name: 'x', gender: 'm' } });
+const buy = (doc, id, speciesId = 'guppy') => ({ type: 'buyFish', tankId: tankId(doc), speciesId, fish: { id, name: 'x', gender: 'm' } });
 
 test('ส่ง commit เดิมซ้ำ (seq เดิม) ไม่ถูกบันทึกซ้ำ — ไม่หักเงินสองครั้ง', () => {
   const doc0 = makeDoc({ coins: 1000 });
   const c = commit('w_a', 1, [buy(doc0, 'fish_a1')]);
   const r1 = processCommit(doc0, c, { now: T0 });
   const r2 = processCommit(r1.doc, c, { now: T0 + 1000 });
-  assert.equal(r1.doc.game.coins, 950);
+  assert.equal(r1.doc.game.coins, 920);
   assert.equal(r2.duplicate, true);
-  assert.equal(r2.doc.game.coins, 950);
+  assert.equal(r2.doc.game.coins, 920);
   assert.equal(r2.doc.revision, r1.doc.revision);
   assert.equal(doc0.game.coins, 1000, 'ไม่แก้เอกสารต้นฉบับ');
 });
@@ -27,20 +27,20 @@ test('ส่ง commit เดิมซ้ำ (seq เดิม) ไม่ถู�
 test('สองเครื่องซื้อพร้อมกันจากข้อมูลชุดเดียวกัน: transaction ทำต่อกัน ได้ปลาทั้งคู่ เงินถูกหักครบ', () => {
   const base = makeDoc({ coins: 1000 });
   // ทั้งสองเครื่องเห็น revision เดียวกัน — เซิร์ฟเวอร์ประมวลผลทีละ commit บนข้อมูลล่าสุดเสมอ
-  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'goldfish')]), { now: T0 });
+  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'betta')]), { now: T0 });
   const b = processCommit(a.doc, commit('w_b', 1, [buy(base, 'fish_b1', 'guppy')]), { now: T0 + 5 });
   const fish = b.doc.game.tanks[0].fish.map((f) => f.id);
   assert.ok(fish.includes('fish_a1') && fish.includes('fish_b1'));
-  assert.equal(b.doc.game.coins, 1000 - getSpecies('goldfish').price.coins - getSpecies('guppy').price.coins);
+  assert.equal(b.doc.game.coins, 1000 - getSpecies('betta').price.coins - getSpecies('guppy').price.coins);
   assert.equal(b.doc.revision, base.revision + 2);
 });
 
 test('ใช้เงินเกินจากหลายเครื่อง: คำสั่งที่มาทีหลังถูกปฏิเสธ ไม่ติดลบ', () => {
   const base = makeDoc({ coins: 120 });
-  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'goldfish')]), { now: T0 });
-  const b = processCommit(a.doc, commit('w_b', 1, [buy(base, 'fish_b1', 'goldfish')]), { now: T0 + 5 });
+  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'guppy')]), { now: T0 });
+  const b = processCommit(a.doc, commit('w_b', 1, [buy(base, 'fish_b1', 'guppy')]), { now: T0 + 5 });
   assert.deepEqual(b.results, [{ ok: false, code: 'insufficient-funds' }]);
-  assert.equal(b.doc.game.coins, 20);
+  assert.equal(b.doc.game.coins, 40);
 });
 
 test('รับรางวัลซ้ำจากสองเครื่องพร้อมกัน: ได้รางวัลครั้งเดียว', () => {
@@ -201,11 +201,11 @@ test('เล่นคำสั่งซ้ำฝั่งเว็บ (predict) 
   const tid = tankId(base);
   const game = structuredClone(base.game);
   replayCommands(game, structuredClone(base.meta), [
-    { type: 'buyFish', tankId: tid, speciesId: 'neon', fish: { id: 'fish_p1', name: 'x', gender: 'f' }, at: T0 },
+    { type: 'buyFish', tankId: tid, speciesId: 'guppy', fish: { id: 'fish_p1', name: 'x', gender: 'f' }, at: T0 },
     { type: 'collectCoins', tankId: tid, count: 4, value: 99999, at: T0 + 10 }, // ฝั่งเว็บไม่ใช้เพดานเวลาเซิร์ฟเวอร์
     { type: 'sellFish', tankId: tid, fishId: 'fish_nope', at: T0 + 20 }, // คำสั่งที่ไม่ผ่านถูกข้าม
   ], 'w_a');
-  assert.equal(game.coins, 500 - 50 + 99999);
+  assert.equal(game.coins, 500 - 80 + 99999);
   assert.equal(game.tanks[0].fish.length, 2);
 });
 

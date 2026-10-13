@@ -135,3 +135,40 @@ test('legacy IDs that collide with object prototypes are replaced with usable un
   assert.equal(tank.fish.length, 2);
   assert.equal(new Set(tank.fish.map((f) => f.id)).size, 2);
 });
+
+test('การตั้งท้อง: เก็บไว้เฉพาะตัวเมีย และเวลาไม่ล้ำอนาคต', () => {
+  const now = Date.parse('2026-10-13T05:00:00Z');
+  const fish = (id, gender, pregnantAt) => ({ id, speciesId: 'guppy', name: 'x', gender, pregnantAt });
+  const game = sanitizeGame(
+    { tanks: [{ id: 'tank_p', typeId: 'starter', name: 'ตู้', cleanliness: 90, fish: [fish('fish_p1', 'f', now - 1000), fish('fish_p2', 'm', now - 1000), fish('fish_p3', 'f', now + 99_000), fish('fish_p4', 'f', 'x')], decor: [] }] },
+    { now },
+  );
+  const byId = Object.fromEntries(game.tanks[0].fish.map((f) => [f.id, f]));
+  assert.equal(byId.fish_p1.pregnantAt, now - 1000);
+  assert.equal(byId.fish_p2.pregnantAt, undefined);
+  assert.equal(byId.fish_p3.pregnantAt, now);
+  assert.equal('pregnantAt' in byId.fish_p4, false);
+});
+
+test('ยีนลูกผสมและลูกในท้อง: เก็บไว้เฉพาะปลาที่มีระบบสี และข้อมูลผิดถูกตัดทิ้ง', () => {
+  const now = Date.parse('2026-10-13T05:00:00Z');
+  const genes = {
+    body: { base: '#ffd22c', back: '#f8b41a', belly: '#ffec9c', from: 'golden' },
+    fins: { base: '#f1efea', tip: '#fbfaf8', ray: '#d2cfc9', opacity: 0.7 },
+    head: null,
+    spots: [{ ref: 'dalmatian:0', color: '#07080b', k: 1 }],
+    seed: 77,
+  };
+  const fish = [
+    { id: 'fish_g1', speciesId: 'molly_hybrid', name: 'x', gender: 'f', genes, pregnantAt: now - 5, fetus: { speciesId: 'molly_hybrid', genes } },
+    { id: 'fish_g2', speciesId: 'guppy', name: 'x', gender: 'f', genes, pregnantAt: now - 5, fetus: { speciesId: 'molly_hybrid', genes } },
+    { id: 'fish_g3', speciesId: 'molly_golden', name: 'x', gender: 'f', fetus: { speciesId: 'molly_hybrid', genes } },
+  ];
+  const game = sanitizeGame({ tanks: [{ id: 'tank_g', typeId: 'starter', name: 'ตู้', cleanliness: 90, fish, decor: [] }] }, { now });
+  const byId = Object.fromEntries(game.tanks[0].fish.map((f) => [f.id, f]));
+  assert.deepEqual(byId.fish_g1.genes, genes);
+  assert.deepEqual(byId.fish_g1.fetus, { speciesId: 'molly_hybrid', genes });
+  assert.equal('genes' in byId.fish_g2, false, 'ปลาหางนกยูงไม่มีระบบสี');
+  assert.equal('fetus' in byId.fish_g2, false, 'ลูกในท้องต่างกลุ่มพันธุ์ถูกตัดทิ้ง');
+  assert.equal('fetus' in byId.fish_g3, false, 'ไม่ได้ตั้งท้อง');
+});

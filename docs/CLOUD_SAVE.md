@@ -223,7 +223,8 @@ gameSaves/global              ← เซฟกลางชุดเดียว
     tanks[]                   ← ตู้ปลา: { id, typeId (ขนาดตู้ ดู src/data/tanks.js), name, cleanliness (ความสะอาดน้ำ),
                                 lastUpdate, fish[], decor[] }
       fish[]                  ← { id, speciesId, name, gender, satiety (อิ่ม), health, growth (ขนาด 0–1), age,
-                                  breedCooldown, coinTimer }
+                                  breedCooldown, coinTimer, pregnantAt? (ตัวเมียที่ตั้งท้อง: เวลาผสมพันธุ์ ms),
+                                  fetus? { speciesId, genes? } (ลูกในท้อง), genes? (ยีนสีของปลาสอดลูกผสม) }
       decor[]                 ← { id, itemId, x, z, rotY } ของตกแต่ง/อุปกรณ์ (หัวทราย ฯลฯ)
     activeTankId              ← ตู้ที่เปิดล่าสุด
     missions                  ← { day, progress, claimed } ภารกิจรายวัน/ความสำเร็จ

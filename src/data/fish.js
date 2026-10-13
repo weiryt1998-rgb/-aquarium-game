@@ -9,13 +9,57 @@
  *   - ถ้ามีแอนิเมชันในไฟล์ จะเล่นคลิปที่ชื่อมีคำว่า "swim" (หรือคลิปแรก)
  *
  * look = พารามิเตอร์ของโมเดลชั่วคราวที่สร้างด้วยโค้ด (ใช้เมื่อยังไม่มีไฟล์ .glb)
+ * breedGroup = กลุ่มที่ผสมข้ามกันได้ (ไม่ระบุ = ผสมได้เฉพาะสายพันธุ์เดียวกัน) เช่น ปลาสอดทุกสีเป็น 'molly'
+ * hybrid  = สายพันธุ์ของลูกผสมในกลุ่มนั้น (ลูกที่พ่อแม่ต่างสี) แต่ละตัวมีสีตามยีนของตัวเอง (fish.genes)
+ * notForSale = ไม่ขายในร้าน ได้จากการผสมพันธุ์เท่านั้น (แต่แสดงในสมุดสะสม)
+ * behavior.walker = เดินบนพื้นทราย (เช่น ปู) แทนการว่าย — เดินตะแคง หยุดเป็นพัก ๆ กินเฉพาะอาหารที่จมถึงพื้น
+ * model.crawl = ขยับขาด้วย shader สำหรับโมเดลที่ไม่มีแอนิเมชัน (ดู createCrawlMod ใน render/shaderMods.js)
+ * retired = เลิกขายแล้ว: ไม่แสดงในร้านค้าและสมุดสะสม ซื้อเพิ่มไม่ได้ แต่ปลาที่มีอยู่แล้วในตู้ยังอยู่ต่อ
+ *           (ห้ามลบสายพันธุ์ออกจากรายการนี้ ไม่งั้นปลาเดิมในเซฟของผู้เล่นจะหายตอนโหลด)
+ * procedural = ใช้โมเดลละเอียดที่สร้างด้วยโค้ดแทนโมเดลชั่วคราว เช่น { type: 'molly', variant: 'dalmatian' }
+ *              (ดู src/models/molly/ — ถ้าใส่ไฟล์ .glb ของสายพันธุ์นั้นภายหลัง ไฟล์จะถูกใช้แทน)
  */
 
 const fishModel = (id, extra = {}) => ({ url: `models/fish/${id}.glb`, rotation: [0, 0, 0], ...extra });
 
+/**
+ * ปลาสอดบอลลูน (Balloon Molly) — ทุกสีใช้โมเดล/พฤติกรรม/การดูแลเดียวกัน ต่างกันที่ลาย (src/models/molly/variants.js)
+ * แต่ละสีเป็นสายพันธุ์แยก จึงผสมพันธุ์ได้เฉพาะสีเดียวกัน
+ */
+function mollySpecies({ variant, name, nameEn, description, rarity, coins, economy, colors, extra = {} }) {
+  const id = `molly_${variant}`;
+  return {
+    id,
+    breedGroup: 'molly',
+    ...extra,
+    name,
+    nameEn,
+    description,
+    rarity,
+    price: { coins },
+    sizeCm: 5,
+    length: 0.7,
+    minTank: 0,
+    model: fishModel(id),
+    procedural: { type: 'molly', variant },
+    behavior: { speed: 0.7, zone: 'middle', schooling: true, agility: 2.2, tailBeat: 1.15 },
+    care: { hungerRate: 0.13, growTime: 260, breedChance: 0.3 },
+    economy,
+    // รูปร่างจริงมาจาก src/models/molly/ — look ใช้เป็นสีเรืองหลังรูปในร้านค้า และเป็นโมเดลสำรองแบบง่ายเท่านั้น
+    look: {
+      body: { height: 0.55, width: 0.75, peak: 0.45, nose: 0.5, taper: 1.0, peduncle: 0.3 },
+      pattern: { type: 'patches', colors, belly: '#fbf9f4', scale: 6 },
+      fins: { color: colors[0], tip: '#ffffff', opacity: 0.6, tail: 'fan', tailLength: 0.45, tailHeight: 0.6, dorsal: 0.3, anal: 0.12, pectoral: 0.15 },
+      eyeSize: 0.09,
+      shine: 0.5,
+    },
+  };
+}
+
 export const FISH_SPECIES = [
   {
     id: 'goldfish',
+    retired: true,
     name: 'ปลาทอง',
     nameEn: 'Goldfish',
     description: 'ปลาสุดคลาสสิก เลี้ยงง่าย ว่ายน้ำช้า ๆ อย่างสง่างาม',
@@ -58,8 +102,70 @@ export const FISH_SPECIES = [
       shine: 0.5,
     },
   },
+  mollySpecies({
+    variant: 'dalmatian',
+    name: 'ปลาสอดดัลเมเชียน',
+    nameEn: 'Dalmatian Balloon Molly',
+    description: 'ปลาสอดบอลลูนตัวกลมท้องป่อง ลายจุดดำบนพื้นขาวมุก ว่ายต้วมเตี้ยมน่ารัก เลี้ยงง่ายและออกลูกเก่ง',
+    rarity: 2,
+    coins: 160,
+    economy: { coinValue: 5, coinInterval: 70 },
+    colors: ['#f3f1ec', '#111214'],
+  }),
+  mollySpecies({
+    variant: 'redhead',
+    name: 'ปลาสอดหัวแดง',
+    nameEn: 'Red Head Balloon Molly',
+    description: 'ปลาสอดบอลลูนลำตัวขาวมุก หัวแดงส้มสะดุดตา เหมือนสวมหมวกสีแดง',
+    rarity: 2,
+    coins: 180,
+    economy: { coinValue: 6, coinInterval: 70 },
+    colors: ['#f0541c', '#f5f2ec'],
+  }),
+  mollySpecies({
+    variant: 'golden',
+    name: 'ปลาสอดทอง',
+    nameEn: 'Golden Balloon Molly',
+    description: 'ปลาสอดบอลลูนสีเหลืองทองทั้งตัว เกล็ดเป็นประกายเมื่อต้องแสง',
+    rarity: 2,
+    coins: 150,
+    economy: { coinValue: 5, coinInterval: 70 },
+    colors: ['#ffd22c', '#f8b41a'],
+  }),
+  mollySpecies({
+    variant: 'calico',
+    name: 'ปลาสอดคาลิโก้',
+    nameEn: 'Calico Balloon Molly',
+    description: 'ปลาสอดบอลลูนลายสามสี ขาว ส้ม ดำ กระจายแบบธรรมชาติ ไม่มีตัวไหนลายซ้ำกัน หางไล่สีฟ้า',
+    rarity: 3,
+    coins: 240,
+    economy: { coinValue: 7, coinInterval: 75 },
+    colors: ['#f2882a', '#f4f1ea'],
+  }),
+  mollySpecies({
+    variant: 'hybrid',
+    name: 'ปลาสอดลูกผสม',
+    nameEn: 'Hybrid Balloon Molly',
+    description: 'เกิดจากการผสมปลาสอดต่างสี สีและลายสืบทอดจากพ่อแม่ บางตัวกลายพันธุ์ได้สีใหม่ ไม่มีตัวไหนเหมือนกัน — ได้จากการผสมพันธุ์เท่านั้น',
+    rarity: 3,
+    coins: 320,
+    economy: { coinValue: 9, coinInterval: 75 },
+    colors: ['#f2c24a', '#f0541c'],
+    extra: { hybrid: true, notForSale: true },
+  }),
+  mollySpecies({
+    variant: 'golddust',
+    name: 'ปลาสอดโกลด์ดัสต์',
+    nameEn: 'Gold Dust Balloon Molly',
+    description: 'ปลาสอดบอลลูนสีทองอำพัน โรยด้วยจุดดำละเอียดเหมือนผงฝุ่นทั่วตัว ครีบไล่เป็นสีดำ',
+    rarity: 3,
+    coins: 260,
+    economy: { coinValue: 8, coinInterval: 75 },
+    colors: ['#e9a33c', '#0b0907'],
+  }),
   {
     id: 'neon',
+    retired: true,
     name: 'ปลานีออน',
     nameEn: 'Neon Tetra',
     description: 'ตัวจิ๋วมีแถบเรืองแสงสีฟ้า ชอบว่ายเป็นฝูง',
@@ -78,6 +184,56 @@ export const FISH_SPECIES = [
       fins: { color: '#e4eef5', tip: '#ffffff', opacity: 0.38, tail: 'fork', tailLength: 0.34, tailHeight: 0.5, dorsal: 0.16, anal: 0.12, pectoral: 0.1 },
       eyeSize: 0.1,
       shine: 0.6,
+    },
+  },
+  {
+    id: 'crab',
+    name: 'ปู',
+    nameEn: 'Red Crab',
+    description: 'ปูสีแดงสด เดินตะแคงไปมาบนพื้นทราย คอยเก็บเศษอาหารที่ตกถึงพื้น ช่วยให้ตู้สะอาด',
+    rarity: 2,
+    price: { coins: 200 },
+    sizeCm: 6,
+    length: 0.75,
+    minTank: 0,
+    // จาก Fish/New Fish/crab.glb — หันก้ามไป +Z อยู่แล้ว ไม่มีแอนิเมชันในไฟล์ จึงขยับขาด้วย shader
+    // แกนในแต่ละ mesh: x = ซ้าย/ขวา, z = ขึ้น, y = หน้า/หลัง (ก้ามอยู่ทาง -y)
+    model: fishModel('crab', {
+      scale: 1.1,
+      crawl: { legs: '^Kaki(\\d)', claws: '^Tangan', bodyHalfWidth: 1.9, legReach: 4.2, lift: 0.9, swing: 0.55 },
+    }),
+    behavior: { speed: 0.32, zone: 'bottom', schooling: false, agility: 2.4, walker: true },
+    care: { hungerRate: 0.1, growTime: 300, breedChance: 0.15 },
+    economy: { coinValue: 6, coinInterval: 75 },
+    look: {
+      body: { height: 0.5, width: 1.2, peak: 0.5, nose: 0.4, taper: 1, peduncle: 0.3 },
+      pattern: { type: 'solid', colors: ['#e8452a'], belly: '#ffd9b0' },
+      fins: { color: '#e8452a', tip: '#ff8a6a', opacity: 1, tail: 'fan', tailLength: 0.1, tailHeight: 0.2, dorsal: 0, anal: 0, pectoral: 0.3 },
+      eyeSize: 0.08,
+      shine: 0.4,
+    },
+  },
+  {
+    id: 'eagleray',
+    name: 'ปลากระเบนนก',
+    nameEn: 'Spotted Eagle Ray',
+    description: 'กระเบนลายจุดขาว ครีบกว้างเหมือนปีกนก กระพือว่ายอย่างสง่างาม ต้องใช้ตู้ขนาดใหญ่',
+    rarity: 4,
+    price: { gems: 35 },
+    sizeCm: 90,
+    length: 1.9,
+    minTank: 1,
+    // จาก Fish/New Fish/eagle_stingray.glb (หันหัวไป +X จึงหมุน -90°) มีแอนิเมชัน "Swim cycle"
+    model: fishModel('eagle_ray', { rotation: [0, -Math.PI / 2, 0] }),
+    behavior: { speed: 0.6, zone: 'middle', schooling: false, agility: 1.1, tailBeat: 0.7 },
+    care: { hungerRate: 0.09, growTime: 520, breedChance: 0.05 },
+    economy: { coinValue: 30, coinInterval: 100 },
+    look: {
+      body: { height: 0.18, width: 1.6, peak: 0.4, nose: 0.5, taper: 1.1, peduncle: 0.1 },
+      pattern: { type: 'solid', colors: ['#5d6268'], belly: '#f2f2f0' },
+      fins: { color: '#5d6268', tip: '#9aa0a6', opacity: 1, tail: 'fork', tailLength: 0.6, tailHeight: 0.05, dorsal: 0, anal: 0, pectoral: 0.6 },
+      eyeSize: 0.04,
+      shine: 0.5,
     },
   },
   {
@@ -168,6 +324,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'yellowtang',
+    retired: true,
     name: 'ปลาขี้ตังเหลือง',
     nameEn: 'Yellow Tang',
     description: 'สีเหลืองสดทั้งตัว ว่ายน้ำกระฉับกระเฉง',
@@ -190,6 +347,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'bluetang',
+    retired: true,
     name: 'ปลาขี้ตังน้ำเงิน',
     nameEn: 'Blue Tang',
     description: 'สีน้ำเงินสดหางเหลือง ขี้เล่นและอยากรู้อยากเห็น',
@@ -302,6 +460,12 @@ export const FISH_SPECIES = [
 ];
 
 const BY_ID = new Map(FISH_SPECIES.map((s) => [s.id, s]));
+
+/** สายพันธุ์ที่ยังมีในเกม (แสดงในสมุดสะสม) — ไม่รวมที่เลิกขายแล้ว */
+export const AVAILABLE_SPECIES = FISH_SPECIES.filter((s) => !s.retired);
+
+/** สายพันธุ์ที่ซื้อได้ในร้านค้า */
+export const SHOP_SPECIES = AVAILABLE_SPECIES.filter((s) => !s.notForSale);
 export const getSpecies = (id) => BY_ID.get(id);
 
 /** โมเดลกลางที่ใช้แทน เมื่อไม่มีไฟล์เฉพาะสายพันธุ์ */

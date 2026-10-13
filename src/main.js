@@ -8,12 +8,13 @@ import WebGL from 'three/addons/capabilities/WebGL.js';
 import { startCloudSession } from './cloud/boot.js';
 import { CloudSync } from './cloud/CloudSync.js';
 import { cloneData } from './shared/saveDoc.js';
+import { GAME_NAME } from './ui/brand.js';
 
 const canvas = document.getElementById('scene');
 const uiRoot = document.getElementById('ui');
 
 function showFatal(message) {
-  uiRoot.innerHTML = `<div class="fatal"><h1>🐠 เกมเลี้ยงปลาในตู้ปลา</h1><p>${message}</p></div>`;
+  uiRoot.innerHTML = `<div class="fatal"><h1>🐠 ${GAME_NAME}</h1><p>${message}</p></div>`;
 }
 
 async function boot() {

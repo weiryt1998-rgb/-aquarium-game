@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { disposeObject } from './AssetLoader.js';
+import { genesKey } from '../models/molly/genetics.js';
 
 const SIZE = 192;
 
@@ -32,8 +33,10 @@ export class Thumbnailer {
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
   }
 
-  fish(species) {
-    return this.#render(`fish:${species.id}`, () => this.factory.createFish(species, { animated: false }).object, new THREE.Vector3(-1, 0.22, 0.45));
+  /** @param {object} [genes] ยีนสีของปลาลูกผสม — ได้รูปลายเฉพาะตัว */
+  fish(species, genes = null) {
+    const key = genes ? `fish:${species.id}:${genesKey(genes)}` : `fish:${species.id}`;
+    return this.#render(key, () => this.factory.createFish(species, { animated: false, genes }).object, new THREE.Vector3(-1, 0.22, 0.45));
   }
 
   decor(item) {

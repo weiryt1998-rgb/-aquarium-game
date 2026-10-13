@@ -9,6 +9,8 @@ import { getFood } from '../../src/data/food.js';
 import { getDecorItem } from '../../src/data/decor.js';
 import { todayKey } from '../../src/utils/math.js';
 import { T0, ctxAt, fishRecord, makeGame } from '../helpers/fixtures.js';
+import { gestationMs, planOffspring } from '../../src/shared/breeding.js';
+import { seededRandom } from '../../src/utils/math.js';
 
 const run = (game, cmd, ctx = ctxAt(T0), meta = { tanks: {}, writers: {} }) => applyCommand(game, meta, cmd, ctx);
 const rejects = (fn, code) => assert.throws(fn, (err) => err instanceof CommandError && err.code === code);
@@ -17,11 +19,11 @@ const newFish = (id = 'fish_new1') => ({ id, name: 'ใหม่', gender: 'f', 
 test('ซื้อปลา: หักเงินตามราคา เพิ่มปลาด้วยค่าเริ่มต้นฝั่งเซิร์ฟเวอร์ นับภารกิจและสถิติ', () => {
   const game = makeGame({ coins: 1000 });
   const tank = game.tanks[0];
-  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'neon', fish: newFish() });
-  assert.equal(game.coins, 1000 - getSpecies('neon').price.coins);
+  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish() });
+  assert.equal(game.coins, 1000 - getSpecies('guppy').price.coins);
   const f = tank.fish.find((x) => x.id === 'fish_new1');
   assert.deepEqual({ satiety: f.satiety, health: f.health, growth: f.growth, age: f.age }, { satiety: 70, health: 100, growth: 0.6, age: 0 });
-  assert.equal(game.collection.neon, true);
+  assert.equal(game.collection.guppy, true);
   assert.equal(game.stats.fishBought, 1);
   assert.equal(game.missions.progress.d_buy, 1);
 });
@@ -30,25 +32,38 @@ test('ซื้อปลา: เงินไม่พอ/ตู้เต็ม/�
   const game = makeGame({ coins: 10 });
   const tank = game.tanks[0];
   const before = JSON.stringify(game);
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'neon', fish: newFish() }), 'insufficient-funds');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish() }), 'insufficient-funds');
   game.coins = 99999;
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'arowana', fish: newFish() }), 'tank-too-small');
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'neon', fish: { ...newFish(), gender: 'x' } }), 'invalid');
-  rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'neon', fish: newFish() }), 'not-found');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: { ...newFish(), gender: 'x' } }), 'invalid');
+  rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'guppy', fish: newFish() }), 'not-found');
   game.coins = 10;
   assert.equal(JSON.stringify(game), before);
 
   const full = makeGame({ coins: 99999, fish: Array.from({ length: 14 }, () => fishRecord('neon')) });
-  rejects(() => run(full, { type: 'buyFish', tankId: full.tanks[0].id, speciesId: 'neon', fish: newFish() }), 'tank-full');
+  rejects(() => run(full, { type: 'buyFish', tankId: full.tanks[0].id, speciesId: 'guppy', fish: newFish() }), 'tank-full');
   assert.equal(full.coins, 99999);
+});
+
+test('ซื้อปลา: สายพันธุ์ที่เลิกขายแล้วซื้อไม่ได้ แต่ปลาเดิมในตู้ยังขายคืนได้', () => {
+  const old = fishRecord('goldfish');
+  const game = makeGame({ coins: 1000, fish: [old] });
+  const tank = game.tanks[0];
+  for (const id of ['goldfish', 'neon', 'yellowtang', 'bluetang']) {
+    assert.equal(getSpecies(id).retired, true);
+    rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: id, fish: newFish() }), 'invalid');
+  }
+  assert.equal(game.coins, 1000);
+  run(game, { type: 'sellFish', tankId: tank.id, fishId: old.id });
+  assert.equal(game.coins, 1000 + fishSellValue(getSpecies('goldfish'), 1).coins);
 });
 
 test('ซื้อปลา: id ซ้ำกับปลาที่มีอยู่ถูกปฏิเสธ (กันคำสั่งเดิมสร้างปลาซ้ำ)', () => {
   const game = makeGame({ coins: 1000 });
   const tank = game.tanks[0];
-  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'neon', fish: newFish('fish_dup') });
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'neon', fish: newFish('fish_dup') }), 'invalid');
-  assert.equal(game.coins, 1000 - 50);
+  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish('fish_dup') });
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish('fish_dup') }), 'invalid');
+  assert.equal(game.coins, 1000 - 80);
 });
 
 test('ขายปลา: คืนเงินตามสูตรเดิม และไม่เชื่อค่าการเติบโตที่เกินจริง', () => {
@@ -160,7 +175,97 @@ test('ทำความสะอาดตู้: ติดคูลดาวน
   assert.equal(game.missions.progress.d_clean, 1);
 });
 
-test('ปลาออกลูก: ต้องมีพ่อแม่คู่จริง และเว้นระยะตามเวลาจริง', () => {
+test('ผสมพันธุ์: ตัวเมียตั้งท้องก่อน ครบกำหนดจึงคลอด และตัวเมียเท่านั้นที่คลอดได้', () => {
+  const dad = fishRecord('guppy', { gender: 'm' });
+  const mom = fishRecord('guppy', { gender: 'f' });
+  const neonMom = fishRecord('neon', { gender: 'f' });
+  const game = makeGame({ fish: [dad, mom, neonMom] });
+  const tank = game.tanks[0];
+  const meta = { tanks: {}, writers: {} };
+  const G = gestationMs();
+  const mated = (parents, extra = {}) => ({ type: 'fishMated', tankId: tank.id, parents, ...extra });
+  const born = (motherId, id) => ({ type: 'fishBorn', tankId: tank.id, motherId, fish: { id, name: 'ลูก', gender: 'f' } });
+
+  rejects(() => run(game, mated([dad.id, neonMom.id]), ctxAt(T0), meta), 'invalid'); // ต่างชนิด
+  rejects(() => run(game, mated([mom.id, dad.id]), ctxAt(T0), meta), 'invalid'); // ตัวผู้ต้องมาก่อน ตัวเมียคือแม่
+  rejects(() => run(game, born(mom.id, 'fish_b0'), ctxAt(T0), meta), 'invalid'); // ยังไม่ตั้งท้อง
+
+  run(game, mated([dad.id, mom.id]), ctxAt(T0), meta);
+  assert.equal(mom.pregnantAt, T0);
+  assert.equal(dad.pregnantAt, undefined);
+  assert.equal(dad.breedCooldown, CONFIG.breeding.cooldown);
+  assert.equal(tank.fish.length, 3, 'ผสมพันธุ์แล้วยังไม่มีลูกทันที');
+
+  rejects(() => run(game, born(mom.id, 'fish_b1'), ctxAt(T0 + 5000), meta), 'cooldown'); // ยังไม่ครบกำหนด
+  rejects(() => run(game, born(dad.id, 'fish_b2'), ctxAt(T0 + G), meta), 'invalid'); // ตัวผู้คลอดไม่ได้
+  rejects(() => run(game, mated([dad.id, mom.id]), ctxAt(T0 + G), meta), 'invalid'); // ตั้งท้องซ้อนไม่ได้
+
+  // ขายตัวพ่อระหว่างตั้งท้อง → ตัวแม่ยังคลอดได้
+  run(game, { type: 'sellFish', tankId: tank.id, fishId: dad.id }, ctxAt(T0 + G), meta);
+  run(game, born(mom.id, 'fish_b3'), ctxAt(T0 + G), meta);
+  assert.equal(tank.fish.length, 3);
+  assert.equal(tank.fish.at(-1).growth, 0);
+  assert.equal(mom.pregnantAt, undefined);
+  assert.equal(mom.breedCooldown, CONFIG.breeding.cooldown);
+  assert.equal(game.stats.fishBorn, 1);
+  rejects(() => run(game, born(mom.id, 'fish_b4'), ctxAt(T0 + 2 * G), meta), 'invalid'); // คลอดไปแล้ว
+});
+
+test('ผสมข้ามสี: ปลาสอดต่างสีผสมกันได้ ลูกเป็นลูกผสมตามยีนที่กำหนดตอนตั้งท้อง', () => {
+  const dad = fishRecord('molly_golden', { gender: 'm' });
+  const mom = fishRecord('molly_calico', { gender: 'f' });
+  const guppyDad = fishRecord('guppy', { gender: 'm' });
+  const game = makeGame({ fish: [dad, mom, guppyDad] });
+  const tank = game.tanks[0];
+  const meta = { tanks: {}, writers: {} };
+  rejects(() => run(game, { type: 'fishMated', tankId: tank.id, parents: [guppyDad.id, mom.id] }, ctxAt(T0), meta), 'invalid'); // ต่างกลุ่มพันธุ์
+
+  const fetus = planOffspring(mom, dad, seededRandom(0.77));
+  assert.equal(fetus.speciesId, 'molly_hybrid');
+  run(game, { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id], fetus }, ctxAt(T0), meta);
+  assert.deepEqual(mom.fetus, fetus);
+
+  // ขายตัวพ่อก่อนคลอด → ลูกยังได้ยีนตามที่กำหนดไว้
+  run(game, { type: 'sellFish', tankId: tank.id, fishId: dad.id }, ctxAt(T0 + 1000), meta);
+  run(game, { type: 'fishBorn', tankId: tank.id, motherId: mom.id, fish: { id: 'fish_hb1', name: 'ลูก', gender: 'm' } }, ctxAt(T0 + gestationMs()), meta);
+  const baby = tank.fish.find((f) => f.id === 'fish_hb1');
+  assert.equal(baby.speciesId, 'molly_hybrid');
+  assert.deepEqual(baby.genes, fetus.genes);
+  assert.equal(game.collection.molly_hybrid, true, 'ลูกผสมถูกบันทึกลงสมุดสะสม');
+  assert.equal(mom.fetus, undefined);
+});
+
+test('ผสมข้ามสี: ลูกในท้องที่ไม่ถูกต้องถูกแทนด้วยผลที่เป็นไปได้ และซื้อลูกผสมจากร้านไม่ได้', () => {
+  const dad = fishRecord('molly_golden', { gender: 'm' });
+  const mom = fishRecord('molly_redhead', { gender: 'f' });
+  const game = makeGame({ coins: 99999, fish: [dad, mom] });
+  const tank = game.tanks[0];
+  run(game, { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id], fetus: { speciesId: 'molly_golddust' } }, ctxAt(T0));
+  assert.equal(mom.fetus.speciesId, 'molly_hybrid');
+  assert.ok(mom.fetus.genes);
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_hybrid', fish: newFish('fish_hb2') }), 'invalid');
+
+  // สีเดียวกัน พันธุ์แท้ → ลูกพันธุ์แท้ไม่มียีน
+  const d2 = fishRecord('molly_golden', { gender: 'm' });
+  const m2 = fishRecord('molly_golden', { gender: 'f' });
+  const g2 = makeGame({ fish: [d2, m2] });
+  run(g2, { type: 'fishMated', tankId: g2.tanks[0].id, parents: [d2.id, m2.id], fetus: planOffspring(m2, d2) }, ctxAt(T0));
+  assert.deepEqual(m2.fetus, { speciesId: 'molly_golden' });
+});
+
+test('ผสมพันธุ์: นับการตั้งท้องจากเวลาที่เกิดในเครื่อง แต่ไม่ล้ำอนาคต', () => {
+  const dad = fishRecord('guppy', { gender: 'm' });
+  const mom = fishRecord('guppy', { gender: 'f' });
+  const game = makeGame({ fish: [dad, mom] });
+  const tank = game.tanks[0];
+  run(game, { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id], at: T0 - 30_000 }, ctxAt(T0));
+  assert.equal(mom.pregnantAt, T0 - 30_000);
+  delete mom.pregnantAt;
+  run(game, { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id], at: T0 + 999_999 }, ctxAt(T0 + 600_000));
+  assert.equal(mom.pregnantAt, T0 + 600_000);
+});
+
+test('ปลาออกลูกแบบเก่า (คำสั่งค้างจากเวอร์ชันก่อน): ต้องมีพ่อแม่คู่จริง และเว้นระยะตามเวลาจริง', () => {
   const dad = fishRecord('guppy', { gender: 'm' });
   const mom = fishRecord('guppy', { gender: 'f' });
   const game = makeGame({ fish: [dad, mom] });
@@ -174,6 +279,24 @@ test('ปลาออกลูก: ต้องมีพ่อแม่คู่
   rejects(() => run(game, { ...baby('fish_baby3'), parents: [dad.id, dad.id] }, ctxAt(T0 + 600_000), meta), 'invalid');
   run(game, baby('fish_baby4'), ctxAt(T0 + 600_000), meta);
   assert.equal(game.stats.fishBorn, 2);
+});
+
+test('แลกเพชร: เหรียญ 2,000 = 1 เพชร หักตามจำนวนจริง และปฏิเสธเมื่อเหรียญไม่พอหรือข้อมูลผิด', () => {
+  const rate = CONFIG.exchange.coinsPerGem;
+  assert.equal(rate, 2000);
+  const game = makeGame({ coins: 5000, gems: 3 });
+  assert.deepEqual(run(game, { type: 'exchangeGems', gems: 2 }), { gems: 2 });
+  assert.equal(game.coins, 1000);
+  assert.equal(game.gems, 5);
+  const before = JSON.stringify(game);
+  rejects(() => run(game, { type: 'exchangeGems', gems: 1 }), 'insufficient-funds');
+  for (const gems of [0, -1, 1.5, '1', null, LIMITS.maxExchangeGems + 1]) rejects(() => run(game, { type: 'exchangeGems', gems }), 'invalid');
+  assert.equal(JSON.stringify(game), before, 'คำสั่งที่ไม่ผ่านไม่แก้ข้อมูล');
+
+  const rich = makeGame({ coins: 99_999_999, gems: LIMITS.maxGems - 1 });
+  rejects(() => run(rich, { type: 'exchangeGems', gems: 2 }), 'limit');
+  run(rich, { type: 'exchangeGems', gems: 1 });
+  assert.equal(rich.gems, LIMITS.maxGems);
 });
 
 test('ของตกแต่ง: วางในตู้ได้ หักเงิน ขายคืนครึ่งราคา และวางนอกตู้ไม่ได้', () => {
@@ -232,7 +355,7 @@ test('metadata IDs cannot use inherited object keys', () => {
   for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
     const game = makeGame({ coins: 10000 });
     const before = structuredClone(game);
-    rejects(() => run(game, { type: 'buyFish', tankId: game.tanks[0].id, speciesId: 'neon', fish: newFish(id) }), 'invalid');
+    rejects(() => run(game, { type: 'buyFish', tankId: game.tanks[0].id, speciesId: 'guppy', fish: newFish(id) }), 'invalid');
     rejects(() => run(game, { type: 'buyTank', typeId: 'classic', tankId: id }), 'invalid');
     assert.deepEqual(game, before, 'invalid IDs must not spend currency or create records');
   }

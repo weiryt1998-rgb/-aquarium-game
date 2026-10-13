@@ -219,9 +219,9 @@ test('3) เครื่อง A เข้าสู่ระบบ ซื้อ�
   await waitSaved(A);
   const before = await cloud();
   assert.equal(await hudCoins(A), before.game.coins);
-  await buyFishUI(A, 'neon');
-  assert.equal(await coinsOf(A), before.game.coins - 50, 'เงินในเครื่องลดทันที');
-  const after = await waitCloud((d) => d.game.coins === before.game.coins - 50, 'buy saved');
+  await buyFishUI(A, 'guppy');
+  assert.equal(await coinsOf(A), before.game.coins - 80, 'เงินในเครื่องลดทันที');
+  const after = await waitCloud((d) => d.game.coins === before.game.coins - 80, 'buy saved');
   await waitSaved(A);
   assert.equal(cloudFishIds(after).length, 4);
   assert.ok(after.revision > before.revision);
@@ -343,9 +343,9 @@ test('9) บันทึกล้มเหลว (เซิร์ฟเวอร
 
 test('10) สองเครื่องซื้อพร้อมกัน → ได้ของครบทั้งคู่ เงินถูกต้อง และทั้งสองเครื่องเห็นตรงกัน', async () => {
   const before = await cloud();
-  await Promise.all([buyFishUI(A, 'guppy'), buyFishUI(B, 'goldfish')]);
+  await Promise.all([buyFishUI(A, 'guppy'), buyFishUI(B, 'betta')]);
   const after = await waitCloud((d) => d.game.tanks[0].fish.length === before.game.tanks[0].fish.length + 2, 'both purchases');
-  assert.equal(after.game.coins, before.game.coins - 80 - 100);
+  assert.equal(after.game.coins, before.game.coins - 80 - 200);
   await waitFor(async () => (await coinsOf(A)) === after.game.coins && (await coinsOf(B)) === after.game.coins, { message: 'both devices converge' });
   await waitFor(async () => JSON.stringify(await fishIdsOf(A)) === JSON.stringify(cloudFishIds(after)) && JSON.stringify(await fishIdsOf(B)) === JSON.stringify(cloudFishIds(after)), { message: 'fish converge' });
 });

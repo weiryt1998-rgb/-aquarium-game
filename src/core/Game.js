@@ -5,6 +5,7 @@ import { Sound } from './Sound.js';
 import { AssetLoader } from '../assets/AssetLoader.js';
 import { ModelFactory } from '../assets/ModelFactory.js';
 import { Thumbnailer } from '../assets/Thumbnailer.js';
+import { TankPreviewer } from '../assets/TankPreviewer.js';
 import { SceneManager } from '../world/SceneManager.js';
 import { Room } from '../world/Room.js';
 import { Aquarium } from '../world/Aquarium.js';
@@ -44,8 +45,9 @@ export class Game {
 
     this.sceneMgr = new SceneManager(canvas, this.settings);
     this.assets = new AssetLoader();
-    this.models = new ModelFactory(this.assets);
+    this.models = new ModelFactory(this.assets, { detail: () => this.sceneMgr.quality?.fishDetail ?? 'high' });
     this.thumbs = new Thumbnailer(this.models);
+    this.tankPreviews = new TankPreviewer(this.models);
 
     this.room = new Room(this.sceneMgr.scene);
     this.aquarium = new Aquarium(this.sceneMgr);
@@ -157,6 +159,8 @@ export class Game {
   // ── ปลา ─────────────────────────────────────────────────────
 
   canBuyFish(species) {
+    if (species.retired) return { ok: false, reason: 'ปลาชนิดนี้เลิกขายแล้ว' };
+    if (species.notForSale) return { ok: false, reason: 'ได้จากการผสมพันธุ์เท่านั้น' };
     const tankType = getTankType(this.state.activeTank.typeId);
     if (this.fish.count >= tankType.capacity) return { ok: false, reason: `ตู้เต็มแล้ว (${this.fish.count}/${tankType.capacity}) ปลดล็อกตู้ใหม่ได้ที่แท็บตู้ปลา` };
     if (tankTier(tankType.id) < species.minTank) return { ok: false, reason: `ต้องใช้${TANK_TYPES[species.minTank].name}ขึ้นไป` };
@@ -164,7 +168,8 @@ export class Game {
     return { ok: true, reason: '' };
   }
 
-  buyFish(speciesId) {
+  /** @param {'m'|'f'} [gender] เพศที่เลือกตอนซื้อ (ไม่ระบุ = สุ่ม) */
+  buyFish(speciesId, gender) {
     const species = getSpecies(speciesId);
     const check = this.canBuyFish(species);
     if (!check.ok) {
@@ -172,14 +177,35 @@ export class Game {
       return null;
     }
     this.state.spend(species.price);
-    const fish = this.fish.addNew(speciesId);
+    const fish = this.fish.addNew(speciesId, gender);
     this.state.record({ type: 'buyFish', tankId: this.state.activeTank.id, speciesId, fish: fishIdentity(fish.data) });
     const isNew = this.state.discover(speciesId);
     this.sound.play('splash');
     this.events.emit(EV.FISH_BOUGHT, { fish });
-    this.ui.toast(`🐟 "${fish.data.name}" (${species.name}) ลงตู้แล้ว!${isNew ? ' 📘 บันทึกลงสมุดสะสม' : ''}`, 'success');
+    const sex = fish.data.gender === 'm' ? '♂ ตัวผู้' : '♀ ตัวเมีย';
+    this.ui.toast(`🐟 "${fish.data.name}" (${species.name} ${sex}) ลงตู้แล้ว!${isNew ? ' 📘 บันทึกลงสมุดสะสม' : ''}`, 'success');
     this.state.save();
     return fish;
+  }
+
+  /** เพชรที่แลกได้มากที่สุดด้วยเหรียญที่มี */
+  get maxExchangeGems() {
+    return Math.min(LIMITS.maxExchangeGems, LIMITS.maxGems - this.state.gems, Math.floor(this.state.coins / CONFIG.exchange.coinsPerGem));
+  }
+
+  /** แลกเหรียญเป็นเพชร @returns {boolean} */
+  exchangeGems(gems) {
+    gems = Math.floor(gems);
+    if (!(gems >= 1)) return false;
+    if (gems > this.maxExchangeGems) return this.#denied('เหรียญไม่พอ');
+    const cost = { coins: gems * CONFIG.exchange.coinsPerGem };
+    this.state.spend(cost);
+    this.state.earn({ gems });
+    this.state.record({ type: 'exchangeGems', gems });
+    this.sound.play('buy');
+    this.ui.toast(`💎 แลกได้ ${gems.toLocaleString('en-US')} เพชร (ใช้ ${cost.coins.toLocaleString('en-US')} เหรียญ)`, 'success');
+    this.state.save();
+    return true;
   }
 
   sellValue(fish) {

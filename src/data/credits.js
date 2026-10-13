@@ -36,6 +36,22 @@ export const MODEL_CREDITS = [
     source: 'https://sketchfab.com/3d-models/koi-fish-236859b809984f52b70c94fd040b9c59',
   },
   {
+    file: 'models/fish/crab.glb',
+    usedAs: 'ปู',
+    title: 'CRAB',
+    author: 'Dewa Martika',
+    authorUrl: 'https://sketchfab.com/DewaMartika',
+    source: 'https://sketchfab.com/3d-models/crab-40c62bb210eb4b14a3def84461becd12',
+  },
+  {
+    file: 'models/fish/eagle_ray.glb',
+    usedAs: 'ปลากระเบนนก',
+    title: 'Eagle stingray',
+    author: 'kenchoo',
+    authorUrl: 'https://sketchfab.com/kenchoo',
+    source: 'https://sketchfab.com/3d-models/eagle-stingray-4d615971858940f38703a1f1ffb370be',
+  },
+  {
     file: 'models/decor/coral.glb',
     usedAs: 'ปะการัง',
     title: 'Staghorn Coral',

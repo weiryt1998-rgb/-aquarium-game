@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>ทดสอบโมเดล Molly</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Kanit', system-ui, sans-serif;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #06202e;
+        color: #e8f4fa;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #panel {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        max-width: min(360px, calc(100vw - 24px));
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(4, 20, 30, 0.78);
+        backdrop-filter: blur(6px);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      #panel h1 {
+        margin: 0 0 6px;
+        font-size: 17px;
+      }
+      #panel .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      button {
+        font: inherit;
+        padding: 4px 10px;
+        border: 1px solid #3b6a80;
+        border-radius: 8px;
+        background: #0f3346;
+        color: inherit;
+        cursor: pointer;
+      }
+      button.active {
+        background: #2e8bb5;
+        border-color: #7cd0f0;
+      }
+      input[type='range'] {
+        flex: 1;
+        min-width: 120px;
+      }
+      #fps {
+        font-variant-numeric: tabular-nums;
+        color: #9fe7a6;
+      }
+      #hide {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        padding: 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="panel">
+      <button id="hide" title="ซ่อน/แสดงแผง">–</button>
+      <h1>🐟 Balloon Molly</h1>
+      <div id="body">
+        <div class="row" id="modes"></div>
+        <div class="row" id="views"></div>
+        <div class="row" id="variants"></div>
+        <div class="row" id="cross" style="color: #ffd98a"></div>
+        <div class="row">
+          จำนวนปลา <input id="count" type="range" min="1" max="80" value="1" /> <b id="countLabel">1</b>
+        </div>
+        <div class="row" id="details"></div>
+        <div class="row">
+          <button id="wire">โครงลวด</button>
+          <button id="pause">หยุดชั่วคราว</button>
+          <span id="fps"></span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./molly-preview.js"></script>
+  </body>
+</html>

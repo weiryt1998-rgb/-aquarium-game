@@ -3,6 +3,7 @@
  *  - caustics : ลายแสงระยิบระยับใต้น้ำบนพื้นทราย หิน และปลา
  *  - swim     : ลำตัวและหางปลาส่ายเป็นคลื่น (โมเดลชั่วคราว)
  *  - sway     : พืชน้ำโยกไหวตามกระแสน้ำ
+ *  - crawl    : ขาเดินของสัตว์ที่ไม่มีแอนิเมชันในไฟล์ (เช่น ปู)
  */
 
 /** uniform ที่ใช้ร่วมกันทั้งเกม (อัปเดตทุกเฟรมใน Game) */
@@ -175,3 +176,43 @@ export function createSwayMod(unit = 1) {
 }
 
 export const swayMod = createSwayMod(1);
+
+/**
+ * ขาเดินของสัตว์ที่ไม่มีแอนิเมชันในไฟล์ (เช่น ปู) — ใช้กับ mesh ขาแต่ละชุด (ขาซ้าย+ขวาอยู่ใน mesh เดียวกันได้)
+ * พิกัดภายใน mesh: x = ซ้าย/ขวา, z = ขึ้น  ขายิ่งห่างจากลำตัว (|x| มาก) ยิ่งขยับมาก
+ * ขาแต่ละคู่ยกสลับกัน และฝั่งซ้าย-ขวาสลับจังหวะกัน
+ * @param {{uWalkPhase:{value:number}, uWalkAmp:{value:number}}} walk uniform เฉพาะตัว (Fish.js อัปเดตตามความเร็ว)
+ * @param {{ leg: number, bodyHalfWidth: number, legReach: number, lift: number, swing: number }} opts leg = ลำดับคู่ขา 0.. หรือ -1 = ก้าม
+ */
+export function createCrawlMod(walk, { leg, bodyHalfWidth = 1.5, legReach = 4, lift = 0.8, swing = 0.5 }) {
+  const own = { uLeg: { value: leg }, uCrawlBody: { value: bodyHalfWidth }, uCrawlReach: { value: legReach }, uCrawlLift: { value: lift }, uCrawlSwing: { value: swing } };
+  return {
+    key: 'crawl',
+    apply(shader) {
+      Object.assign(shader.uniforms, own, { uWalkPhase: walk.uWalkPhase, uWalkAmp: walk.uWalkAmp, uCrawlTime: sharedUniforms.uTime });
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nuniform float uWalkPhase;\nuniform float uWalkAmp;\nuniform float uLeg;\nuniform float uCrawlBody;\nuniform float uCrawlReach;\nuniform float uCrawlLift;\nuniform float uCrawlSwing;\nuniform float uCrawlTime;',
+        )
+        .replace(
+          '#include <begin_vertex>',
+          /* glsl */ `#include <begin_vertex>
+          {
+            float side = position.x >= 0.0 ? 1.0 : -1.0;
+            float reach = smoothstep(uCrawlBody, uCrawlReach, abs(position.x));
+            if (uLeg >= 0.0) {
+              float ph = uWalkPhase + uLeg * 1.6 + (side > 0.0 ? 0.0 : 3.14159);
+              transformed.z += max(0.0, sin(ph)) * reach * uCrawlLift * uWalkAmp;
+              transformed.x += cos(ph) * reach * uCrawlSwing * uWalkAmp * side;
+              transformed.z += sin(uCrawlTime * 1.3 + uLeg * 2.1 + side) * 0.05 * reach; // ขยับเบา ๆ แม้ยืนนิ่ง
+            } else {
+              // ก้าม: ยกขึ้นลงช้า ๆ ซ้ายขวาไม่พร้อมกัน
+              float claw = smoothstep(uCrawlBody * 0.4, uCrawlReach * 0.8, abs(position.x) + max(0.0, -position.y - 2.0));
+              transformed.z += sin(uCrawlTime * 1.1 + side * 1.7) * 0.2 * claw;
+            }
+          }`,
+        );
+    },
+  };
+}

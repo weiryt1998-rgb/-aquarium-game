@@ -1,14 +1,14 @@
 import { CONFIG } from '../config.js';
 import { EV } from './EventBus.js';
 import { loadSettings, saveSettings } from './settings.js';
-import { FISH_NAMES, FISH_SPECIES, getSpecies } from '../data/fish.js';
+import { AVAILABLE_SPECIES, FISH_NAMES, getSpecies } from '../data/fish.js';
 import { getDecorItem } from '../data/decor.js';
 import { getTankType } from '../data/tanks.js';
 import { earn, offlineCoins, offlineSeconds } from '../shared/economy.js';
 import { clamp, pick, rand, todayKey, uid } from '../utils/math.js';
 
 /** ของตกแต่งเริ่มต้น: [itemId, u, v, rotY] โดย u,v อยู่ในช่วง -1..1 (สัดส่วนของความกว้าง/ลึกตู้) */
-const STARTER_DECOR = [
+export const STARTER_DECOR = [
   ['plant_vallis', -0.88, -0.65, 0],
   ['plant_vallis', -0.7, -0.82, 1.2],
   ['plant_fern', -0.62, 0.05, 0.5],
@@ -28,15 +28,16 @@ const STARTER_DECOR = [
   ['bubbler', 0.08, -0.78, 0],
 ];
 
-const STARTER_FISH = ['goldfish', 'betta', 'clownfish', 'yellowtang', 'angelfish', 'guppy', 'guppy', 'neon', 'neon', 'neon'];
+const STARTER_FISH = ['betta', 'clownfish', 'angelfish', 'guppy', 'guppy', 'guppy', 'guppy', 'molly_dalmatian', 'molly_dalmatian', 'molly_dalmatian'];
 
-export function createFishRecord(speciesId, { growth = 1, satiety = 75, name } = {}) {
+/** @param {{ gender?: 'm'|'f' }} options gender ไม่ระบุ = สุ่ม */
+export function createFishRecord(speciesId, { growth = 1, satiety = 75, name, gender, genes } = {}) {
   const species = getSpecies(speciesId);
-  return {
+  const record = {
     id: uid('fish'),
     speciesId,
     name: name ?? pick(FISH_NAMES),
-    gender: Math.random() < 0.5 ? 'm' : 'f',
+    gender: gender === 'm' || gender === 'f' ? gender : Math.random() < 0.5 ? 'm' : 'f',
     satiety,
     health: 100,
     growth,
@@ -44,6 +45,8 @@ export function createFishRecord(speciesId, { growth = 1, satiety = 75, name } =
     breedCooldown: rand(30, 90),
     coinTimer: rand(5, species?.economy.coinInterval ?? 30),
   };
+  if (genes) record.genes = genes; // ยีนสีของลูกผสม
+  return record;
 }
 
 export function createDecorRecord(itemId, x, z, rotY = 0) {
@@ -238,7 +241,7 @@ export class GameState {
   }
 
   get collectionCount() {
-    return FISH_SPECIES.filter((s) => this.data.collection[s.id]).length;
+    return AVAILABLE_SPECIES.filter((s) => this.data.collection[s.id]).length;
   }
 
   hasRareFish(minRarity) {

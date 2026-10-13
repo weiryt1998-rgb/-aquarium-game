@@ -1,7 +1,9 @@
 import { Panel } from '../Panel.js';
-import { FISH_SPECIES } from '../../data/fish.js';
+import { AVAILABLE_SPECIES } from '../../data/fish.js';
 import { escapeHtml } from '../../utils/math.js';
 import { genderIcon, meter, priceHtml, stars } from '../helpers.js';
+import { isPregnant } from '../../shared/breeding.js';
+import { describeGenes } from '../../models/molly/genetics.js';
 
 /** ปลาในตู้ + สมุดสะสมสายพันธุ์ */
 export class FishPanel extends Panel {
@@ -24,7 +26,7 @@ export class FishPanel extends Panel {
     this.body.innerHTML = `
       <div class="tabs">
         <button class="tab ${this.tab === 'mine' ? 'active' : ''}" data-action="tab" data-tab="mine">🐟 ปลาในตู้ (${count}/${cap})</button>
-        <button class="tab ${this.tab === 'collection' ? 'active' : ''}" data-action="tab" data-tab="collection">📘 สมุดสะสม (${collected}/${FISH_SPECIES.length})</button>
+        <button class="tab ${this.tab === 'collection' ? 'active' : ''}" data-action="tab" data-tab="collection">📘 สมุดสะสม (${collected}/${AVAILABLE_SPECIES.length})</button>
       </div>
       <div class="tab-content">${this.tab === 'mine' ? this.#mine() : this.#collection()}</div>`;
   }
@@ -41,10 +43,10 @@ export class FishPanel extends Panel {
         const confirming = this.pendingSell === f.id;
         return `
         <div class="fish-row">
-          <img src="${this.game.thumbs.fish(f.species)}" alt="" draggable="false">
+          <img src="${this.game.thumbs.fish(f.species, f.data.genes)}" alt="" draggable="false">
           <div class="info">
-            <b>${escapeHtml(f.data.name)} ${genderIcon(f.data.gender)}</b>
-            <small>${f.species.name} · ${growth}${f.data.health < 30 ? ' · <span class="warn">ป่วย</span>' : ''}</small>
+            <b>${escapeHtml(f.data.name)} ${genderIcon(f.data.gender)}${isPregnant(f.data) ? ' <span title="ตั้งท้อง">🤰</span>' : ''}</b>
+            <small>${f.species.name}${f.data.genes ? ` (${describeGenes(f.data.genes)})` : ''} · ${growth}${f.data.health < 30 ? ' · <span class="warn">ป่วย</span>' : ''}</small>
             <div class="mini-meters">
               <span title="ความอิ่ม">🍽️ ${meter(f.data.satiety, 'satiety')}</span>
               <span title="สุขภาพ">❤️ ${meter(f.data.health, 'health')}</span>
@@ -63,18 +65,18 @@ export class FishPanel extends Panel {
 
   #collection() {
     const state = this.game.state;
-    const cards = FISH_SPECIES.map((s) => {
+    const cards = AVAILABLE_SPECIES.map((s) => {
       const known = state.isDiscovered(s.id);
       return `
-        <div class="col-card ${known ? '' : 'unknown'}" ${known ? '' : `title="ซื้อปลาชนิดนี้เพื่อปลดล็อก"`}>
+        <div class="col-card ${known ? '' : 'unknown'}" ${known ? '' : `title="${s.notForSale ? 'ผสมพันธุ์ปลาสอดต่างสีเพื่อปลดล็อก' : 'ซื้อปลาชนิดนี้เพื่อปลดล็อก'}"`}>
           <img src="${this.game.thumbs.fish(s)}" alt="" draggable="false">
           <b>${known ? s.name : '???'}</b>
           ${stars(s.rarity)}
-          <small>${known ? `${s.sizeCm} ซม.` : priceHtml(s.price)}</small>
+          <small>${known ? `${s.sizeCm} ซม.` : s.notForSale ? 'ได้จากการผสมพันธุ์' : priceHtml(s.price)}</small>
         </div>`;
     }).join('');
     const total = this.game.state.data.tanks.reduce((n, t) => n + t.fish.length, 0);
-    return `<p class="hint">สะสมแล้ว ${state.collectionCount} จาก ${FISH_SPECIES.length} สายพันธุ์ · ปลาทุกตู้รวม ${total} ตัว</p><div class="collection-grid">${cards}</div>`;
+    return `<p class="hint">สะสมแล้ว ${state.collectionCount} จาก ${AVAILABLE_SPECIES.length} สายพันธุ์ · ปลาทุกตู้รวม ${total} ตัว</p><div class="collection-grid">${cards}</div>`;
   }
 
   onAction(action, el) {

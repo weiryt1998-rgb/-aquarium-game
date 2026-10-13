@@ -7,6 +7,8 @@ import { MISSIONS } from '../data/missions.js';
 import { TANK_TYPES, getTankType, tankTier } from '../data/tanks.js';
 import { clamp } from '../utils/math.js';
 import { FEED_WINDOW_MS, LIMITS } from './constants.js';
+import { breedGroupOf, dueAt, isPregnant, planOffspring, sanitizeFetus } from './breeding.js';
+import { sanitizeGenes } from '../models/molly/genetics.js';
 import {
   addItem,
   atDecorLimit,
@@ -51,7 +53,7 @@ import {
  */
 
 /** ข้อมูลปลาตัวใหม่: ค่าที่สุ่มในเครื่อง (id ชื่อ เพศ) รับจากคำสั่ง ส่วนค่าสถานะเริ่มต้นกำหนดฝั่งนี้ */
-function newFishRecord(game, species, input, { growth, satiety }) {
+function newFishRecord(game, species, input, { growth, satiety, genes = null }) {
   const id = needId(input?.id, 'fish.id');
   if (findFishAnywhere(game, id)) fail('invalid', 'duplicate-id');
   if (input.gender !== 'm' && input.gender !== 'f') fail('invalid', 'gender');
@@ -67,11 +69,48 @@ function newFishRecord(game, species, input, { growth, satiety }) {
     age: 0,
     breedCooldown: isNum(input.breedCooldown) ? clamp(input.breedCooldown, 30, 90) : 60,
     coinTimer: isNum(input.coinTimer) ? clamp(input.coinTimer, 0, eco.coinInterval) : eco.coinInterval / 2,
+    ...(genes ? { genes } : {}),
   };
 }
 
 function needFish(tank, fishId) {
   return tank.fish.find((f) => f.id === fishId) ?? fail('not-found', 'fish');
+}
+
+/** พ่อแม่ที่ผสมพันธุ์ได้: ตัวผู้ + ตัวเมีย กลุ่มพันธุ์เดียวกัน (ปลาสอดต่างสีได้) ในตู้เดียวกัน โตเต็มวัย และเว้นระยะตามเวลาจริง */
+function needParents(tank, meta, c, ctx) {
+  const [dadId, momId] = Array.isArray(c.parents) ? c.parents : [];
+  const dad = needFish(tank, dadId);
+  const mom = needFish(tank, momId);
+  const species = getSpecies(dad.speciesId) ?? fail('invalid', 'species');
+  const momSpecies = getSpecies(mom.speciesId) ?? fail('invalid', 'species');
+  if (dad === mom || breedGroupOf(species) !== breedGroupOf(momSpecies) || dad.gender !== 'm' || mom.gender !== 'f') fail('invalid', 'parents');
+  const tm = tankMeta(meta, tank.id);
+  tm.bredAt ??= {};
+  if (!ctx.predict) {
+    const slack = maxGrowthIn(species, simSecondsSince(tank, meta, ctx.now)) + 0.01;
+    if (dad.growth + slack < 1 || mom.growth + slack < 1) fail('invalid', 'not-adult');
+    const minGap = ((CONFIG.breeding.cooldown / CONFIG.timeScale) * 1000) / 2;
+    if (ctx.now - (tm.bredAt[dad.id] ?? 0) < minGap || ctx.now - (tm.bredAt[mom.id] ?? 0) < minGap) fail('cooldown', 'breeding');
+  }
+  return { dad, mom, species, tm };
+}
+
+/**
+ * คำสั่งออกลูกแบบเก่า (ก่อนมีการตั้งท้อง: ส่ง parents มาแล้วเกิดทันที)
+ * เก็บไว้ให้คำสั่งที่ค้างอยู่ในเครื่องจากเวอร์ชันก่อนยังบันทึกได้
+ */
+function legacyBirth(game, meta, tank, c, ctx) {
+  const { dad, mom, species, tm } = needParents(tank, meta, c, ctx);
+  if (tank.fish.length >= getTankType(tank.typeId).capacity) fail('tank-full');
+  const record = newFishRecord(game, species, c.fish, { growth: 0, satiety: 60 });
+  tank.fish.push(record);
+  dad.breedCooldown = mom.breedCooldown = CONFIG.breeding.cooldown;
+  tm.bredAt[dad.id] = tm.bredAt[mom.id] = ctx.now;
+  game.stats.fishBorn += 1;
+  bumpMissions(game, EV.FISH_BORN, 1, ctx.day);
+  ctx.simTouched?.add(tank.id);
+  return null;
 }
 
 function needDecor(tank, decorId) {
@@ -106,6 +145,7 @@ const HANDLERS = {
   buyFish(game, meta, c, ctx) {
     const tank = needTank(game, c.tankId);
     const species = getSpecies(c.speciesId) ?? fail('invalid', 'species');
+    if (species.retired || species.notForSale) fail('invalid', 'not-for-sale'); // เลิกขายแล้ว / ได้จากการผสมพันธุ์เท่านั้น
     const type = getTankType(tank.typeId);
     if (tank.fish.length >= type.capacity) fail('tank-full');
     if (tankTier(type.id) < species.minTank) fail('tank-too-small');
@@ -127,27 +167,39 @@ const HANDLERS = {
     return { refund };
   },
 
-  /** ปลาออกลูก: ตรวจพ่อแม่ ความจุตู้ และระยะห่างการออกลูกด้วยเวลาเซิร์ฟเวอร์ */
+  /**
+   * ผสมพันธุ์: ต้องเป็นตัวผู้กับตัวเมียชนิดเดียวกันในตู้เดียวกัน โตเต็มวัยทั้งคู่ และพ้นระยะพักการผสมพันธุ์
+   * ผล: ตัวเมียตั้งท้อง (pregnantAt) ครบ CONFIG.breeding.gestation แล้วจึงคลอดได้ (คำสั่ง fishBorn)
+   */
+  fishMated(game, meta, c, ctx) {
+    const tank = needTank(game, c.tankId);
+    const { dad, mom, tm } = needParents(tank, meta, c, ctx);
+    if (isPregnant(mom)) fail('invalid', 'already-pregnant');
+    // นับการตั้งท้องจากเวลาที่เกิดในเครื่อง (คำสั่งอาจถูกส่งช้าตอนออฟไลน์) แต่ไม่ล้ำอนาคตและไม่เก่ากว่าหนึ่งสัปดาห์
+    mom.pregnantAt = Math.round(clamp(isNum(c.at) ? c.at : ctx.now, ctx.now - 7 * 86_400_000, ctx.now));
+    // ลูกในท้อง (สายพันธุ์ + ยีนสี) สุ่มในเครื่องที่ผสมพันธุ์ ตรวจรูปแบบที่นี่ (คำสั่งจากเวอร์ชันเก่าที่ไม่มี fetus → สุ่มให้)
+    mom.fetus = sanitizeFetus(c.fetus, mom, dad) ?? planOffspring(mom, dad);
+    dad.breedCooldown = CONFIG.breeding.cooldown;
+    tm.bredAt[dad.id] = tm.bredAt[mom.id] = ctx.now;
+    ctx.simTouched?.add(tank.id);
+  },
+
+  /** ตัวเมียที่ตั้งท้องครบกำหนดคลอดลูก (ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้) */
   fishBorn(game, meta, c, ctx) {
     const tank = needTank(game, c.tankId);
-    const [dadId, momId] = Array.isArray(c.parents) ? c.parents : [];
-    const dad = needFish(tank, dadId);
-    const mom = needFish(tank, momId);
-    if (dad === mom || dad.speciesId !== mom.speciesId || dad.gender !== 'm' || mom.gender !== 'f') fail('invalid', 'parents');
-    const species = getSpecies(dad.speciesId) ?? fail('invalid', 'species');
+    if (!c.motherId) return legacyBirth(game, meta, tank, c, ctx);
+    const mom = needFish(tank, c.motherId);
+    if (!isPregnant(mom)) fail('invalid', 'not-pregnant');
+    // ลูกเป็นไปตามที่กำหนดไว้ตอนตั้งท้อง (ตั้งท้องก่อนมีระบบผสมสี = สายพันธุ์เดียวกับแม่)
+    const species = getSpecies(mom.fetus?.speciesId) ?? getSpecies(mom.speciesId) ?? fail('invalid', 'species');
     if (tank.fish.length >= getTankType(tank.typeId).capacity) fail('tank-full');
-    const tm = tankMeta(meta, tank.id);
-    tm.bredAt ??= {};
-    if (!ctx.predict) {
-      const slack = maxGrowthIn(species, simSecondsSince(tank, meta, ctx.now)) + 0.01;
-      if (dad.growth + slack < 1 || mom.growth + slack < 1) fail('invalid', 'not-adult');
-      const minGap = ((CONFIG.breeding.cooldown / CONFIG.timeScale) * 1000) / 2;
-      if (ctx.now - (tm.bredAt[dad.id] ?? 0) < minGap || ctx.now - (tm.bredAt[mom.id] ?? 0) < minGap) fail('cooldown', 'breeding');
-    }
-    const record = newFishRecord(game, species, c.fish, { growth: 0, satiety: 60 });
+    if (!ctx.predict && ctx.now < dueAt(mom) - 3000) fail('cooldown', 'pregnancy');
+    const record = newFishRecord(game, species, c.fish, { growth: 0, satiety: 60, genes: sanitizeGenes(mom.fetus?.genes) });
     tank.fish.push(record);
-    dad.breedCooldown = mom.breedCooldown = CONFIG.breeding.cooldown;
-    tm.bredAt[dad.id] = tm.bredAt[mom.id] = ctx.now;
+    game.collection[species.id] = true;
+    delete mom.pregnantAt;
+    delete mom.fetus;
+    mom.breedCooldown = CONFIG.breeding.cooldown;
     game.stats.fishBorn += 1;
     bumpMissions(game, EV.FISH_BORN, 1, ctx.day);
     ctx.simTouched?.add(tank.id);
@@ -302,6 +354,15 @@ const HANDLERS = {
     return { reward: item.pearl.reward };
   },
 
+  /** แลกเหรียญเป็นเพชร ตามอัตรา CONFIG.exchange.coinsPerGem (หักเหรียญตามจำนวนจริงบนเซฟ ไม่เชื่อตัวเลขจากเครื่อง) */
+  exchangeGems(game, meta, c) {
+    const gems = needInt(c.gems, 1, LIMITS.maxExchangeGems, 'gems');
+    if (game.gems + gems > LIMITS.maxGems) fail('limit', 'gems');
+    spend(game, { coins: gems * CONFIG.exchange.coinsPerGem });
+    earn(game, { gems });
+    return { gems };
+  },
+
   /** เหรียญช่วงออฟไลน์: เซิร์ฟเวอร์คำนวณเองจากเวลาที่ตู้ถูกจำลองครั้งล่าสุด ไม่รับตัวเลขจากเครื่อง */
   offlineIncome(game, meta, c, ctx) {
     const tank = needTank(game, c.tankId);
@@ -349,12 +410,14 @@ export const URGENT_COMMANDS = new Set([
   'claimMission',
   'claimDaily',
   'offlineIncome',
+  'fishMated',
   'fishBorn',
   'collectPearl',
+  'exchangeGems',
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */
-export const SILENT_REJECTIONS = new Set(['fishDied', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'selectFood', 'offlineIncome']);
+export const SILENT_REJECTIONS = new Set(['fishDied', 'fishMated', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'selectFood', 'offlineIncome']);
 
 export function applyCommand(game, meta, cmd, ctx) {
   const handler = Object.prototype.hasOwnProperty.call(HANDLERS, cmd?.type) ? HANDLERS[cmd.type] : null;

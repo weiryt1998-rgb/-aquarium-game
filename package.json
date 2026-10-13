@@ -2,7 +2,7 @@
   "name": "aquarium-game",
   "private": true,
   "version": "0.1.0",
-  "description": "เกมเลี้ยงปลาในตู้ปลา — Three.js + WebGL + Vite",
+  "description": "MyAquarium11 — เกมเลี้ยงปลาในตู้ปลา (Three.js + WebGL + Vite)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,6 +27,7 @@
     "deploy:blaze": "npm run firebase -- deploy --only firestore,functions --config firebase.blaze.json"
   },
   "dependencies": {
+    "@fontsource/fredoka": "^5.3.0",
     "@fontsource/kanit": "^5.3.0",
     "firebase": "^12.19.0",
     "three": "^0.186.1"

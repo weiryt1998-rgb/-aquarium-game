@@ -28,6 +28,7 @@ export const EV = {
   FISH_ATE: 'fish:ate',
   FISH_BOUGHT: 'fish:bought',
   FISH_BORN: 'fish:born',
+  FISH_PREGNANT: 'fish:pregnant',
   FISH_DIED: 'fish:died',
   FISH_SOLD: 'fish:sold',
   FISH_GREW: 'fish:grew',

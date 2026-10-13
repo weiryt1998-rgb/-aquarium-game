@@ -36,6 +36,8 @@ export const CONFIG = {
   breeding: {
     checkInterval: 10,
     cooldown: 240,
+    /** ระยะตั้งท้อง (วินาที) ตัวเมียคลอดลูกเมื่อครบเวลานี้หลังผสมพันธุ์ — นับตามเวลาจริง ปิดเกมไว้ก็ยังนับ */
+    gestation: 180,
     minHappiness: 70,
     minHealth: 70,
   },
@@ -60,6 +62,8 @@ export const CONFIG = {
   },
 
   dailyReward: { coins: 200, gems: 5 },
+  /** แลกเหรียญเป็นเพชร: ใช้กี่เหรียญต่อ 1 เพชร */
+  exchange: { coinsPerGem: 2000 },
 
   sellRate: 0.4, // ขายคืนได้ 40% ของราคา
   decorSellRate: 0.5,
@@ -68,7 +72,7 @@ export const CONFIG = {
 
 /** คุณภาพกราฟิก */
 export const QUALITY = {
-  high: { pixelRatio: 2, shadows: true, shadowMapSize: 2048, pebbles: 520 },
-  medium: { pixelRatio: 1.5, shadows: true, shadowMapSize: 1024, pebbles: 300 },
-  low: { pixelRatio: 1, shadows: false, shadowMapSize: 512, pebbles: 120 },
+  high: { pixelRatio: 2, shadows: true, shadowMapSize: 2048, pebbles: 520, fishDetail: 'high' },
+  medium: { pixelRatio: 1.5, shadows: true, shadowMapSize: 1024, pebbles: 300, fishDetail: 'medium' },
+  low: { pixelRatio: 1, shadows: false, shadowMapSize: 512, pebbles: 120, fishDetail: 'low' },
 };

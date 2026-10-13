@@ -15,7 +15,7 @@ export class Room {
 
     // โต๊ะ
     const tableW = w + 8;
-    const tableD = d + 4.5;
+    const tableD = d + 9; // ลึกพอให้มุมกล้องของตู้ใหญ่ไม่เห็นขอบโต๊ะด้านหน้า
     const thick = 0.7;
     const wood = getWoodTexture();
     wood.repeat.set(tableW / 9, 1);
@@ -23,7 +23,7 @@ export class Room {
       new THREE.BoxGeometry(tableW, thick, tableD),
       new THREE.MeshStandardMaterial({ map: wood, roughness: 0.5, metalness: 0.05, fog: false }),
     );
-    table.position.set(0, -0.32 - thick / 2, 0.6);
+    table.position.set(0, -0.32 - thick / 2, 2.85);
     table.receiveShadow = true;
     this.group.add(table);
 
