@@ -493,6 +493,15 @@ svg {
   background: linear-gradient(90deg, #6fd36a, #c8f56b);
 }
 
+.bar.energy i {
+  background: linear-gradient(90deg, #3d8bff, #7fd0ff);
+}
+
+/* ความเครียด: ยิ่งเต็มยิ่งแย่ (สีม่วง ไม่ใช้ .low ที่หมายถึงค่าน้อย) */
+.bar.stress i {
+  background: linear-gradient(90deg, #a46bff, #ff7ad0);
+}
+
 .bar.low i,
 .stat .bar.low i {
   background: linear-gradient(90deg, #ff4d5e, #ff8a6b);

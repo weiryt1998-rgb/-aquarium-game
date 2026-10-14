@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Fish } from '../src/entities/Fish.js';
+import { AssetLoader } from '../src/assets/AssetLoader.js';
 import { ModelFactory } from '../src/assets/ModelFactory.js';
+import { FishAI } from '../src/ai/FishAI.ts';
+import { motionOf } from '../src/systems/FishManager.js';
 import { getSpecies } from '../src/data/fish.js';
 import { QUALITY } from '../src/config.js';
 import { applyShaderMods, causticsMod, sharedUniforms } from '../src/render/shaderMods.js';
@@ -90,21 +93,28 @@ const aquarium = {
   },
 };
 
+// Fish AI แบบเดียวกับในเกม (โหมด "ว่ายในตู้") — ไม่มีของตกแต่ง/อาหารในหน้านี้
+const ai = new FishAI({ w: TANK.w, d: TANK.d, waterTop: TANK.waterTop, floorAt: () => 0, obstacles: [], covers: [], food: [], consume() {} });
+
 const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 80);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 // ── สถานะ ──────────────────────────────────────────────────────
-const state = { mode: 'turntable', view: 'side', variant: 'dalmatian', count: 1, detail: 'high', wire: false, paused: false };
-const factory = new ModelFactory({ first: () => null }, { detail: () => state.detail });
+const state = { mode: 'turntable', view: 'side', variant: 'dalmatian', count: 1, detail: 'high', shape: 'file', age: 'adult', wire: false, paused: false };
 const baseSpecies = getSpecies('molly_dalmatian');
-const speciesFor = (variant) => ({ ...baseSpecies, id: `molly_${variant}`, procedural: { type: 'molly', variant } });
+// รูปทรงจากไฟล์ molly.glb (เหมือนในเกม) หรือรูปทรงที่สร้างด้วยโค้ด (ตัวสำรองเมื่อไม่มีไฟล์) — สลับได้เพื่อเทียบกัน
+const assets = new AssetLoader();
+await assets.preload([baseSpecies.procedural.mesh, baseSpecies.procedural.babyMesh]);
+const factory = new ModelFactory({ first: (urls) => (state.shape === 'file' ? assets.first(urls) : null) }, { detail: () => state.detail });
+const speciesFor = (variant) => ({ ...baseSpecies, id: `molly_${variant}`, procedural: { ...baseSpecies.procedural, variant } });
 const game = { models: factory };
 let fishes = [];
 let orbitAngle = 0;
 
 function clearFish() {
   for (const f of fishes) {
+    ai.remove(f.id);
     scene.remove(f.group);
     f.dispose();
   }
@@ -113,7 +123,7 @@ function clearFish() {
 
 /** variant = id ชุดสี หรือ 'cross' = ลูกผสมสุ่มจากพ่อแม่ 2 สี (เหมือนการผสมพันธุ์ในเกม) */
 function makeFish(variant) {
-  const record = { id: `p${Math.random()}`, speciesId: 'molly_dalmatian', name: 'molly', gender: 'f', satiety: 80, health: 100, growth: 1, age: 0, breedCooldown: 99, coinTimer: 99 };
+  const record = { id: `p${Math.random()}`, speciesId: 'molly_dalmatian', name: 'molly', gender: 'f', satiety: 80, health: 100, growth: state.age === 'baby' ? 0.2 : 1, age: 0, breedCooldown: 99, coinTimer: 99 };
   if (variant === 'cross') {
     const a = randomColor();
     let b = randomColor();
@@ -136,6 +146,7 @@ function rebuild() {
       const v = state.variant === 'mixed' ? (i % 2 ? 'cross' : SHOP_COLORS[(i / 2) % SHOP_COLORS.length | 0]) : state.variant;
       const f = makeFish(v);
       aquarium.randomPoint('middle', 0.8, f.position);
+      f.agent = ai.add(f.id, motionOf(f.species), { x: f.position.x, y: f.position.y, z: f.position.z });
     }
   } else {
     const f = makeFish(state.variant === 'mixed' ? 'dalmatian' : state.variant);
@@ -183,6 +194,8 @@ function applyWire() {
 const MODES = { turntable: 'หมุนดูรอบตัว', circle: 'ว่ายวน (ดูการเลี้ยว)', tank: 'ว่ายในตู้ (AI เกม)' };
 const VIEWS = { hero: 'มุมสวย', front: 'หน้า', side: 'ซ้าย', sideR: 'ขวา', top: 'บน', bottom: 'ล่าง' };
 const DETAILS = { high: 'สูง', medium: 'กลาง', low: 'ต่ำ (มือถือ)' };
+const SHAPES = { file: 'รูปทรงจาก molly.glb', code: 'รูปทรงจากโค้ด (สำรอง)' };
+const AGES = { adult: 'ตัวเต็มวัย', baby: 'ลูกปลา (molly_baby.glb)' };
 
 function buttons(el, items, current, onClick) {
   el.replaceChildren(
@@ -210,6 +223,14 @@ function renderButtons() {
   document.getElementById('cross').textContent = state.variant === 'cross' && state.crossInfo ? state.crossInfo : '';
   buttons(document.getElementById('variants'), variants, state.variant, (v) => {
     state.variant = v;
+    rebuild();
+  });
+  buttons(document.getElementById('ages'), AGES, state.age, (a) => {
+    state.age = a;
+    rebuild();
+  });
+  buttons(document.getElementById('shapes'), SHAPES, state.shape, (s) => {
+    state.shape = s;
     rebuild();
   });
   buttons(document.getElementById('details'), DETAILS, state.detail, (d) => {
@@ -264,8 +285,10 @@ function step(dt) {
   ctx.time += dt;
   ctx.fish = fishes;
   if (state.mode === 'tank') {
+    for (const f of fishes) f.syncNeedsToAgent(100);
+    ai.update(dt);
     for (const f of fishes) {
-      f.updateMovement(dt, ctx);
+      f.syncFromAgent(ai.alpha);
       f.updateVisual(dt);
     }
   } else if (state.mode === 'circle') {
@@ -323,4 +346,5 @@ window.preview = {
   get fishes() {
     return fishes;
   },
+  ai,
 };

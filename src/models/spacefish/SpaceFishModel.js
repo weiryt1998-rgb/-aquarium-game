@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { applyShaderMods, causticsMod } from '../../render/shaderMods.js';
 import { clamp, seededRandom, smoothstep } from '../../utils/math.js';
+import { createMeshSpaceFish } from './spaceFishMesh.js';
 import { getSpaceFishGeometry } from './spaceFishShape.js';
 import { createSpaceBodyMod, createSpaceFinMod, createSpaceSwimMod, spaceAttrMod } from './spaceFishShaders.js';
 import { getSpaceFishVariant } from './variants.js';
@@ -16,6 +17,7 @@ import { getSpaceFishVariant } from './variants.js';
  *
  * object หันหัวไป +Z ลำตัวยาว 1 หน่วย (ไม่รวมหาง) จุดศูนย์กลางอยู่กลางลำตัว — ตรงกับปลาตัวอื่นในเกม
  * geometry ใช้ร่วมกันทุกตัว / material แยกต่อตัว แต่ใช้ shader program เดียวกันทุกสี
+ * ถ้าส่งไฟล์ spacefish.glb มาใน options.mesh จะใช้รูปทรงจากไฟล์แทน (ดู spaceFishMesh.js) — แบบนี้เป็นตัวสำรองเมื่อไม่มีไฟล์
  */
 
 /** ความยาวรวมจากปลายจมูกถึงปลายหาง เทียบกับลำตัว 1 หน่วย */
@@ -118,13 +120,21 @@ function createMaterials(variant, detail, energy) {
 }
 
 /**
- * @param {{ variant?: string, detail?: 'high'|'medium'|'low', animated?: boolean }} options
+ * @param {{ variant?: string, detail?: 'high'|'medium'|'low', animated?: boolean, mesh?: object|null }} options mesh = ไฟล์ spacefish.glb ที่โหลดแล้ว
  * @returns {{ object: THREE.Group, swimUniforms: object|null, trail: object|null, variant: object }}
  */
-export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', animated = true } = {}) {
+export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', animated = true, mesh = null } = {}) {
   const V = getSpaceFishVariant(variant);
-  const geo = getSpaceFishGeometry(detail);
   const energy = { value: 0 };
+  const fromFile = mesh && createMeshSpaceFish(mesh, V, { detail, animated, energy });
+  if (fromFile) {
+    const { object, body, fins, swimUniforms, tailZ } = fromFile;
+    object.name = `spacefish-${V.id}`;
+    const trail = animated ? addGlow(object, V, tailZ) : null;
+    object.userData.parts = { body, fins };
+    return { object, swimUniforms, trail, variant: V };
+  }
+  const geo = getSpaceFishGeometry(detail);
   const M = createMaterials(V, detail, energy);
 
   let swimUniforms = null;
@@ -148,19 +158,23 @@ export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', anim
   fins.renderOrder = 1;
   group.add(body, eyes, fins);
 
-  let trail = null;
-  if (animated) {
-    // แสงฟุ้งรอบตัว (เฉพาะในตู้ — รูปตัวอย่างใน UI ไม่ต้องมี)
-    const halo = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: getHaloTexture(), color: new THREE.Color(V.glow), transparent: true, opacity: V.light ? 0.22 : 0.32, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
-    halo.scale.set(2.5, 1.7, 1);
-    halo.position.set(0, -0.02, -0.35);
-    halo.renderOrder = 2;
-    group.add(halo);
-    group.userData.release = () => halo.material.dispose(); // disposeObject ไม่ล้างวัสดุของ Sprite
-    trail = { colors: V.trail.map((c) => new THREE.Color(c)), rate: 16, offset: -1.05 };
-  }
+  const trail = animated ? addGlow(group, V, -1.05) : null;
   group.userData.parts = { body, eyes, fins };
   return { object: group, swimUniforms, trail, variant: V };
+}
+
+/**
+ * แสงฟุ้งรอบตัว (เฉพาะในตู้ — รูปตัวอย่างใน UI ไม่ต้องมี) และค่าประกายดาวที่ปล่อยตามหลัง
+ * @param {number} tailZ ตำแหน่งปลายหางบนแกน z (จุดปล่อยประกายดาว)
+ */
+function addGlow(group, V, tailZ) {
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: getHaloTexture(), color: new THREE.Color(V.glow), transparent: true, opacity: V.light ? 0.22 : 0.32, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  halo.scale.set(2.5, 1.7, 1);
+  halo.position.set(0, -0.02, -0.35);
+  halo.renderOrder = 2;
+  group.add(halo);
+  group.userData.release = () => halo.material.dispose(); // disposeObject ไม่ล้างวัสดุของ Sprite
+  return { colors: V.trail.map((c) => new THREE.Color(c)), rate: 16, offset: tailZ };
 }

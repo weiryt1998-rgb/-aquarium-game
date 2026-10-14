@@ -8,19 +8,25 @@
 | ไฟล์ | ใช้กับ |
 | --- | --- |
 | `fish/goldfish.glb` | ปลาทอง |
-| `fish/guppy.glb` | ปลาหางนกยูง |
+| `fish/guppy.glb` | ปลาหางนกยูง (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
 | `fish/neon.glb` | ปลานีออน |
-| `fish/clownfish.glb` | ปลาการ์ตูน |
-| `fish/betta.glb` | ปลากัด |
-| `fish/angelfish.glb` | ปลาเทวดา |
+| `fish/clownfish.glb` | ปลาการ์ตูน (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
+| `fish/betta.glb` | ปลากัด (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
+| `fish/angelfish.glb` | ปลาเทวดา (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
 | `fish/yellowtang.glb` | ปลาขี้ตังเหลือง |
 | `fish/bluetang.glb` | ปลาขี้ตังน้ำเงิน |
-| `fish/koi.glb` | ปลาคาร์ป |
-| `fish/discus.glb` | ปลาปอมปาดัวร์ |
-| `fish/lionfish.glb` | ปลาสิงโต |
+| `fish/koi.glb` | ปลาคาร์ป (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
+| `fish/discus.glb` | ปลาปอมปาดัวร์ (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
+| `fish/lionfish.glb` | ปลาสิงโต (เลิกขายแล้ว — ยังใช้กับปลาที่ผู้เล่นมีอยู่) |
 | `fish/arowana.glb` | ปลามังกร |
 | `fish/crab.glb` | ปู (เดินบนพื้น — ขาขยับด้วย shader ตาม `model.crawl`) |
 | `fish/eagle_ray.glb` | ปลากระเบนนก |
+| `fish/betta_galaxy.glb` | ปลากัดกาแล็กซี (ท่าว่ายจาก shader — `model.motion`) |
+| `fish/seahorse.glb` | ม้าน้ำภูตแก้ว — เก็บโครงกระดูกไว้ (`--keep-skin`) เกมขยับหาง/หัว/ครีบตาม `model.rig` |
+| `fish/rune_guardian.glb` | ปลาผู้พิทักษ์รูน (ท่าว่ายจาก shader — `model.motion`) |
+| `fish/spacefish.glb` | ปลาอวกาศทุกสี (รูปทรงอย่างเดียว เกมวาดลายกาแล็กซีตามสีเอง) — แปลงด้วย `node scripts/build-spacefish-model.mjs <ไฟล์จาก Meshy>.glb` |
+| `fish/molly_baby.glb` | ลูกปลาสอดทุกสี (ใช้จนโต 60% แล้วเปลี่ยนเป็น molly.glb) — แปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์>.glb public/models/fish/molly_baby.glb` |
+| `fish/molly.glb` | ปลาสอดทุกสีและลูกผสม (รูปทรงอย่างเดียว เกมย้อมสี/ลายใหม่ตามสายพันธุ์และยีน) — **ห้ามวางไฟล์ทับตรง ๆ** ต้องแปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์จาก Meshy>.glb` |
 | `fish/fish.glb` | **ไฟล์กลาง** ใช้กับทุกสายพันธุ์ที่ยังไม่มีไฟล์ของตัวเอง (เกมย้อมสีให้ตามสายพันธุ์) |
 
 ข้อกำหนดของโมเดลปลา
@@ -31,6 +37,9 @@
 - ถ้ามีแอนิเมชัน เกมจะเล่นคลิปที่ชื่อมีคำว่า `swim` ก่อน ถ้าไม่มีก็เล่นคลิปแรก
   ความเร็วแอนิเมชันจะเปลี่ยนตามความเร็วที่ปลาว่าย ถ้าไม่มีแอนิเมชันเลย เกมจะส่ายตัวปลาให้แทน
 - รองรับ skinned mesh และไฟล์ที่บีบอัดด้วย Draco หรือ Meshopt (ตัวถอดรหัสมากับเกมแล้ว ไม่ต้องต่ออินเทอร์เน็ต)
+- ไฟล์จาก Meshy AI (ใหญ่ 15–45 MB มีโครงกระดูกแบบคนที่ไม่มีแอนิเมชัน) ให้แปลงก่อน:
+  `node scripts/build-model.mjs <ไฟล์>.glb public/models/fish/<id>.glb --fish` (ของตกแต่งไม่ต้องใส่ `--fish`)
+  แล้วตั้ง `model.motion: 'fish'` (หรือ `'seahorse'`) ให้ว่ายด้วย shader — ครีบ/ชายผ้าที่แผ่ข้างจนถูกนับเป็นลำตัว ให้เพิ่ม `--flex-open 4`
 
 ## ของตกแต่ง — `decor/`
 
@@ -48,6 +57,8 @@
 | `decor/snail_coral.glb` | หอยสะสมกับปะการัง |
 | `decor/plant_fern.glb` `plant_red.glb` `plant_grass.glb` `plant_sword.glb` `plant_stem.glb` | พืชน้ำแต่ละชนิด (แยกจากไฟล์พืชรวม 1 ไฟล์) |
 | `decor/bubbler.glb` | หัวทรายออกซิเจน |
+| `decor/rock_crystal.glb` | หินคริสตัลอเมทิสต์ |
+| `decor/plant_tree.glb` | ต้นเฟิร์นยักษ์ |
 | `decor/<id>.glb` | ไฟล์ของแต่ละชิ้นตาม `id` ใน `src/data/decor.js` เช่น `plant_fern.glb` (ถ้ามีจะใช้แทนไฟล์กลาง) |
 
 ข้อกำหนดของโมเดลของตกแต่ง

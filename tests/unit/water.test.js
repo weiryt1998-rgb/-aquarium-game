@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../../src/config.js';
-import { WATER_STAGES, dirtyHealthDamage, waterStageIndex } from '../../src/systems/CareSystem.js';
+import { WATER_STAGES, dirtyHealthDamage, waterStageIndex } from '../../src/sim/water.ts';
 
 test('น้ำสกปรก: ไม่ทำร้ายปลาเมื่อสะอาดพอ และยิ่งสกปรกยิ่งแรงขึ้นเรื่อย ๆ', () => {
   for (const c of [100, 70, CONFIG.care.dirtyFrom]) assert.equal(dirtyHealthDamage(c), 0);

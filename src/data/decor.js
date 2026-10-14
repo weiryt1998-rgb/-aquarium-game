@@ -120,6 +120,22 @@ export const DECOR_ITEMS = [
     color: '#8fd65a',
   },
   {
+    id: 'plant_tree',
+    name: 'ต้นเฟิร์นยักษ์',
+    category: 'plant',
+    price: { coins: 150 },
+    // จาก Fish/Meshy_AI_Character_output.glb (แปลงด้วย scripts/build-model.mjs --error 0.01) ต้นสูงใบเฟิร์นเป็นชั้น ๆ บนเนินดิน
+    model: decorModel('plant_tree'),
+    placeholder: 'stem',
+    height: 3.2,
+    radius: 0.85,
+    obstacle: false,
+    happiness: 5,
+    cleanBonus: 0.08,
+    sway: true,
+    color: '#5f9e3a',
+  },
+  {
     id: 'rock_grey',
     name: 'หินแม่น้ำ',
     category: 'rock',
@@ -181,7 +197,8 @@ export const DECOR_ITEMS = [
     name: 'หินคริสตัลอเมทิสต์',
     category: 'rock',
     price: { coins: 240 },
-    model: decorModel('rock_crystal', { fallback: false }),
+    // จาก Fish/Meshy_AI_Prismatic_Crystal_Clu_….glb (แปลงด้วย scripts/build-model.mjs) กองคริสตัลกว้างกว่าสูง จึงกำหนดตามความกว้าง
+    model: decorModel('rock_crystal', { fallback: false, fit: 'width', size: 1.75 }),
     placeholder: 'crystal',
     height: 1.5,
     radius: 0.8,

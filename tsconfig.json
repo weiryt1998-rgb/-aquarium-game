@@ -1,0 +1,23 @@
+{
+  // ตรวจชนิดข้อมูลของ Simulation Engine (src/sim/) และ Fish Life AI (src/ai/) — npm run typecheck
+  // lib ไม่มี "DOM" โดยตั้งใจ: โค้ดจำลอง/AI ต้องไม่แตะ document/window/Three.js (ถ้าเผลอใช้ tsc จะฟ้อง)
+  // Vite และ Node (ตัด type ออกเอง) รันไฟล์ .ts ได้ตรง ๆ จึงไม่ต้อง build แยก
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/sim/**/*.ts", "src/ai/**/*.ts"]
+}

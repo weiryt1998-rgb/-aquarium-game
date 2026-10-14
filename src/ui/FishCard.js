@@ -4,6 +4,11 @@ import { escapeHtml, formatDuration } from '../utils/math.js';
 import { breedGroupOf, dueAt, isPregnant } from '../shared/breeding.js';
 import { describeGenes } from '../models/molly/genetics.js';
 import { getSpecies } from '../data/fish.js';
+import { CONFIG } from '../config.js';
+import { TRAIT_LABEL } from '../ai/personality.ts';
+import { STATE_LABEL } from '../ai/types.ts';
+
+const TRAIT_ICON = { curious: '🔍', shy: '🙈', social: '🤝', calm: '🍃', active: '💨' };
 
 /** การ์ดข้อมูลปลาที่ถูกแตะ: ตั้งชื่อ ดูค่าสถานะ ติดตามด้วยกล้อง */
 export class FishCard {
@@ -42,7 +47,7 @@ export class FishCard {
     this.root.innerHTML = `
       <button class="btn-close" data-action="close" title="ปิด">${ICONS.close}</button>
       <div class="fc-head">
-        <img src="${this.game.thumbs.fish(s, fish.data.genes)}" alt="" draggable="false">
+        <img src="${this.game.thumbs.fish(s, fish.data.genes, fish.data.growth)}" alt="" draggable="false">
         <div>
           <input class="fc-name" value="${escapeHtml(fish.data.name)}" maxlength="16" title="แตะเพื่อเปลี่ยนชื่อ">
           <small>${s.name} ${genderIcon(fish.data.gender)} · <span data-ref="stage"></span></small>
@@ -54,7 +59,10 @@ export class FishCard {
         <div><span>❤️ สุขภาพ</span><div class="bar health"><i data-ref="health"></i></div></div>
         <div><span>😊 ความสุข</span><div class="bar happy"><i data-ref="happy"></i></div></div>
         <div><span>🌱 การเติบโต</span><div class="bar growth"><i data-ref="growth"></i></div></div>
+        <div><span>⚡ พลังงาน</span><div class="bar energy"><i data-ref="energy"></i></div></div>
+        <div><span>😰 ความเครียด</span><div class="bar stress"><i data-ref="stress"></i></div></div>
       </div>
+      <div class="fc-meta" data-ref="mind"></div>
       <div class="fc-meta" data-ref="meta"></div>
       <div class="fc-actions">
         <button class="btn" data-action="follow" data-ref="followBtn">${ICONS.eye}<span>ติดตาม</span></button>
@@ -70,6 +78,20 @@ export class FishCard {
     if (sm.followTarget === this.fish.group) sm.stopFollow();
     else this.game.followFish(this.fish);
     this.update();
+  }
+
+  /** อาการจาก Simulation Engine + สิ่งที่ต้องแก้ + เวลาที่เหลือ (ตอนป่วย/อาการหนัก) */
+  #conditionNote(f) {
+    const sim = this.game.sim;
+    const condition = f.condition;
+    if (condition === 'healthy') return '';
+    if (condition === 'hungry') return '🍽️ หิวแล้ว';
+    if (condition === 'starving') return '⚠️ อดอาหาร สุขภาพเริ่มลด — ให้อาหาร';
+    const causes = sim.causes(f.id);
+    const fixes = [causes.hungry && 'ให้อาหาร', causes.dirtyWater && 'ทำความสะอาดตู้', 'ใช้ยา'].filter(Boolean).join(' / ');
+    const left = sim.secondsLeft(f.id);
+    const time = left != null ? ` (เหลือเวลาราว ${formatDuration(left / CONFIG.timeScale)})` : '';
+    return condition === 'critical' ? `🚨 อาการหนัก${time} — ${fixes}` : `🤒 ป่วย${time} — ${fixes}`;
   }
 
   /** สถานะการขยายพันธุ์: ตั้งท้อง / ขาดคู่ / พร้อมผสมพันธุ์ */
@@ -102,10 +124,19 @@ export class FishCard {
     set('health', d.health);
     set('happy', f.happiness);
     set('growth', d.growth * 100);
+    // ค่าจาก Fish AI (ไม่บันทึกลงเซฟ): พลังงาน ความเครียด บุคลิก และสิ่งที่กำลังทำ
+    const a = f.agent;
+    this.refs.energy.parentElement.parentElement.hidden = !a;
+    this.refs.stress.parentElement.parentElement.hidden = !a;
+    if (a) {
+      set('energy', a.energy);
+      this.refs.stress.style.width = `${Math.max(0, Math.min(100, a.stress))}%`;
+      this.refs.mind.textContent = `${TRAIT_ICON[a.personality.primary]} ${TRAIT_LABEL[a.personality.primary]} · ${STATE_LABEL[a.state]}`;
+    } else this.refs.mind.textContent = '';
     this.refs.stage.textContent = f.isAdult ? 'โตเต็มวัย' : 'ลูกปลา';
     const notes = [`อายุ ${formatDuration(d.age)}`];
-    if (d.satiety < 30) notes.push('หิวแล้ว!');
-    if (d.health < 30) notes.push('ป่วย ลองใช้ยา');
+    const condition = this.#conditionNote(f);
+    if (condition) notes.push(condition);
     notes.push(...this.#breedingNotes(f));
     this.refs.meta.textContent = notes.join(' · ');
     const following = this.game.sceneMgr.followTarget === f.group;

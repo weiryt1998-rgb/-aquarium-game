@@ -19,11 +19,11 @@ const newFish = (id = 'fish_new1') => ({ id, name: 'ใหม่', gender: 'f', 
 test('ซื้อปลา: หักเงินตามราคา เพิ่มปลาด้วยค่าเริ่มต้นฝั่งเซิร์ฟเวอร์ นับภารกิจและสถิติ', () => {
   const game = makeGame({ coins: 1000 });
   const tank = game.tanks[0];
-  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish() });
-  assert.equal(game.coins, 1000 - getSpecies('guppy').price.coins);
+  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish() });
+  assert.equal(game.coins, 1000 - getSpecies('molly_golden').price.coins);
   const f = tank.fish.find((x) => x.id === 'fish_new1');
   assert.deepEqual({ satiety: f.satiety, health: f.health, growth: f.growth, age: f.age }, { satiety: 70, health: 100, growth: 0.6, age: 0 });
-  assert.equal(game.collection.guppy, true);
+  assert.equal(game.collection.molly_golden, true);
   assert.equal(game.stats.fishBought, 1);
   assert.equal(game.missions.progress.d_buy, 1);
 });
@@ -32,16 +32,16 @@ test('ซื้อปลา: เงินไม่พอ/ตู้เต็ม/�
   const game = makeGame({ coins: 10 });
   const tank = game.tanks[0];
   const before = JSON.stringify(game);
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish() }), 'insufficient-funds');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish() }), 'insufficient-funds');
   game.coins = 99999;
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'arowana', fish: newFish() }), 'tank-too-small');
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: { ...newFish(), gender: 'x' } }), 'invalid');
-  rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'guppy', fish: newFish() }), 'not-found');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: { ...newFish(), gender: 'x' } }), 'invalid');
+  rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'molly_golden', fish: newFish() }), 'not-found');
   game.coins = 10;
   assert.equal(JSON.stringify(game), before);
 
   const full = makeGame({ coins: 99999, fish: Array.from({ length: 14 }, () => fishRecord('neon')) });
-  rejects(() => run(full, { type: 'buyFish', tankId: full.tanks[0].id, speciesId: 'guppy', fish: newFish() }), 'tank-full');
+  rejects(() => run(full, { type: 'buyFish', tankId: full.tanks[0].id, speciesId: 'molly_golden', fish: newFish() }), 'tank-full');
   assert.equal(full.coins, 99999);
 });
 
@@ -61,9 +61,9 @@ test('ซื้อปลา: สายพันธุ์ที่เลิกข
 test('ซื้อปลา: id ซ้ำกับปลาที่มีอยู่ถูกปฏิเสธ (กันคำสั่งเดิมสร้างปลาซ้ำ)', () => {
   const game = makeGame({ coins: 1000 });
   const tank = game.tanks[0];
-  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish('fish_dup') });
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'guppy', fish: newFish('fish_dup') }), 'invalid');
-  assert.equal(game.coins, 1000 - 80);
+  run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish('fish_dup') });
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish('fish_dup') }), 'invalid');
+  assert.equal(game.coins, 1000 - getSpecies('molly_golden').price.coins);
 });
 
 test('ขายปลา: คืนเงินตามสูตรเดิม และไม่เชื่อค่าการเติบโตที่เกินจริง', () => {
@@ -355,7 +355,7 @@ test('metadata IDs cannot use inherited object keys', () => {
   for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
     const game = makeGame({ coins: 10000 });
     const before = structuredClone(game);
-    rejects(() => run(game, { type: 'buyFish', tankId: game.tanks[0].id, speciesId: 'guppy', fish: newFish(id) }), 'invalid');
+    rejects(() => run(game, { type: 'buyFish', tankId: game.tanks[0].id, speciesId: 'molly_golden', fish: newFish(id) }), 'invalid');
     rejects(() => run(game, { type: 'buyTank', typeId: 'classic', tankId: id }), 'invalid');
     assert.deepEqual(game, before, 'invalid IDs must not spend currency or create records');
   }

@@ -14,10 +14,17 @@
  * notForSale = ไม่ขายในร้าน ได้จากการผสมพันธุ์เท่านั้น (แต่แสดงในสมุดสะสม)
  * behavior.walker = เดินบนพื้นทราย (เช่น ปู) แทนการว่าย — เดินตะแคง หยุดเป็นพัก ๆ กินเฉพาะอาหารที่จมถึงพื้น
  * model.crawl = ขยับขาด้วย shader สำหรับโมเดลที่ไม่มีแอนิเมชัน (ดู createCrawlMod ใน render/shaderMods.js)
+ * model.motion = ท่าว่ายจาก shader สำหรับโมเดลที่ไม่มีแอนิเมชัน: 'fish' หรือ 'seahorse' (ดู src/render/fishMotion.js)
+ *                ไฟล์ต้องแปลงด้วย scripts/build-model.mjs --fish (ยาว 1 หน่วยตามแกน Z + ค่าความพลิ้วของครีบ)
+ * model.rig    = โมเดลมีกระดูกแต่ไม่มีคลิปแอนิเมชัน → ขยับข้อกระดูกด้วยโค้ด { tail, head, fins } (ดู src/render/boneRig.js)
+ * behavior.upright = ตัวตั้งตรงเสมอ (ม้าน้ำ) ไม่ก้มเงยตามทิศที่ว่ายขึ้นลง
  * retired = เลิกขายแล้ว: ไม่แสดงในร้านค้าและสมุดสะสม ซื้อเพิ่มไม่ได้ แต่ปลาที่มีอยู่แล้วในตู้ยังอยู่ต่อ
  *           (ห้ามลบสายพันธุ์ออกจากรายการนี้ ไม่งั้นปลาเดิมในเซฟของผู้เล่นจะหายตอนโหลด)
  * procedural = ใช้โมเดลละเอียดที่สร้างด้วยโค้ดแทนโมเดลชั่วคราว เช่น { type: 'molly', variant: 'dalmatian' }
  *              (ดู src/models/molly/ — ถ้าใส่ไฟล์ .glb ของสายพันธุ์นั้นภายหลัง ไฟล์จะถูกใช้แทน)
+ *              babyMesh / babyUntil = รูปทรงลูกปลา ใช้ตอนโต (growth) ไม่ถึง babyUntil
+ *              mesh = ไฟล์รูปทรงที่โมเดลจากโค้ดนำไปย้อมสีตามสายพันธุ์เอง (ปลาสอดทุกสีใช้ models/fish/molly.glb,
+ *                     ปลาอวกาศทุกสีใช้ models/fish/spacefish.glb)
  * legendary = ปลาระดับตำนาน: มีป้าย "ตำนาน" ในร้านค้าและสมุดสะสม (ความหายากเต็ม 5 ดาว)
  */
 
@@ -42,7 +49,8 @@ function mollySpecies({ variant, name, nameEn, description, rarity, coins, econo
     length: 0.7,
     minTank: 0,
     model: fishModel(id),
-    procedural: { type: 'molly', variant },
+    // ลูกปลาใช้รูปทรงลูกปลาแรกเกิด (ตัวเรียว ตาโต ครีบใส) จนโตได้ 60% แล้วเปลี่ยนเป็นทรงบอลลูน — ย้อมสีตามสายพันธุ์/ยีนเหมือนกัน
+    procedural: { type: 'molly', variant, mesh: 'models/fish/molly.glb', babyMesh: 'models/fish/molly_baby.glb', babyUntil: 0.6 },
     behavior: { speed: 0.7, zone: 'middle', schooling: true, agility: 2.2, tailBeat: 1.15 },
     care: { hungerRate: 0.13, growTime: 260, breedChance: 0.3 },
     economy,
@@ -76,7 +84,7 @@ function spaceFishSpecies({ variant, name, nameEn, description, gems, colors }) 
     length: 0.8,
     minTank: 0,
     model: fishModel(id),
-    procedural: { type: 'spacefish', variant },
+    procedural: { type: 'spacefish', variant, mesh: 'models/fish/spacefish.glb' },
     behavior: { speed: 0.65, zone: 'middle', schooling: false, agility: 1.5, tailBeat: 0.7 },
     care: { hungerRate: 0.09, growTime: 600, breedChance: 0.04 },
     economy: { coinValue: 55, coinInterval: 120 },
@@ -118,6 +126,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'guppy',
+    retired: true,
     name: 'ปลาหางนกยูง',
     nameEn: 'Guppy',
     description: 'ตัวเล็กสีสันสดใส หางพลิ้วสวย ชอบว่ายใกล้ผิวน้ำ',
@@ -274,6 +283,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'clownfish',
+    retired: true,
     name: 'ปลาการ์ตูน',
     nameEn: 'Clownfish',
     description: 'สีส้มลายขาวสุดน่ารัก ชอบหลบตามของตกแต่ง',
@@ -306,6 +316,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'betta',
+    retired: true,
     name: 'ปลากัด',
     nameEn: 'Betta',
     description: 'ครีบยาวพลิ้วไหวเหมือนผ้าไหม ว่ายช้าแต่สง่างาม',
@@ -328,7 +339,57 @@ export const FISH_SPECIES = [
     },
   },
   {
+    id: 'betta_galaxy',
+    name: 'ปลากัดกาแล็กซี',
+    nameEn: 'Galaxy Betta',
+    description: 'ปลากัดสีน้ำเงินเข้ม ครีบยาวพลิ้วไล่เป็นสีม่วงเหมือนผืนฟ้ายามค่ำ มีจุดเรืองแสงสีชมพูกระจายเหมือนดวงดาว',
+    rarity: 4,
+    price: { gems: 30 },
+    sizeCm: 6,
+    length: 0.8,
+    minTank: 0,
+    // จาก Fish/Meshy_AI_Character_output.glb (แปลงด้วย scripts/build-model.mjs --fish) ไม่มีแอนิเมชัน → ท่าว่ายจาก shader
+    model: fishModel('betta_galaxy', { motion: 'fish' }),
+    behavior: { speed: 0.5, zone: 'top', schooling: false, agility: 1.5, tailBeat: 0.7 },
+    care: { hungerRate: 0.1, growTime: 420, breedChance: 0.08 },
+    economy: { coinValue: 24, coinInterval: 95 },
+    look: {
+      body: { height: 0.34, width: 0.42, peak: 0.36, nose: 0.6, taper: 1.0, peduncle: 0.3 },
+      pattern: { type: 'gradient', colors: ['#1f5cff', '#7b3cff'], belly: '#4fa0ff' },
+      fins: { color: '#2f6bff', tip: '#d85cff', opacity: 0.86, tail: 'veil', tailLength: 1.05, tailHeight: 1.15, dorsal: 0.55, anal: 0.6, pectoral: 0.14, dorsalStart: 0.4, dorsalEnd: 0.85, analStart: 0.3, analEnd: 0.92 },
+      eyeSize: 0.08,
+      shine: 0.6,
+      iridescence: 0.6,
+    },
+  },
+  {
+    id: 'seahorse',
+    name: 'ม้าน้ำภูตแก้ว',
+    nameEn: 'Crystal Sprite Seahorse',
+    description: 'ม้าน้ำลำตัวสีเขียวมุก ครีบระบายโปร่งแสงเหลือบรุ้งเหมือนปีกภูต ว่ายตัวตั้งตรงอย่างช้า ๆ',
+    rarity: 4,
+    price: { gems: 28 },
+    sizeCm: 12,
+    length: 0.5,
+    minTank: 0,
+    // จาก Fish/Meshy_AI_Character_output (2).glb (แปลงด้วย scripts/build-model.mjs --fish --keep-skin) ตัวตั้งตรง หันหน้าไป +Z
+    // โครงกระดูกจาก Meshy วางตามตัวม้าน้ำจริง: สายหาง 12 ข้อ, คอ-หัว 5 ข้อ, ครีบหลังซ้าย/ขวา → ขยับด้วยโค้ด (render/boneRig.js)
+    model: fishModel('seahorse', { motion: 'seahorse', rig: { tail: 'Bone_016', head: 'Bone_025', fins: ['Bone_018', 'Bone_020'] } }),
+    behavior: { speed: 0.3, zone: 'middle', schooling: false, agility: 0.9, tailBeat: 0.5, upright: true },
+    care: { hungerRate: 0.09, growTime: 460, breedChance: 0.06 },
+    economy: { coinValue: 25, coinInterval: 100 },
+    look: {
+      body: { height: 0.9, width: 0.3, peak: 0.4, nose: 0.6, taper: 1.0, peduncle: 0.2 },
+      pattern: { type: 'gradient', colors: ['#7fc9b8', '#d9e8ff'], belly: '#e8f4ee' },
+      fins: { color: '#cfe6ff', tip: '#ffc6e8', opacity: 0.6, tail: 'fan', tailLength: 0.2, tailHeight: 0.2, dorsal: 0.3, anal: 0.05, pectoral: 0.12 },
+      eyeSize: 0.06,
+      shine: 0.55,
+      iridescence: 0.6,
+    },
+  },
+  {
     id: 'angelfish',
+    retired: true,
     name: 'ปลาเทวดา',
     nameEn: 'Angelfish',
     description: 'ลำตัวสูงลายขาวดำ ครีบยาวสง่างาม',
@@ -406,6 +467,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'koi',
+    retired: true,
     name: 'ปลาคาร์ป',
     nameEn: 'Koi',
     description: 'ปลามงคลลายแดงขาว ตัวใหญ่ ต้องการตู้กว้าง',
@@ -428,6 +490,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'discus',
+    retired: true,
     name: 'ปลาปอมปาดัวร์',
     nameEn: 'Discus',
     description: 'ราชาแห่งตู้ปลา ลวดลายคลื่นสีฟ้าบนพื้นแดง',
@@ -450,6 +513,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'lionfish',
+    retired: true,
     name: 'ปลาสิงโต',
     nameEn: 'Lionfish',
     description: 'ครีบแผ่กว้างเหมือนแผงคอสิงโต หายากและสะดุดตา',
@@ -491,6 +555,31 @@ export const FISH_SPECIES = [
       eyeSize: 0.05,
       shine: 0.75,
       metalness: 0.55,
+    },
+  },
+  {
+    id: 'rune_guardian',
+    legendary: true,
+    name: 'ปลาผู้พิทักษ์รูน',
+    nameEn: 'Rune Guardian',
+    description: 'ปลาเงินในตำนาน สวมผ้าคลุมของนักเดินทางและเครื่องรางอัญมณี ลายอักขระรูนเรืองแสงสีฟ้าทั่วตัวและครีบ เชื่อกันว่าคอยปกป้องตู้ที่มันอาศัยอยู่',
+    rarity: 5,
+    price: { gems: 120 },
+    sizeCm: 25,
+    length: 0.95,
+    minTank: 0,
+    // จาก Fish/Meshy_AI_Character_output (1).glb (แปลงด้วย scripts/build-model.mjs --fish --flex-open 4) ไม่มีแอนิเมชัน → ท่าว่ายจาก shader
+    model: fishModel('rune_guardian', { motion: 'fish' }),
+    behavior: { speed: 0.55, zone: 'middle', schooling: false, agility: 1.3, tailBeat: 0.6 },
+    care: { hungerRate: 0.09, growTime: 600, breedChance: 0.03 },
+    economy: { coinValue: 60, coinInterval: 120 },
+    look: {
+      body: { height: 0.4, width: 0.45, peak: 0.4, nose: 0.5, taper: 1.0, peduncle: 0.25 },
+      pattern: { type: 'gradient', colors: ['#c9d3dc', '#3fa8ff'], belly: '#eef2f6' },
+      fins: { color: '#4f8fd8', tip: '#9fe0ff', opacity: 0.8, tail: 'veil', tailLength: 0.7, tailHeight: 0.8, dorsal: 0.5, anal: 0.3, pectoral: 0.3 },
+      eyeSize: 0.07,
+      shine: 0.6,
+      metalness: 0.3,
     },
   },
   spaceFishSpecies({

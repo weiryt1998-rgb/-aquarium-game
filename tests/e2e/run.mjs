@@ -221,9 +221,9 @@ test('3) เครื่อง A เข้าสู่ระบบ ซื้อ�
   await waitSaved(A);
   const before = await cloud();
   assert.equal(await hudCoins(A), before.game.coins);
-  await buyFishUI(A, 'guppy');
-  assert.equal(await coinsOf(A), before.game.coins - 80, 'เงินในเครื่องลดทันที');
-  const after = await waitCloud((d) => d.game.coins === before.game.coins - 80, 'buy saved');
+  await buyFishUI(A, 'molly_golden');
+  assert.equal(await coinsOf(A), before.game.coins - 150, 'เงินในเครื่องลดทันที');
+  const after = await waitCloud((d) => d.game.coins === before.game.coins - 150, 'buy saved');
   await waitSaved(A);
   assert.equal(cloudFishIds(after).length, 4);
   assert.ok(after.revision > before.revision);
@@ -345,9 +345,9 @@ test('9) บันทึกล้มเหลว (เซิร์ฟเวอร
 
 test('10) สองเครื่องซื้อพร้อมกัน → ได้ของครบทั้งคู่ เงินถูกต้อง และทั้งสองเครื่องเห็นตรงกัน', async () => {
   const before = await cloud();
-  await Promise.all([buyFishUI(A, 'guppy'), buyFishUI(B, 'betta')]);
+  await Promise.all([buyFishUI(A, 'molly_golden'), buyFishUI(B, 'crab')]);
   const after = await waitCloud((d) => d.game.tanks[0].fish.length === before.game.tanks[0].fish.length + 2, 'both purchases');
-  assert.equal(after.game.coins, before.game.coins - 80 - 200);
+  assert.equal(after.game.coins, before.game.coins - 150 - 200);
   await waitFor(async () => (await coinsOf(A)) === after.game.coins && (await coinsOf(B)) === after.game.coins, { message: 'both devices converge' });
   await waitFor(async () => JSON.stringify(await fishIdsOf(A)) === JSON.stringify(cloudFishIds(after)) && JSON.stringify(await fishIdsOf(B)) === JSON.stringify(cloudFishIds(after)), { message: 'fish converge' });
 });
@@ -481,6 +481,57 @@ test('15b) ให้อาหาร / ขายปลา / รับรางว
   assert.equal(await coinsOf(A), afterDecor.game.coins);
   await waitFor(async () => (await coinsOf(B)) === afterDecor.game.coins, { message: 'B sees decor purchase' });
   assert.equal(await evalGame(B, () => window.game.state.activeTank.decor.length), placed);
+});
+
+test('15e) Fish AI ในเกมจริง: ปลาว่ายไปกินอาหาร ไม่ออกนอกตู้ ไม่ทะลุของตกแต่ง และแต่ละตัวมีบุคลิกต่างกัน', async () => {
+  // ให้ปลาหิวพอจะสนใจอาหาร แล้วโรยอาหารผ่านปุ่มในเกม
+  await A.page.evaluate(() => {
+    for (const f of window.game.state.activeTank.fish) f.satiety = Math.min(f.satiety, 45);
+  });
+  await A.page.click('.feed-btn');
+  const sprinkled = await evalGame(A, () => window.game.food.pellets.length);
+  assert.ok(sprinkled > 0, 'มีอาหารในตู้');
+  const report = await A.page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const game = window.game;
+        const { w, d, waterTop } = game.aquarium.dims;
+        const problems = [];
+        const states = new Set();
+        let frames = 0;
+        const t0 = performance.now();
+        const check = () => {
+          for (const f of game.fish.list) {
+            if (!f.agent || f.dying) continue;
+            const p = f.position;
+            const m = f.agent.radius * 0.6 + 0.12 - 1e-3;
+            if (Math.abs(p.x) > w / 2 - m + 0.02 || Math.abs(p.z) > d / 2 - m + 0.02) problems.push(`กระจก ${f.data.name}`);
+            if (p.y < game.aquarium.heightAt(p.x, p.z) || p.y > waterTop) problems.push(`พื้น/ผิวน้ำ ${f.data.name}`);
+            for (const o of game.decor.obstacles) {
+              if (p.y <= o.top && Math.hypot(p.x - o.x, p.z - o.z) < o.r * 0.8 + f.agent.radius * 0.5 - 0.05) problems.push(`ของตกแต่ง ${f.data.name}`);
+            }
+            states.add(f.agent.state);
+          }
+          // ตรวจทุกเฟรมจนอาหารหมด (อย่างน้อย 120 เฟรม) หรือครบ 30 วินาที — Chrome แบบไม่มีจอเรนเดอร์ช้า จึงนับตามเวลาจริง
+          if (++frames < 120 || (game.food.pellets.length && performance.now() - t0 < 30000)) requestAnimationFrame(check);
+          else
+            resolve({
+              problems: problems.slice(0, 5),
+              states: [...states],
+              left: game.food.pellets.length,
+              traits: [...new Set(game.fish.list.filter((f) => f.agent).map((f) => f.agent.personality.primary))],
+            });
+        };
+        requestAnimationFrame(check);
+      }),
+  );
+  console.log(`[e2e:${MODE}] Fish AI:`, JSON.stringify(report));
+  await A.page.screenshot({ path: path.join(OUT_DIR, `fish-ai-${MODE}.png`) });
+  assert.deepEqual(report.problems, [], 'ไม่มีปลาออกนอกตู้หรือทะลุของตกแต่ง');
+  assert.ok(report.left < sprinkled, `ปลากินอาหารแล้ว (เหลือ ${report.left}/${sprinkled})`);
+  assert.ok(report.states.length >= 2, 'ปลาทำพฤติกรรมต่างกัน');
+  assert.ok(report.traits.length >= 2, 'ปลามีบุคลิกหลายแบบ');
+  await A.page.evaluate(() => window.game.cloud.flushNow());
 });
 
 test('15c) สำรองและกู้คืนผ่าน UI → ได้ข้อมูลเดิม พร้อมสำรองก่อนกู้และแจ้งอีกเครื่อง', async () => {

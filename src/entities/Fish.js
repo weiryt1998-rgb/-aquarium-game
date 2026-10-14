@@ -1,10 +1,8 @@
 import * as THREE from 'three';
-import { CONFIG } from '../config.js';
 import { forEachMaterial, disposeObject } from '../assets/AssetLoader.js';
-import { angleDelta, clamp, damp, lerp, pick, rand, smoothstep } from '../utils/math.js';
+import { angleDelta, clamp, damp, lerp, pick, rand } from '../utils/math.js';
 import { noise2 } from '../utils/noise.js';
-import { pregnancyProgress } from '../shared/breeding.js';
-import { dirtyHealthDamage } from '../systems/CareSystem.js';
+import { isPregnant, pregnancyProgress } from '../shared/breeding.js';
 
 const _desired = new THREE.Vector3();
 const _steer = new THREE.Vector3();
@@ -17,10 +15,11 @@ const _box = new THREE.Box3();
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 /**
- * ปลา 1 ตัวในฉาก
- * - data    : record ที่บันทึกลงเซฟ (ความอิ่ม สุขภาพ การเติบโต ฯลฯ)
+ * ปลา 1 ตัวในฉาก (ฝั่งแสดงผล)
+ * - data    : record ที่บันทึกลงเซฟ (ความอิ่ม สุขภาพ การเติบโต ฯลฯ) — ค่าเหล่านี้คำนวณใน Simulation Engine (src/sim/)
+ *             คลาสนี้แค่อ่านไปใช้ (ขนาดตัว ว่ายช้าตอนป่วย ท้องป่องตอนตั้งท้อง)
  * - species : ข้อมูลสายพันธุ์จาก data/fish.js
- * การเคลื่อนที่ใช้ steering behaviors (wander + หลบกำแพง/สิ่งกีดขวาง + ว่ายเป็นฝูง + ไล่กินอาหาร)
+ * การเคลื่อนที่ใช้ steering behaviors (wander + หลบกำแพง/สิ่งกีดขวาง + ว่ายเป็นฝูง + ไล่กินอาหาร) คำนวณทุกเฟรม
  */
 export class Fish {
   constructor(game, data, species) {
@@ -29,24 +28,18 @@ export class Fish {
     this.species = species;
     this.id = data.id;
 
-    const visual = game.models.createFish(species, { genes: data.genes });
-    this.visual = visual.object;
-    this.mixer = visual.mixer;
-    this.swim = visual.swimUniforms;
-    this.walk = visual.walkUniforms ?? null;
-    // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ปลาอวกาศ) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
-    this.trail = visual.trail ?? null;
-    this.trailAcc = 0;
-    // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
-    this.footOffset = species.behavior.walker ? -_box.setFromObject(this.visual, true).min.y : 0;
     this.wiggle = new THREE.Group();
-    this.wiggle.add(this.visual);
+    this.#buildVisual();
+    this.trailAcc = 0;
     this.group = new THREE.Group();
     this.group.add(this.wiggle);
     this.group.userData.fish = this;
 
     const angle = Math.random() * Math.PI * 2;
     this.velocity = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle)).multiplyScalar(species.behavior.speed * 0.5);
+    /** Fish AI ของตัวนี้ (FishManager ผูกให้ปลาที่ว่ายน้ำ — ปูยังใช้การเดินแบบเดิม) */
+    this.agent = null;
+    this.heading = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
     this.yaw = angle;
     this.pitch = 0;
     this.roll = 0;
@@ -55,13 +48,38 @@ export class Fish {
     this.seed = Math.random() * 100;
     this.wigglePhase = Math.random() * 10;
     this.eatCooldown = 0;
-    this.happiness = 65;
-    this.moodBoost = 0;
-    this.growthBoost = 1;
-    this.growthBoostTime = 0;
     this.dying = false;
     this.dyingTime = 0;
     this.updateScale();
+  }
+
+  /** สร้างโมเดล 3 มิติตามช่วงวัย (ลูกปลาบางสายพันธุ์มีโมเดลแยก — ดู ModelFactory.isBabyLook) */
+  #buildVisual() {
+    const visual = this.game.models.createFish(this.species, { genes: this.data.genes, growth: this.data.growth });
+    this.visual = visual.object;
+    this.babyLook = !!visual.baby;
+    this.mixer = visual.mixer;
+    this.swim = visual.swimUniforms;
+    this.walk = visual.walkUniforms ?? null;
+    this.rig = visual.rig ?? null; // ขยับโครงกระดูกด้วยโค้ด (ม้าน้ำ)
+    // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ปลาอวกาศ) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
+    this.trail = visual.trail ?? null;
+    // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
+    this.footOffset = this.species.behavior.walker ? -_box.setFromObject(this.visual, true).min.y : 0;
+    this.wiggle.add(this.visual);
+  }
+
+  /**
+   * ลูกปลาโตพ้นช่วงวัยเด็กแล้ว → เปลี่ยนจากโมเดลลูกปลาเป็นตัวเต็มวัย (หรือกลับกันถ้าข้อมูลจากอีกเครื่องต่างไป)
+   * @returns {boolean} เปลี่ยนโมเดลแล้ว
+   */
+  refreshLook() {
+    if (this.dying || this.game.models.isBabyLook(this.species, this.data.growth) === this.babyLook) return false;
+    this.mixer?.stopAllAction();
+    this.wiggle.remove(this.visual);
+    disposeObject(this.visual);
+    this.#buildVisual();
+    return true;
   }
 
   get position() {
@@ -305,6 +323,42 @@ export class Fish {
     if (pos.y > ceiling) out.y -= (pos.y - ceiling) * k;
   }
 
+  // ── Fish AI ─────────────────────────────────────────────────
+
+  /**
+   * รับตำแหน่ง/ทิศจาก Fish AI (src/ai/ — คำนวณเป็นจังหวะคงที่) แล้วเกลี่ยระหว่างจังหวะด้วย alpha ให้ภาพลื่นทุก FPS
+   * @param {number} alpha 0..1 สัดส่วนระหว่างจังหวะก่อนหน้า → ปัจจุบัน
+   */
+  syncFromAgent(alpha) {
+    const a = this.agent;
+    this.group.position.set(
+      a.prevPos.x + (a.pos.x - a.prevPos.x) * alpha,
+      a.prevPos.y + (a.pos.y - a.prevPos.y) * alpha,
+      a.prevPos.z + (a.pos.z - a.prevPos.z) * alpha,
+    );
+    this.heading
+      .set(
+        a.prevHeading.x + (a.heading.x - a.prevHeading.x) * alpha,
+        a.prevHeading.y + (a.heading.y - a.prevHeading.y) * alpha,
+        a.prevHeading.z + (a.heading.z - a.prevHeading.z) * alpha,
+      )
+      .normalize();
+    this.velocity.set(a.vel.x, a.vel.y, a.vel.z);
+  }
+
+  /** ค่าจากระบบนิเวศที่ AI ใช้ตัดสินใจ (ความหิว สุขภาพ อายุ ขนาดตัว ตั้งท้อง ความสะอาดน้ำ) */
+  syncNeedsToAgent(cleanliness) {
+    const n = this.agent.needs;
+    const d = this.data;
+    n.hunger = 100 - d.satiety;
+    n.health = d.health;
+    n.growth = d.growth;
+    n.age = d.age;
+    n.length = this.length;
+    n.pregnant = isPregnant(d);
+    n.cleanliness = cleanliness;
+  }
+
   // ── ท่าทาง/แอนิเมชัน ────────────────────────────────────────
 
   updateVisual(dt) {
@@ -314,13 +368,22 @@ export class Fish {
     }
     const v = this.velocity;
     const speed = v.length();
+    // สัตว์ตัวตั้งตรง (ม้าน้ำ) แทบไม่ก้มเงยตามทิศที่ว่ายขึ้นลง
+    const pitchLimit = this.species.behavior.upright ? 0.08 : 0.5;
     let turnRate = 0;
-    if (speed > 0.02) {
+    if (this.agent) {
+      // ทิศหัวมาจาก Fish AI (จำกัดอัตราเลี้ยวแล้ว) — แค่แปลงเป็นมุมและเอียงตัวตามการเลี้ยว
+      const h = this.heading;
+      turnRate = this.agent.yawRate;
+      this.yaw = Math.atan2(h.x, h.z);
+      this.pitch = clamp(-Math.atan2(h.y, Math.hypot(h.x, h.z)), -pitchLimit, pitchLimit);
+      this.roll = damp(this.roll, clamp(-turnRate * 0.12, -0.45, 0.45), 4, dt);
+    } else if (speed > 0.02) {
       const step = angleDelta(this.yaw, Math.atan2(v.x, v.z)) * (1 - Math.exp(-4 * dt));
       turnRate = step / Math.max(dt, 1e-4);
       this.yaw += step;
       this.roll = damp(this.roll, clamp(-turnRate * 0.12, -0.45, 0.45), 4, dt);
-      this.pitch = damp(this.pitch, clamp(-Math.atan2(v.y, Math.hypot(v.x, v.z)), -0.5, 0.5), 4, dt);
+      this.pitch = damp(this.pitch, clamp(-Math.atan2(v.y, Math.hypot(v.x, v.z)), -pitchLimit, pitchLimit), 4, dt);
     }
     _euler.set(this.pitch, this.yaw, this.roll, 'YXZ');
     this.group.quaternion.setFromEuler(_euler);
@@ -338,6 +401,7 @@ export class Fish {
       if (this.swim.uTurn) this.swim.uTurn.value = damp(this.swim.uTurn.value, clamp(turnRate * 0.35, -1, 1), 5, dt);
       // โมเดลที่เรืองแสงแรงขึ้นตอนว่ายเร็ว (เช่น ปลาอวกาศ)
       if (this.swim.uEnergy) this.swim.uEnergy.value = damp(this.swim.uEnergy.value, clamp((speedRatio - 0.5) * 1.6, 0, 1), 3, dt);
+      this.rig?.update(dt, speedRatio, this.swim.uTurn?.value ?? 0);
     } else if (this.mixer) {
       this.mixer.timeScale = 0.5 + speedRatio;
       this.mixer.update(dt);
@@ -384,57 +448,21 @@ export class Fish {
     }
   }
 
-  // ── ค่าสถานะ ────────────────────────────────────────────────
+  // ── ค่าสถานะ (คำนวณใน Simulation Engine — game.sim) ─────────────
 
-  /**
-   * @param {number} dt เวลาจำลอง (คูณ timeScale แล้ว)
-   * @param {{cleanliness:number, decorScore:number, crowdPenalty:number, coins:any, onGrown:Function}} ctx
-   */
-  updateStats(dt, ctx) {
-    const d = this.data;
-    const care = this.species.care;
-    const C = CONFIG.care;
-    d.age += dt;
-    d.satiety = Math.max(0, d.satiety - care.hungerRate * dt);
-    if (d.satiety < 15) d.health -= C.starvingDamage * dt * (1.3 - d.satiety / 15);
-    // น้ำขุ่น/เน่าทำร้ายปลา (ยิ่งสกปรกยิ่งแรง) และปลาฟื้นตัวไม่ได้จนกว่าน้ำจะสะอาดพอ
-    d.health -= dirtyHealthDamage(ctx.cleanliness) * dt;
-    if (d.satiety > 40 && ctx.cleanliness > C.regenAbove) d.health += C.regen * dt;
-    d.health = clamp(d.health, 0, 100);
-
-    this.growthBoostTime -= dt;
-    if (this.growthBoostTime <= 0) this.growthBoost = 1;
-    if (d.growth < 1 && d.satiety > 30 && d.health > 40) {
-      d.growth = Math.min(1, d.growth + (dt / care.growTime) * this.growthBoost);
-      this.updateScale();
-      if (d.growth >= 1) ctx.onGrown(this);
-    }
-    d.breedCooldown = Math.max(0, d.breedCooldown - dt);
-
-    this.moodBoost = Math.max(0, this.moodBoost - dt * 0.2);
-    const fed = smoothstep(10, 70, d.satiety);
-    const target = 100 * (0.35 * fed + (0.25 * ctx.cleanliness) / 100 + (0.2 * d.health) / 100 + 0.2 * ctx.decorScore) - ctx.crowdPenalty + this.moodBoost;
-    this.happiness = damp(this.happiness, clamp(target, 0, 100), 0.6, dt);
-
-    // ปลาที่มีความสุขจะผลิตเหรียญ (สุขมากกว่า 80% ได้เหรียญเพิ่ม 50%)
-    if (this.happiness >= 40) {
-      d.coinTimer -= dt;
-      if (d.coinTimer <= 0) {
-        const eco = this.species.economy;
-        d.coinTimer = eco.coinInterval * rand(0.85, 1.2);
-        const value = Math.max(1, Math.round(eco.coinValue * (this.happiness > 80 ? 1.5 : 1) * (this.isAdult ? 1 : 0.5)));
-        ctx.coins.spawn(this.group.position, value);
-      }
-    }
+  /** ความสุข 0..100 (ไม่บันทึกลงเซฟ engine คำนวณใหม่จากความอิ่ม น้ำ สุขภาพ ของตกแต่ง) */
+  get happiness() {
+    return this.game.sim?.happiness(this.id) ?? 65;
   }
 
+  /** อาการตอนนี้: healthy / hungry / starving / sick / critical */
+  get condition() {
+    return this.game.sim?.condition(this.id) ?? 'healthy';
+  }
+
+  /** กินอาหาร 1 เม็ด — ผลต่อค่าสถานะคิดใน engine */
   eat(food) {
-    const d = this.data;
-    d.satiety = Math.min(100, d.satiety + food.nutrition);
-    d.health = Math.min(100, d.health + food.health);
-    this.moodBoost = Math.min(30, this.moodBoost + food.happiness);
-    if (food.growth > this.growthBoost) this.growthBoost = food.growth;
-    this.growthBoostTime = 60;
+    this.game.sim?.feed(this.id, food);
   }
 
   /** ระยะตามแนวรังสีถ้าคลิกโดนปลา (ใช้ทรงกลมครอบ เพราะปลาตัวเล็กคลิกยาก) */

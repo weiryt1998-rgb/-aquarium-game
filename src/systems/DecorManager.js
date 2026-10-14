@@ -13,6 +13,8 @@ export class DecorManager {
     this.group = new THREE.Group();
     game.sceneMgr.scene.add(this.group);
     this.obstacles = [];
+    /** ที่หลบซ่อนของปลา (Fish AI): พุ่มพืชน้ำว่ายเข้าไปได้ ของตกแต่งอื่นหลบข้าง ๆ */
+    this.covers = [];
     this.happinessScore = 0;
     this.cleanBonus = 0;
   }
@@ -116,6 +118,9 @@ export class DecorManager {
   /** คำนวณค่าที่ขึ้นกับของตกแต่งใหม่ (เรียกหลังเพิ่ม/ลบ/ย้าย) */
   refresh() {
     this.obstacles = this.items.map((d) => d.obstacle).filter(Boolean);
+    this.covers = this.items
+      .filter((d) => d.item.category === 'plant' || d.item.obstacle)
+      .map((d) => ({ x: d.data.x, z: d.data.z, r: d.item.radius, top: d.group.position.y + (d.item.obstacleHeight ?? d.item.height), plant: d.item.category === 'plant' }));
     const happiness = this.items.reduce((s, d) => s + (d.item.happiness ?? 0), 0);
     this.happinessScore = Math.min(1, happiness / 30);
     this.cleanBonus = Math.min(0.5, this.items.reduce((s, d) => s + (d.item.cleanBonus ?? 0), 0));
@@ -147,5 +152,6 @@ export class DecorManager {
     }
     this.items = [];
     this.obstacles = [];
+    this.covers = [];
   }
 }

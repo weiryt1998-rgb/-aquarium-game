@@ -115,7 +115,7 @@ export function createSpaceSwimMod(uniforms) {
 }
 
 /** สัญญาณรบกวนและดวงดาว ใช้ร่วมกันทั้งลำตัวและครีบ  octaves = ความละเอียดของลายเนบิวลา (คุณภาพต่ำใช้น้อยลง) */
-const noise = (octaves) => /* glsl */ `
+export const noise = (octaves) => /* glsl */ `
 uniform float uSFTime;
 uniform float uEnergy;
 uniform vec3 uDeep;
@@ -173,7 +173,7 @@ vec3 sfNebula(vec3 p) {
 }
 `;
 
-function colorUniforms(variant) {
+export function colorUniforms(variant) {
   const c = (hex) => ({ value: new THREE.Color(hex) });
   return {
     uDeep: c(variant.deep),

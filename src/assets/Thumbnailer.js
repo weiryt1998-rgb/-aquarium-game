@@ -34,9 +34,11 @@ export class Thumbnailer {
   }
 
   /** @param {object} [genes] ยีนสีของปลาลูกผสม — ได้รูปลายเฉพาะตัว */
-  fish(species, genes = null) {
-    const key = genes ? `fish:${species.id}:${genesKey(genes)}` : `fish:${species.id}`;
-    return this.#render(key, () => this.factory.createFish(species, { animated: false, genes }).object, new THREE.Vector3(-1, 0.22, 0.45));
+  /** @param {number} [growth] ช่วงวัยของปลาตัวนั้น — ลูกปลาที่มีโมเดลแยกได้รูปลูกปลา (ไม่ระบุ = ตัวเต็มวัย) */
+  fish(species, genes = null, growth = 1) {
+    const baby = this.factory.isBabyLook(species, growth);
+    const key = `fish:${species.id}${genes ? `:${genesKey(genes)}` : ''}${baby ? ':baby' : ''}`;
+    return this.#render(key, () => this.factory.createFish(species, { animated: false, genes, growth: baby ? 0 : 1 }).object, new THREE.Vector3(-1, 0.22, 0.45));
   }
 
   decor(item) {

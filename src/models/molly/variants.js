@@ -5,7 +5,8 @@
  * body.base/back/belly : สีพื้นลำตัว สีหลัง สีท้อง (ไล่สีแบบ countershading)
  * scales               : ความเข้มของขอบเกล็ดบน texture สี (contrast) และความนูนบน normal map (relief)
  * spots                : ลายจุด/ด่าง — object ชั้นเดียว หรือ array หลายชั้น (วาดทับตามลำดับ) ไม่มี = ไม่มีจุด
- *                        { color, count, minSize, maxSize, sizePow, back, clusters, blur, matte, finCount, finSize }
+ *                        { color, count, minSize, maxSize, sizePow, back, clusters, blur, matte, finCount, finSize, patches }
+ *                        patches = ใช้ลายด่างสีส้มที่วาดมากับเท็กซ์เจอร์ของ molly.glb แทนการสุ่มจุด (ดู mollyMesh.js)
  * head                 : สีบริเวณหัว { color, start, end, back } (t = 0 ปลายจมูก → 1 โคนหาง)
  * fins                 : สีครีบ ก้านครีบ ปลายครีบ และความทึบ
  * material             : ค่า PBR — clearcoat = ความมันวาวเหมือนเคลือบน้ำ, iridescence = ประกายมุก
@@ -82,7 +83,7 @@ export const MOLLY_VARIANTS = {
     body: { base: '#f4f1ea', back: '#e6e3dc', belly: '#fbf9f4', gill: '#f2d8cf' },
     scales: { contrast: 0.14, relief: 0.85, rim: '#ffffff' },
     spots: [
-      { color: '#f2882a', count: 54, minSize: 0.03, maxSize: 0.09, sizePow: 1.2, back: 0.25, blur: 1.2, matte: 0.35, finCount: 10, finSize: 0.07 },
+      { color: '#f2882a', count: 54, minSize: 0.03, maxSize: 0.09, sizePow: 1.2, back: 0.25, blur: 1.2, matte: 0.35, finCount: 10, finSize: 0.07, patches: true },
       { color: '#0c0c10', count: 120, minSize: 0.006, maxSize: 0.04, back: 0.3, finCount: 40, finSize: 0.045 },
     ],
     fins: { base: '#e8ecef', tip: '#6e9fd2', ray: '#bfc7cf', opacity: 0.72 },

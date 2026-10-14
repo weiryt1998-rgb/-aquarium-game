@@ -15,6 +15,8 @@ import { FishManager, fishIdentity } from '../systems/FishManager.js';
 import { FoodSystem } from '../systems/FoodSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
 import { CareSystem } from '../systems/CareSystem.js';
+import { AlertSystem } from '../systems/AlertSystem.js';
+import { TankSimulation } from '../sim/TankSimulation.ts';
 import { DecorManager } from '../systems/DecorManager.js';
 import { MissionSystem } from '../systems/MissionSystem.js';
 import { PlacementController } from '../systems/PlacementController.js';
@@ -30,6 +32,11 @@ import { pearlReadyAt } from '../shared/economy.js';
 
 /**
  * ตัวควบคุมหลักของเกม — สร้างทุกระบบ, game loop และคำสั่งระดับเกม (ซื้อ ขาย ให้อาหาร ฯลฯ)
+ *
+ * แบ่งเป็น 2 ชั้น:
+ *  - Simulation Engine (this.sim, src/sim/ — TypeScript ล้วน ไม่มี Three.js) คำนวณระบบนิเวศเป็นจังหวะคงที่
+ *    (CONFIG.sim.tickSeconds) แล้วส่งเหตุการณ์ออกมา — ส่วนใหญ่ของเฟรมไม่ต้องคำนวณอะไรเลย
+ *  - ฝั่งแสดงผล (Three.js + UI) ทำงานทุกเฟรม: ว่าย ท่าทาง เอฟเฟกต์ และแสดงผลเหตุการณ์จาก engine
  * เปิด DevTools แล้วพิมพ์ `game` เพื่อสำรวจ/ดีบักได้
  *
  * save  = { data, isNewGame } ข้อมูลเกมที่โหลดจากเซฟกลางแล้ว (เกมเริ่มหลังโหลดสำเร็จเท่านั้น)
@@ -62,6 +69,9 @@ export class Game {
     this.decor = new DecorManager(this);
     this.fish = new FishManager(this);
     this.care = new CareSystem(this);
+    this.alerts = new AlertSystem(this);
+    /** Simulation Engine ของตู้ที่แสดงอยู่ (สร้างใหม่ทุกครั้งที่โหลด/ย้ายตู้) */
+    this.sim = null;
     this.missions = new MissionSystem(this);
     this.placement = new PlacementController(this);
     this.ui = new UI(this, uiRoot);
@@ -122,10 +132,11 @@ export class Game {
     this.food.clear();
     this.coins.clear();
     this.decor.load(tank);
+    this.sim = new TankSimulation(tank, this.#environment());
     this.fish.load(tank);
     this.care.lastQuality = -1;
-    this.care.stage = null; // ย้ายตู้ไม่ต้องเตือนสภาพน้ำซ้ำ
-    this.care.update(0);
+    this.care.syncVisuals();
+    this.alerts.reset();
     this.ui.refreshTank();
   }
 
@@ -255,7 +266,10 @@ export class Game {
       return false;
     }
     const { w, d } = this.aquarium.dims;
-    this.food.sprinkle(food, x ?? rand(-w * 0.32, w * 0.32), z ?? rand(-d * 0.25, d * 0.2));
+    const fx = x ?? rand(-w * 0.32, w * 0.32);
+    const fz = z ?? rand(-d * 0.25, d * 0.2);
+    this.food.sprinkle(food, fx, fz);
+    this.fish.notifyFood(fx, fz);
     this.sound.play('splash');
     state.data.stats.feeds++;
     state.record({ type: 'feed', tankId: state.activeTank.id, foodId: food.id });
@@ -286,7 +300,7 @@ export class Game {
 
   useMedicine() {
     if (!this.state.useItem('medicine')) return this.#denied('ไม่มียาแล้ว');
-    for (const f of this.fish.alive) f.data.health = Math.min(100, f.data.health + CONFIG.care.medicineHeal);
+    this.sim.heal(CONFIG.care.medicineHeal);
     this.state.record({ type: 'useMedicine', tankId: this.state.activeTank.id });
     this.sound.play('clean');
     this.ui.toast('💊 ให้ยาแล้ว ปลาทุกตัวแข็งแรงขึ้น', 'success');
@@ -394,14 +408,14 @@ export class Game {
   update(dt) {
     this.time += dt;
     sharedUniforms.uTime.value = this.time;
-    const simDt = dt * CONFIG.timeScale;
+    this.#simulate(dt);
 
     this.sceneMgr.update(dt);
-    this.fish.update(dt, simDt, this.time);
+    this.fish.update(dt, this.time);
     this.food.update(dt, this.time);
     this.coins.update(dt, this.time);
     this.decor.update(dt, this.time);
-    this.care.update(simDt);
+    this.alerts.update(dt);
     this.bubbles.update(dt, this.time);
     this.sparkles.update(dt, this.time);
     this.aquarium.update(dt, this.time, this.sceneMgr.camera);
@@ -414,5 +428,24 @@ export class Game {
       this.saveTimer = CONFIG.autoSaveInterval;
       this.state.save();
     }
+  }
+
+  /** ให้ Simulation Engine เดินเวลา — คำนวณเฉพาะเมื่อครบจังหวะ แล้วนำเหตุการณ์ไปแสดงผล */
+  #simulate(dt) {
+    const sim = this.sim;
+    sim.tank = this.state.activeTank; // เซฟกลางอาจแทนที่ record ของตู้ได้ทุกเมื่อ
+    sim.env = this.#environment();
+    if (sim.advance(dt) === 0) return;
+    for (const e of sim.drainEvents()) {
+      this.fish.handleSimEvent(e);
+      this.alerts.handle(e);
+    }
+    this.fish.syncFromSim();
+    this.care.syncVisuals();
+  }
+
+  /** สภาพแวดล้อมของตู้จากฝั่งเกม (ของตกแต่ง ขนาดตู้) ให้ engine ใช้คำนวณ */
+  #environment() {
+    return { decorHappiness: this.decor.happinessScore, cleanBonus: this.decor.cleanBonus, capacity: this.fish.capacity };
   }
 }

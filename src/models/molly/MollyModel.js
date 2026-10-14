@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { applyShaderMods, causticsMod } from '../../render/shaderMods.js';
+import { createMeshMolly } from './mollyMesh.js';
 import { getMollyGeometry, MOLLY_DETAIL } from './mollyShape.js';
 import { acquireMollyTextures } from './mollyTextures.js';
 import { createMollySwimMod, createMollySwimUniforms } from './mollySwim.js';
@@ -7,6 +8,7 @@ import { getMollyVariant } from './variants.js';
 
 /**
  * โมเดลปลา Balloon Molly แบบ 3 มิติ สร้างด้วยโค้ดทั้งหมด (geometry + texture + shader)
+ * ถ้าส่งไฟล์ molly.glb มาใน options.mesh จะใช้รูปทรงจากไฟล์แทน (ดู mollyMesh.js) — แบบนี้เป็นตัวสำรองเมื่อไม่มีไฟล์
  *
  * ใช้งาน:
  *   const { object, swimUniforms } = createMolly({ variant: 'dalmatian' });
@@ -70,14 +72,17 @@ function createMaterials(variant, detail, textures) {
 }
 
 /**
- * @param {{ variant?: string|object, detail?: 'high'|'medium'|'low', animated?: boolean, caustics?: boolean }} options
+ * @param {{ variant?: string|object, detail?: 'high'|'medium'|'low', animated?: boolean, caustics?: boolean, mesh?: object|null }} options
  *  variant = id ใน variants.js หรือชุดสีที่ได้จาก genesToVariant (ลูกผสม)
+ *  mesh    = ไฟล์ molly.glb ที่โหลดแล้ว → ใช้รูปทรงจากไฟล์และย้อมสีตามชุดสี (mollyMesh.js) ไม่มี = สร้างรูปทรงด้วยโค้ด
  * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object }}
  *  เมื่อเลิกใช้ ให้เรียก object.userData.release() (disposeObject ใน AssetLoader เรียกให้อัตโนมัติ)
  */
-export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true } = {}) {
+export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true, mesh = null } = {}) {
   const V = typeof variant === 'object' && variant ? variant : getMollyVariant(variant);
   const D = MOLLY_DETAIL[detail] ? detail : 'high';
+  const fromFile = mesh && createMeshMolly(mesh, V, { detail: D, animated, caustics });
+  if (fromFile) return fromFile;
   const geo = getMollyGeometry(D);
   // ลูกผสมทุกตัวมีลายเฉพาะตัว → ใช้ texture เล็กลงเพื่อประหยัดหน่วยความจำ
   const size = V.hybrid ? Math.min(MOLLY_DETAIL[D].texture, D === 'low' ? 256 : 512) : MOLLY_DETAIL[D].texture;

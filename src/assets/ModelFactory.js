@@ -5,6 +5,8 @@ import { buildFishPlaceholder, createFishMaterials } from '../placeholders/fishP
 import { buildDecorPlaceholder } from '../placeholders/decorPlaceholder.js';
 import { forEachMaterial, normalizeModel } from './AssetLoader.js';
 import { applyShaderMods, causticsMod, createCrawlMod, createSwayMod, createSwimMod } from '../render/shaderMods.js';
+import { createBoneRig } from '../render/boneRig.js';
+import { createFishMotionMod, createFishMotionUniforms, prepareFlexAttribute } from '../render/fishMotion.js';
 import { createMolly } from '../models/molly/MollyModel.js';
 import { genesToVariant } from '../models/molly/genetics.js';
 import { createSpaceFish } from '../models/spacefish/SpaceFishModel.js';
@@ -14,8 +16,8 @@ export const FISH_MODEL_LENGTH = 1.35;
 
 /** โมเดลปลาที่สร้างด้วยโค้ดแบบละเอียด (species.procedural.type) — ใช้แทนโมเดลชั่วคราว ถ้าไม่มีไฟล์ .glb ของสายพันธุ์นั้น */
 const PROCEDURAL_FISH = {
-  molly: (species, { animated, detail, genes }) => createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated }),
-  spacefish: (species, { animated, detail }) => createSpaceFish({ variant: species.procedural.variant, detail, animated }),
+  molly: (species, { animated, detail, genes, mesh }) => createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh }),
+  spacefish: (species, { animated, detail, mesh }) => createSpaceFish({ variant: species.procedural.variant, detail, animated, mesh }),
 };
 
 /**
@@ -42,16 +44,32 @@ export class ModelFactory {
   }
 
   allModelUrls() {
-    return [...FISH_SPECIES.flatMap((s) => this.fishModelUrls(s)), ...DECOR_ITEMS.flatMap((d) => this.decorModelUrls(d))];
+    return [
+      ...FISH_SPECIES.flatMap((s) => [...this.fishModelUrls(s), s.procedural?.mesh, s.procedural?.babyMesh].filter(Boolean)),
+      ...DECOR_ITEMS.flatMap((d) => this.decorModelUrls(d)),
+    ];
   }
 
   /**
-   * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, trail?: object|null, isPlaceholder: boolean }}
+   * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, trail?: object|null, rig?: object|null, isPlaceholder: boolean }}
+   *  rig = ตัวขยับโครงกระดูกด้วยโค้ด (render/boneRig.js) เรียก rig.update ทุกเฟรม
    *  object หันหัวไป +Z จุดศูนย์กลางที่กลางลำตัว ลำตัวยาวประมาณ 1 หน่วย
    *  trail = อนุภาคแสงที่ปลาปล่อยตามหลังขณะว่าย (ปลาอวกาศ) ดู world/Sparkles.js
    */
-  /** @param {{ animated?: boolean, genes?: object }} options genes = ยีนสีของปลาลูกผสม (ดู models/molly/genetics.js) */
-  createFish(species, { animated = true, genes = null } = {}) {
+  /**
+   * ใช้โมเดลลูกปลาไหม: สายพันธุ์ที่มี procedural.babyMesh และโตไม่ถึง procedural.babyUntil (ต้องโหลดไฟล์ได้ด้วย)
+   * @param {number} [growth] 0 แรกเกิด → 1 โตเต็มวัย (ไม่ระบุ = ตัวเต็มวัย เช่น รูปในร้านค้า)
+   */
+  isBabyLook(species, growth = 1) {
+    const p = species.procedural;
+    return !!p?.babyMesh && growth < (p.babyUntil ?? 0.6) && !!this.assets.first([p.babyMesh]);
+  }
+
+  /**
+   * @param {{ animated?: boolean, genes?: object, growth?: number }} options genes = ยีนสีของปลาลูกผสม (ดู models/molly/genetics.js)
+   *  growth = ช่วงวัย (ลูกปลาบางสายพันธุ์ใช้โมเดลแยก — ผลลัพธ์มี baby: true)
+   */
+  createFish(species, { animated = true, genes = null, growth = 1 } = {}) {
     const found = this.assets.first(this.fishModelUrls(species));
     if (found) {
       const { scene, animations } = this.assets.instantiate(found.gltf);
@@ -64,6 +82,8 @@ export class ModelFactory {
         mixer.clipAction(clip).play();
         mixer.update(0);
       }
+      // มีกระดูกแต่ไม่มีคลิปแอนิเมชัน → ขยับข้อกระดูกด้วยโค้ด (ต้องสร้างก่อนย่อ/หมุนโมเดล ใช้ทิศของตัวโมเดลเป็นแกนอ้างอิง)
+      const rig = animated && !mixer && species.model?.rig ? createBoneRig(scene, species.model.rig) : null;
       const { root } = normalizeModel(scene, {
         rotation: species.model?.rotation,
         fit: 'length',
@@ -84,13 +104,25 @@ export class ModelFactory {
       });
       if (animated) forEachMaterial(root, (m) => m.isMeshStandardMaterial && applyShaderMods(m, [causticsMod]));
       const walkUniforms = animated && species.model?.crawl ? this.#applyCrawl(root, species.model.crawl) : null;
-      return { object: root, mixer: animated ? mixer : null, swimUniforms: null, walkUniforms, isPlaceholder: false };
+      // ไม่มีแอนิเมชันในไฟล์ แต่ไฟล์ถูกแปลงด้วย build-model.mjs --fish แล้ว → ท่าว่ายจาก shader (render/fishMotion.js)
+      let swimUniforms = null;
+      if (animated && !mixer && species.model?.motion) {
+        prepareFlexAttribute(root);
+        swimUniforms = createFishMotionUniforms(root);
+        forEachMaterial(root, (m) => applyShaderMods(m, [createFishMotionMod(species.model.motion, swimUniforms, { rigged: !!rig })]));
+      }
+      return { object: root, mixer: animated ? mixer : null, swimUniforms, walkUniforms, rig, isPlaceholder: false };
     }
 
     const procedural = PROCEDURAL_FISH[species.procedural?.type];
     if (procedural) {
-      const { object, swimUniforms, trail = null } = procedural(species, { animated, detail: this.detail(), genes });
-      return { object, mixer: null, swimUniforms, trail, isPlaceholder: false };
+      // procedural.mesh = ไฟล์รูปทรงที่โมเดลจากโค้ดนำไปย้อมสีเอง (เช่น molly.glb ใช้กับปลาสอดทุกสี)
+      // procedural.babyMesh = รูปทรงลูกปลา (ย้อมสีตามสายพันธุ์/ยีนแบบเดียวกัน) ใช้จนโตถึง babyUntil
+      const baby = this.isBabyLook(species, growth);
+      const url = baby ? species.procedural.babyMesh : species.procedural.mesh;
+      const mesh = url ? (this.assets.first([url])?.gltf ?? null) : null;
+      const { object, swimUniforms, trail = null } = procedural(species, { animated, detail: this.detail(), genes, mesh });
+      return { object, mixer: null, swimUniforms, trail, baby, isPlaceholder: false };
     }
 
     const materials = createFishMaterials(species.look);

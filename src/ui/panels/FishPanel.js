@@ -43,7 +43,7 @@ export class FishPanel extends Panel {
         const confirming = this.pendingSell === f.id;
         return `
         <div class="fish-row">
-          <img src="${this.game.thumbs.fish(f.species, f.data.genes)}" alt="" draggable="false">
+          <img src="${this.game.thumbs.fish(f.species, f.data.genes, f.data.growth)}" alt="" draggable="false">
           <div class="info">
             <b>${escapeHtml(f.data.name)} ${genderIcon(f.data.gender)}${isPregnant(f.data) ? ' <span title="ตั้งท้อง">🤰</span>' : ''}</b>
             <small>${f.species.name}${f.data.genes ? ` (${describeGenes(f.data.genes)})` : ''} · ${growth}${f.data.health < 30 ? ' · <span class="warn">ป่วย</span>' : ''}</small>

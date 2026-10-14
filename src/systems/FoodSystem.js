@@ -65,6 +65,7 @@ export class FoodSystem {
     const i = this.pellets.indexOf(pellet);
     if (i < 0) return;
     this.pellets.splice(i, 1);
+    pellet.gone = true; // Fish AI ที่เล็งเม็ดนี้อยู่จะรู้ว่าหมดแล้ว
     fish.eat(pellet.food);
     this.game.events.emit(EV.FISH_ATE, { fish, food: pellet.food });
   }
@@ -91,6 +92,7 @@ export class FoodSystem {
         p.settledTime += dt * CONFIG.timeScale;
         if (p.settledTime > CONFIG.care.foodDecayTime) {
           this.pellets.splice(i, 1);
+          p.gone = true;
           this.game.care.addDirt(CONFIG.care.foodDecayDirt);
         }
       }
@@ -108,6 +110,7 @@ export class FoodSystem {
   }
 
   clear() {
+    for (const p of this.pellets) p.gone = true;
     this.pellets = [];
     this.mesh.count = 0;
   }

@@ -1,11 +1,13 @@
 import { CONFIG } from '../config.js';
 import { EV } from './EventBus.js';
 import { loadSettings, saveSettings } from './settings.js';
-import { AVAILABLE_SPECIES, FISH_NAMES, getSpecies } from '../data/fish.js';
+import { AVAILABLE_SPECIES, getSpecies } from '../data/fish.js';
 import { getDecorItem } from '../data/decor.js';
 import { getTankType } from '../data/tanks.js';
 import { earn, offlineCoins, offlineSeconds } from '../shared/economy.js';
-import { clamp, pick, rand, todayKey, uid } from '../utils/math.js';
+import { todayKey, uid } from '../utils/math.js';
+import { createFishRecord } from '../sim/records.ts';
+import { catchUpTank } from '../sim/offline.ts';
 
 /** ของตกแต่งเริ่มต้น: [itemId, u, v, rotY] โดย u,v อยู่ในช่วง -1..1 (สัดส่วนของความกว้าง/ลึกตู้) */
 export const STARTER_DECOR = [
@@ -28,26 +30,10 @@ export const STARTER_DECOR = [
   ['bubbler', 0.08, -0.78, 0],
 ];
 
-const STARTER_FISH = ['betta', 'clownfish', 'angelfish', 'guppy', 'guppy', 'guppy', 'guppy', 'molly_dalmatian', 'molly_dalmatian', 'molly_dalmatian'];
+const STARTER_FISH = ['molly_golddust', 'crab', 'molly_redhead', 'molly_redhead', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_dalmatian', 'molly_dalmatian', 'molly_dalmatian'];
 
-/** @param {{ gender?: 'm'|'f' }} options gender ไม่ระบุ = สุ่ม */
-export function createFishRecord(speciesId, { growth = 1, satiety = 75, name, gender, genes } = {}) {
-  const species = getSpecies(speciesId);
-  const record = {
-    id: uid('fish'),
-    speciesId,
-    name: name ?? pick(FISH_NAMES),
-    gender: gender === 'm' || gender === 'f' ? gender : Math.random() < 0.5 ? 'm' : 'f',
-    satiety,
-    health: 100,
-    growth,
-    age: 0,
-    breedCooldown: rand(30, 90),
-    coinTimer: rand(5, species?.economy.coinInterval ?? 30),
-  };
-  if (genes) record.genes = genes; // ยีนสีของลูกผสม
-  return record;
-}
+// สร้าง record ปลาอยู่ใน Simulation Engine (คลอดลูกต้องใช้ด้วย) — ส่งต่อชื่อเดิมให้โค้ดส่วนอื่น
+export { createFishRecord };
 
 export function createDecorRecord(itemId, x, z, rotY = 0) {
   const record = { id: uid('decor'), itemId, x, z, rotY };
@@ -154,28 +140,13 @@ export class GameState {
    * @returns {{ seconds: number, coins: number }}
    */
   catchUpTank(tank, now = Date.now(), { giveCoins = false } = {}) {
-    const off = CONFIG.offline;
     const seconds = offlineSeconds(tank.lastUpdate, now);
     tank.lastUpdate = now;
     if (seconds < 5) return { seconds: 0, coins: 0 };
 
     // คิดเหรียญก่อนปรับค่าปลา (สูตรเดียวกับที่เซิร์ฟเวอร์ใช้ตรวจ ดู shared/economy.js)
     const coins = giveCoins ? offlineCoins(tank, seconds) : 0;
-    for (const fish of tank.fish) {
-      const species = getSpecies(fish.speciesId);
-      if (!species) continue;
-      const rate = species.care.hungerRate;
-      const before = fish.satiety;
-      // ช่วงเวลาที่ยังอิ่มพอจะโตได้
-      const growSeconds = clamp((before - 30) / rate, 0, seconds);
-      fish.growth = Math.min(1, fish.growth + growSeconds / species.care.growTime);
-      fish.satiety = Math.max(before - rate * seconds, Math.min(before, off.minSatiety));
-      fish.breedCooldown = Math.max(0, (fish.breedCooldown ?? 0) - seconds);
-      fish.age = (fish.age ?? 0) + seconds;
-    }
-    const dirt = (CONFIG.care.dirtBase + CONFIG.care.dirtPerFish * tank.fish.length) * seconds;
-    tank.cleanliness = Math.max(tank.cleanliness - dirt, Math.min(tank.cleanliness, off.minCleanliness));
-
+    catchUpTank(tank, seconds);
     if (coins > 0) this.earn({ coins });
     return { seconds, coins };
   }

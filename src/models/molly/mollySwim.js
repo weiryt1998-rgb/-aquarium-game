@@ -11,7 +11,7 @@ import { sharedUniforms } from '../../render/shaderMods.js';
  *  - ครีบหลัง ครีบท้อง ครีบก้น: ไหวเบา ๆ ตามน้ำ
  * normal ของลำตัวถูกหมุนตามการโค้งด้วย แสงสะท้อนจึงไหลไปตามตัวขณะว่าย
  *
- * ใช้คู่กับ geometry จาก mollyShape.js (attribute aFin = [ชนิดชิ้นส่วน, น้ำหนัก 0..1])
+ * ใช้คู่กับ geometry จาก mollyShape.js หรือจากไฟล์ molly.glb (ดู mollyMesh.js) — attribute aFin = [ชนิดชิ้นส่วน, น้ำหนัก 0..1]
  */
 
 const PARS = /* glsl */ `
@@ -20,7 +20,10 @@ uniform float uSwimAmp;
 uniform float uTurn;
 uniform float uFinSeed;
 uniform float uMollyTime;
+#ifndef MOLLY_AFIN
+#define MOLLY_AFIN
 attribute vec2 aFin;
+#endif
 
 // การเบี่ยงตามแกน x ของแนวกลางลำตัวที่ตำแหน่ง z → (dx, dx/dz)
 vec2 mollyBend(float z) {
