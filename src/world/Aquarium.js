@@ -449,8 +449,15 @@ export class Aquarium {
     if (this.rays) this.rays.intensity.value = 0.22 * (0.3 + 0.7 * this.quality);
     // ทรายมีคราบเขียวเมื่อสกปรก
     if (this.substrate) this.substrate.material.color.set(this.style.sand).lerp(ALGAE_SAND, smoothstep(0.35, 1, dirt) * 0.55);
-    // ตะไคร่เริ่มขึ้นเมื่อความสะอาดต่ำกว่า 75% และเต็มกระจกเมื่อใกล้ 0
-    this.algae?.setTarget(smoothstep(0.25, 0.97, dirt), { immediate });
+    // ตะไคร่เริ่มขึ้นเมื่อความสะอาดต่ำกว่า 75% และเต็มกระจกเมื่อใกล้ 0 (หอยกินตะไคร่ช่วยให้กระจกใสขึ้น — setAlgaeControl)
+    this.algae?.setTarget(smoothstep(0.25, 0.97, dirt) * (1 - (this.algaeControl ?? 0)), { immediate });
+  }
+
+  /** สัดส่วนตะไคร่ที่หอยกินไป 0..0.7 (จาก sim/ecology.ts) — ตะไคร่ค่อย ๆ จางลง/กลับมาตามจำนวนหอย */
+  setAlgaeControl(v) {
+    if (v === this.algaeControl) return;
+    this.algaeControl = v;
+    if (this.quality != null) this.algae?.setTarget(smoothstep(0.25, 0.97, 1 - this.quality) * (1 - v));
   }
 
   update(dt, time, camera) {

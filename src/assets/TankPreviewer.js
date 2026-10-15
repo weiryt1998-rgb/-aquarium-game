@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Aquarium } from '../world/Aquarium.js';
 import { Room } from '../world/Room.js';
 import { STARTER_DECOR } from '../core/GameState.js';
@@ -7,20 +6,29 @@ import { getDecorItem } from '../data/decor.js';
 import { getSpecies } from '../data/fish.js';
 import { sharedUniforms } from '../render/shaderMods.js';
 import { getWoodTexture } from '../render/textures.js';
+import { OffscreenShot } from '../render/OffscreenShot.js';
 import { disposeObject } from './AssetLoader.js';
 import { seededRandom } from '../utils/math.js';
 
-const WIDTH = 960;
-const HEIGHT = 540;
+/** ขนาดภาพ: มือถือ/จอเล็กใช้ภาพเล็กลง (การ์ดในร้านกว้างไม่ถึง 640px อยู่แล้ว) ประหยัดหน่วยความจำ GPU ตอนสร้าง */
+const SIZE_LARGE = [960, 540];
+const SIZE_SMALL = [640, 360];
+/** เว้นระยะระหว่างภาพ ให้เกมได้วาดเฟรมและเก็บกวาดหน่วยความจำก่อนสร้างภาพถัดไป */
+const GAP_MS = 120;
+
+const isSmallDevice = () => Math.min(window.innerWidth, window.innerHeight) < 700 || window.matchMedia?.('(pointer: coarse)').matches;
 
 /**
  * ภาพตัวอย่างตู้ปลาสำหรับร้านค้า: สร้างตู้ชนิดนั้นพร้อมของตกแต่งและปลาตัวอย่าง (data/tanks.js → showcase)
- * แล้วเรนเดอร์ด้วย renderer แยก (ไม่ยุ่งกับฉากหลัก) ได้เป็นรูป JPEG เก็บไว้ใช้ซ้ำ
- * สร้างทีละรูปตามคิว เฉพาะตอนเปิดแท็บตู้ปลา (ไม่เสียเวลาตอนโหลดเกม)
+ * แล้วถ่ายภาพด้วย renderer หลักของเกม (OffscreenShot — ไม่เปิด WebGL context ใหม่ ซึ่งเคยทำให้เกมเด้งออกบนมือถือ)
+ * ได้เป็นรูป JPEG เก็บไว้ใช้ซ้ำ สร้างทีละรูปตามคิว เฉพาะตอนเปิดแท็บตู้ปลา (ไม่เสียเวลาตอนโหลดเกม)
  */
 export class TankPreviewer {
-  constructor(factory) {
+  /** @param {{ renderer: THREE.WebGLRenderer, envMap: THREE.Texture }} sceneMgr ใช้ renderer และ environment map ของฉากหลัก */
+  constructor(factory, sceneMgr) {
     this.factory = factory;
+    this.sceneMgr = sceneMgr;
+    this.shot = new OffscreenShot(sceneMgr.renderer);
     this.cache = new Map();
     this.pending = new Map();
     this.queue = Promise.resolve();
@@ -36,11 +44,12 @@ export class TankPreviewer {
     if (this.cache.has(type.id)) return Promise.resolve(this.cache.get(type.id));
     if (this.pending.has(type.id)) return this.pending.get(type.id);
     const job = (this.queue = this.queue
-      .then(() => new Promise((r) => setTimeout(r, 20))) // ให้ UI วาดก่อน ไม่ค้างทั้งชุด
+      .then(() => new Promise((r) => setTimeout(r, GAP_MS))) // ให้ UI/เกมวาดก่อน ไม่ค้างทั้งชุด
       .then(() => {
         const url = this.#render(type);
         this.cache.set(type.id, url);
         this.pending.delete(type.id);
+        if (!this.pending.size) this.shot.release(); // ครบทุกภาพในคิวแล้ว คืนหน่วยความจำ GPU
         return url;
       }));
     this.pending.set(type.id, job);
@@ -51,34 +60,28 @@ export class TankPreviewer {
     const saved = { top: sharedUniforms.uWaterTop.value, caustic: sharedUniforms.uCausticIntensity.value };
     const wood = getWoodTexture();
     const woodRepeat = wood.repeat.clone();
-    let renderer = null;
+    const [WIDTH, HEIGHT] = isSmallDevice() ? SIZE_SMALL : SIZE_LARGE;
     let url = '';
     const extras = [];
+    let aquarium = null;
+    let room = null;
+    let sun = null;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-      renderer.setPixelRatio(1);
-      renderer.setSize(WIDTH, HEIGHT, false);
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFShadowMap;
-
       const scene = new THREE.Scene();
       scene.fog = new THREE.Fog('#1b6aa8', 10, 60);
-      const pmrem = new THREE.PMREMGenerator(renderer);
-      const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-      scene.environment = envMap;
+      scene.environment = this.sceneMgr.envMap; // ใช้ร่วมกับฉากหลัก (ไม่สร้าง environment map ใหม่ทุกภาพ)
       scene.environmentIntensity = 0.45;
+      const envMap = this.sceneMgr.envMap;
 
-      const aquarium = new Aquarium({ scene, envMap });
+      aquarium = new Aquarium({ scene, envMap });
       aquarium.build(type, { pebbles: 220 });
-      const room = new Room(scene);
+      room = new Room(scene);
       room.build(aquarium.dims);
       const { w, h, d } = aquarium.dims;
 
-      // แสงแบบเดียวกับฉากหลัก (SceneManager)
+      // แสงแบบเดียวกับฉากหลัก (SceneManager) — เงาตามการตั้งค่าคุณภาพของเกม
       const hemi = new THREE.HemisphereLight(0xcfeeff, 0x9c8a66, 1.25);
-      const sun = new THREE.DirectionalLight(0xfff6e6, 2.7);
+      sun = new THREE.DirectionalLight(0xfff6e6, 2.7);
       sun.position.set(w * 0.12, h * 2.6, d * 0.45);
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
@@ -143,22 +146,18 @@ export class TankPreviewer {
 
       aquarium.setWaterQuality(1);
       aquarium.update(0, 0, camera);
-      renderer.render(scene, camera);
-      url = renderer.domElement.toDataURL('image/jpeg', 0.88);
-
-      for (const obj of extras) disposeObject(obj);
-      aquarium.dispose();
-      room.clear();
-      envMap.dispose();
-      pmrem.dispose();
+      url = this.shot.capture(scene, camera, { width: WIDTH, height: HEIGHT, background: '#000000', type: 'image/jpeg', quality: 0.88 });
     } catch (err) {
       console.warn('สร้างภาพตัวอย่างตู้ไม่สำเร็จ', type.id, err);
     } finally {
+      // เก็บกวาดทุกอย่างที่สร้างให้ภาพนี้ (texture ที่ใช้ร่วมกับฉากหลักไม่ถูกลบ)
+      for (const obj of extras) disposeObject(obj);
+      aquarium?.dispose();
+      room?.clear();
+      sun?.shadow.dispose();
       sharedUniforms.uWaterTop.value = saved.top;
       sharedUniforms.uCausticIntensity.value = saved.caustic;
       wood.repeat.copy(woodRepeat);
-      renderer?.dispose();
-      renderer?.forceContextLoss();
     }
     return url;
   }

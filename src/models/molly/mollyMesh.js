@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { applyShaderMods, causticsMod } from '../../render/shaderMods.js';
 import { createMollySwimMod, createMollySwimUniforms } from './mollySwim.js';
+import { FRY_COLORS, FRY_FIN_OPACITY } from './fry.js';
 
 /**
  * ปลาสอดจากไฟล์โมเดล public/models/fish/molly.glb (แปลงจากโมเดล Meshy ด้วย scripts/build-molly-model.mjs)
@@ -58,6 +59,12 @@ uniform float uSpotMatte[${MAX_LAYERS}];
 uniform float uPaintSeed;
 uniform float uTexRef;
 uniform float uTexPatches;
+uniform float uFry;
+uniform vec3 uFryBack;
+uniform vec3 uFryBase;
+uniform vec3 uFryBelly;
+uniform vec3 uFryFin;
+uniform float uFryFinOpacity;
 varying vec3 vPaintPos;
 varying vec3 vPaintNormal;
 varying vec2 vPaintFin;
@@ -143,18 +150,38 @@ for (int i = 0; i < ${MAX_LAYERS}; i++) {
   mMatte = max(mMatte, s * uSpotMatte[i]);
 }
 
-// ตา: ใช้สีเดิมของเท็กซ์เจอร์ (ตาดำ + ประกาย) ม่านตาย้อมเป็นสีของชุดสี
+// ลูกปลาแรกเกิด (ดู fry.js): สีเทาเข้มอมเขียว หลังเข้ม ท้องเทาเงิน ครีบใส ทับสีจริงไว้ → ค่อย ๆ จางเมื่อโต
+vec3 mFry = mix(uFryBelly, uFryBase, smoothstep(-0.9, -0.45, mN.y));
+mFry = mix(mFry, uFryBack, smoothstep(0.1, 0.75, mN.y));
+mFry = mix(mFry, uFryFin, mFinAmt);
+mCol = mix(mCol, mFry, uFry);
+mMatte *= 1.0 - uFry;
+
+// ตา: ใช้สีเดิมของเท็กซ์เจอร์ (ตาดำ + ประกาย) ม่านตาย้อมเป็นสีของชุดสี (ลูกปลาม่านตาสีเทาเหมือนกันหมด)
 float mLum = dot(mTex.rgb, vec3(0.2126, 0.7152, 0.0722));
-vec3 mEye = mix(mTex.rgb, uIris * mShade, smoothstep(0.03, 0.15, mLum) * 0.65);
+vec3 mEye = mix(mTex.rgb, mix(uIris, vec3(0.35), uFry) * mShade, smoothstep(0.03, 0.15, mLum) * 0.65);
 diffuseColor.rgb *= mix(mCol * mShade, mEye, vPaintEye);
 #ifdef MOLLY_FINS
-  diffuseColor.a *= mix(1.0, mix(uFinOpacity, 1.0, 0.45 * mRay), smoothstep(0.08, 0.4, vPaintFin.y));
+  float mFinFade = smoothstep(0.08, 0.4, vPaintFin.y);
+  diffuseColor.a *= mix(1.0, mix(mix(uFinOpacity, 1.0, 0.45 * mRay), uFryFinOpacity, uFry), mFinFade);
 #endif
 `;
 
-/** @param {object} paint uniform ของชุดสี (จาก getPaint) ใช้ร่วมกันทุกตัวที่สีเดียวกัน */
-function createPaintMod(paint, texRef = 0.97, texPatches = true) {
-  const own = { uTexRef: { value: texRef }, uTexPatches: { value: texPatches ? 1 : 0 } };
+/** สีลูกปลาแรกเกิด ใช้ร่วมกันทุกตัว */
+const FRY_PAINT = {
+  uFryBack: { value: new THREE.Color(FRY_COLORS.back) },
+  uFryBase: { value: new THREE.Color(FRY_COLORS.base) },
+  uFryBelly: { value: new THREE.Color(FRY_COLORS.belly) },
+  uFryFin: { value: new THREE.Color(FRY_COLORS.fin) },
+  uFryFinOpacity: { value: FRY_FIN_OPACITY },
+};
+
+/**
+ * @param {object} paint uniform ของชุดสี (จาก getPaint) ใช้ร่วมกันทุกตัวที่สีเดียวกัน
+ * @param {{ value: number }} fry สีลูกปลาแรกเกิดของตัวนี้ 0..1 (แยกต่อตัว — ปรับตามการเติบโต)
+ */
+function createPaintMod(paint, texRef = 0.97, texPatches = true, fry = { value: 0 }) {
+  const own = { uTexRef: { value: texRef }, uTexPatches: { value: texPatches ? 1 : 0 }, uFry: fry, ...FRY_PAINT };
   return {
     key: 'molly-paint',
     apply(shader) {
@@ -269,9 +296,11 @@ function prepare(gltf) {
 /**
  * @param {object} gltf ไฟล์ molly.glb ที่โหลดแล้ว
  * @param {object} V ชุดสี (variants.js หรือ genesToVariant)
- * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object } | null} null = ไฟล์ใช้ไม่ได้
+ * @param {{ fry?: number }} options fry = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
+ * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object, fry: { value: number } } | null}
+ *  null = ไฟล์ใช้ไม่ได้ · fry = uniform ของตัวนี้ (ตั้ง .value ใหม่เมื่อปลาโตขึ้น)
  */
-export function createMeshMolly(gltf, V, { detail = 'high', animated = true, caustics = true } = {}) {
+export function createMeshMolly(gltf, V, { detail = 'high', animated = true, caustics = true, fry = 0 } = {}) {
   const src = prepare(gltf);
   if (!src) return null;
   const M = V.material;
@@ -312,7 +341,8 @@ export function createMeshMolly(gltf, V, { detail = 'high', animated = true, cau
   fins.defines = { MOLLY_FINS: '' };
 
   // texRef = ความสว่างปกติของเท็กซ์เจอร์ในไฟล์ (ลูกปลาสีเทาเข้มกว่าตัวเต็มวัยสีขาว) ให้ย้อมสีออกมาสว่างเท่ากัน
-  const paint = createPaintMod(getPaint(V), src.texRef, src.texPatches);
+  const fryUniform = { value: fry };
+  const paint = createPaintMod(getPaint(V), src.texRef, src.texPatches, fryUniform);
   let swimUniforms = null;
   let swim = null;
   if (animated) {
@@ -330,5 +360,5 @@ export function createMeshMolly(gltf, V, { detail = 'high', animated = true, cau
   finsMesh.renderOrder = 1;
   group.add(bodyMesh, finsMesh);
   group.userData.parts = { body: bodyMesh, fins: finsMesh };
-  return { object: group, swimUniforms, materials: { body, fins }, variant: V };
+  return { object: group, swimUniforms, materials: { body, fins }, variant: V, fry: fryUniform };
 }

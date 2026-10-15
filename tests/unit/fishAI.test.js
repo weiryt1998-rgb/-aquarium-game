@@ -181,6 +181,44 @@ test('ใช้ครบทุกสถานะ: ว่ายเล่น ส�
   for (const s of ['idle', 'explore', 'seekFood', 'eat', 'rest', 'school', 'avoid', 'hide']) assert.ok(seen.has(s), `ไม่เคยเข้าสถานะ ${s}`);
 });
 
+test('เกี้ยวพาราสี: ตัวผู้ว่ายตามตัวเมีย เข้าประชิดเป็นระยะ ไม่ทะลุตู้ และเลิกเมื่อถูกสั่ง/ตัวเมียหายไป', () => {
+  const { ai, world } = makeAI(12, { hunger: 10 });
+  const [dad, mom] = ai.agents;
+  for (let i = 0; i < 2 / STEP; i++) ai.step(STEP);
+  assert.equal(ai.court(dad.id, mom.id), true);
+  assert.equal(ai.court('fish_nope', mom.id), false, 'ไม่มี agent (เช่น ปู) → ไม่มีท่าเกี้ยว');
+  let sum = 0;
+  let n = 0;
+  let closest = Infinity;
+  for (let i = 0; i < 30 / STEP; i++) {
+    ai.step(STEP);
+    assertInside(ai, world);
+    if (i < 10 / STEP) continue; // ช่วงแรกตัวผู้ยังว่ายไปหา (อาจเริ่มห่างกันเกือบสุดตู้)
+    assert.equal(dad.state === 'court' || dad.state === 'avoid' || dad.state === 'hide' || dad.state === 'seekFood' || dad.state === 'eat', true, dad.state);
+    const d = Math.sqrt(dad.pos.distanceSq(mom.pos));
+    sum += d;
+    n++;
+    closest = Math.min(closest, d);
+  }
+  console.log(`เกี้ยว: ระยะเฉลี่ย ${(sum / n).toFixed(2)} · ใกล้สุด ${closest.toFixed(2)} (ความยาวปลา 0.7)`);
+  assert.ok(sum / n < 1.6, `ตัวผู้ว่ายตามใกล้ ๆ ตัวเมีย (เฉลี่ย ${(sum / n).toFixed(2)})`);
+  assert.ok(closest < 0.45, `เข้าประชิดตัวเมีย (ใกล้สุด ${closest.toFixed(2)})`);
+  assert.equal(mom.courtedBy, dad);
+
+  ai.endCourt(dad.id);
+  assert.equal(dad.mate, null);
+  assert.equal(mom.courtedBy, null);
+  for (let i = 0; i < 3 / STEP; i++) ai.step(STEP);
+  assert.notEqual(dad.state, 'court');
+
+  // ตัวเมียถูกเอาออกจากตู้ระหว่างเกี้ยว → ตัวผู้เลิกเกี้ยวเอง ไม่ค้างอ้างถึงปลาที่ไม่อยู่แล้ว
+  ai.court(dad.id, mom.id);
+  ai.remove(mom.id);
+  assert.equal(dad.mate, null);
+  for (let i = 0; i < 3 / STEP; i++) ai.step(STEP);
+  assert.notEqual(dad.state, 'court');
+});
+
 test('บุคลิกต่างกันทำให้พฤติกรรมต่างกัน', () => {
   // หา ID ที่ได้บุคลิกหลักแต่ละแบบ
   const idsOf = (trait, n) => {

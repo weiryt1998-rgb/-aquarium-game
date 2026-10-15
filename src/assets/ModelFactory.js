@@ -9,6 +9,7 @@ import { createBoneRig } from '../render/boneRig.js';
 import { createFishMotionMod, createFishMotionUniforms, prepareFlexAttribute } from '../render/fishMotion.js';
 import { createMolly } from '../models/molly/MollyModel.js';
 import { genesToVariant } from '../models/molly/genetics.js';
+import { fryAmount } from '../models/molly/fry.js';
 import { createSpaceFish } from '../models/spacefish/SpaceFishModel.js';
 
 /** ความยาวรวม (หัวถึงปลายหาง) ของโมเดล .glb หลังปรับขนาด เทียบกับลำตัวโมเดลชั่วคราวที่ยาว 1 */
@@ -16,7 +17,9 @@ export const FISH_MODEL_LENGTH = 1.35;
 
 /** โมเดลปลาที่สร้างด้วยโค้ดแบบละเอียด (species.procedural.type) — ใช้แทนโมเดลชั่วคราว ถ้าไม่มีไฟล์ .glb ของสายพันธุ์นั้น */
 const PROCEDURAL_FISH = {
-  molly: (species, { animated, detail, genes, mesh }) => createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh }),
+  // ลูกปลาสอดแรกเกิดยังไม่เห็นสีจริง (fry.js) — สีค่อย ๆ เผยตามการเติบโต
+  molly: (species, { animated, detail, genes, mesh, growth }) =>
+    createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh, fry: fryAmount(species, growth) }),
   spacefish: (species, { animated, detail, mesh }) => createSpaceFish({ variant: species.procedural.variant, detail, animated, mesh }),
 };
 
@@ -121,8 +124,8 @@ export class ModelFactory {
       const baby = this.isBabyLook(species, growth);
       const url = baby ? species.procedural.babyMesh : species.procedural.mesh;
       const mesh = url ? (this.assets.first([url])?.gltf ?? null) : null;
-      const { object, swimUniforms, trail = null } = procedural(species, { animated, detail: this.detail(), genes, mesh });
-      return { object, mixer: null, swimUniforms, trail, baby, isPlaceholder: false };
+      const { object, swimUniforms, trail = null, fry = null } = procedural(species, { animated, detail: this.detail(), genes, mesh, growth });
+      return { object, mixer: null, swimUniforms, trail, baby, fry, isPlaceholder: false };
     }
 
     const materials = createFishMaterials(species.look);
@@ -151,11 +154,18 @@ export class ModelFactory {
 
   /**
    * @param {number} seed 0..1 ทำให้โมเดลชั่วคราวแต่ละชิ้นหน้าตาต่างกัน
-   * @returns {{ object: THREE.Object3D, isPlaceholder: boolean }} ฐานของโมเดลอยู่ที่ y=0
+   * @returns {{ object: THREE.Object3D, isPlaceholder: boolean, mixer: THREE.AnimationMixer|null }} ฐานของโมเดลอยู่ที่ y=0
+   *  mixer = แอนิเมชันคลานของหอย (item.critter) จากไฟล์ .glb — เล่นคลิปที่ชื่อมี crawl/walk/move ก่อน
    */
   createDecor(item, seed = 0.5, { animated = true } = {}) {
     const found = this.assets.first(this.decorModelUrls(item));
-    const raw = found ? this.assets.instantiate(found.gltf).scene : buildDecorPlaceholder(item, seed);
+    const inst = found ? this.assets.instantiate(found.gltf) : null;
+    const raw = inst ? inst.scene : buildDecorPlaceholder(item, seed);
+    let mixer = null;
+    if (animated && item.critter && inst?.animations?.length) {
+      mixer = new THREE.AnimationMixer(raw);
+      mixer.clipAction(inst.animations.find((a) => /crawl|walk|move/i.test(a.name)) ?? inst.animations[0]).play();
+    }
     const fit = item.model?.fit ?? 'height';
     const size = fit === 'width' ? item.model?.size ?? item.radius * 2 : item.height;
     const { root, scale } = normalizeModel(raw, {
@@ -168,6 +178,6 @@ export class ModelFactory {
       const sway = item.sway ? createSwayMod(scale) : null;
       forEachMaterial(root, (m) => applyShaderMods(m, [sway, m.isMeshStandardMaterial ? causticsMod : null]));
     }
-    return { object: root, isPlaceholder: !found };
+    return { object: root, isPlaceholder: !found, mixer };
   }
 }

@@ -49,6 +49,8 @@ export class FishAI {
   remove(id: string): void {
     const agent = this.byId.get(id);
     if (!agent) return;
+    agent.setMate(null);
+    agent.courtedBy?.setMate(null);
     this.byId.delete(id);
     this.agents.splice(this.agents.indexOf(agent), 1);
   }
@@ -73,6 +75,24 @@ export class FishAI {
         a.vel.copy(velocity);
       }
     }
+  }
+
+  /**
+   * ระบบขยายพันธุ์ (Simulation Engine) จับคู่แล้ว: ตัวผู้ว่ายตามเกี้ยวพาราสีตัวเมีย จนกว่าจะเรียก endCourt
+   * @returns false ถ้าตัวใดตัวหนึ่งไม่มี agent (เช่น ปูที่เดินพื้น — ผสมพันธุ์ได้ตามปกติแต่ไม่มีท่าเกี้ยว)
+   */
+  court(dadId: string, momId: string): boolean {
+    const dad = this.byId.get(dadId);
+    const mom = this.byId.get(momId);
+    if (!dad || !mom || dad === mom) return false;
+    mom.courtedBy?.setMate(null);
+    dad.setMate(mom);
+    return true;
+  }
+
+  endCourt(dadId: string): void {
+    const dad = this.byId.get(dadId);
+    if (dad?.mate) dad.setMate(null);
   }
 
   /** สิ่งรบกวน (ทำความสะอาด ปลาใหม่ ให้อาหาร) — ปลาใกล้จุดนั้นตกใจมาก ไกลออกไปตกใจน้อยลง */
@@ -127,7 +147,7 @@ export class FishAI {
     const reach = a.mods.personalSpace * a.needs.length + 0.3;
     this.grid.query(a.pos.x, a.pos.y, a.pos.z, reach + 1, this.near);
     for (const o of this.near) {
-      if (o === a) continue;
+      if (o === a || o === a.mate || o === a.courtedBy) continue; // คู่ที่เกี้ยวกันเข้าประชิดกันได้
       const min = reach + o.radius * 0.6;
       const dx = a.pos.x - o.pos.x;
       const dy = a.pos.y - o.pos.y;

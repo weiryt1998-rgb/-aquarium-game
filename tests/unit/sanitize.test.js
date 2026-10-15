@@ -150,6 +150,20 @@ test('การตั้งท้อง: เก็บไว้เฉพาะต
   assert.equal('pregnantAt' in byId.fish_p4, false);
 });
 
+test('พักฟื้นหลังคลอด: เก็บไว้เฉพาะตัวเมีย และเวลาไม่ล้ำอนาคต', () => {
+  const now = Date.parse('2026-10-13T05:00:00Z');
+  const fish = (id, gender, lastBirthAt) => ({ id, speciesId: 'molly_golden', name: 'x', gender, lastBirthAt });
+  const game = sanitizeGame(
+    { tanks: [{ id: 'tank_r', typeId: 'starter', name: 'ตู้', cleanliness: 90, fish: [fish('fish_r1', 'f', now - 1000), fish('fish_r2', 'm', now - 1000), fish('fish_r3', 'f', now + 99_000), fish('fish_r4', 'f', 'x')], decor: [] }] },
+    { now },
+  );
+  const byId = Object.fromEntries(game.tanks[0].fish.map((f) => [f.id, f]));
+  assert.equal(byId.fish_r1.lastBirthAt, now - 1000);
+  assert.equal('lastBirthAt' in byId.fish_r2, false);
+  assert.equal(byId.fish_r3.lastBirthAt, now);
+  assert.equal('lastBirthAt' in byId.fish_r4, false);
+});
+
 test('ยีนลูกผสมและลูกในท้อง: เก็บไว้เฉพาะปลาที่มีระบบสี และข้อมูลผิดถูกตัดทิ้ง', () => {
   const now = Date.parse('2026-10-13T05:00:00Z');
   const genes = {

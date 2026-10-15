@@ -5,6 +5,7 @@ import { getMollyGeometry, MOLLY_DETAIL } from './mollyShape.js';
 import { acquireMollyTextures } from './mollyTextures.js';
 import { createMollySwimMod, createMollySwimUniforms } from './mollySwim.js';
 import { getMollyVariant } from './variants.js';
+import { FRY_COLORS, FRY_FIN_OPACITY } from './fry.js';
 
 /**
  * โมเดลปลา Balloon Molly แบบ 3 มิติ สร้างด้วยโค้ดทั้งหมด (geometry + texture + shader)
@@ -72,16 +73,43 @@ function createMaterials(variant, detail, textures) {
 }
 
 /**
- * @param {{ variant?: string|object, detail?: 'high'|'medium'|'low', animated?: boolean, caustics?: boolean, mesh?: object|null }} options
+ * ตัวสำรอง (ไม่มีไฟล์ molly.glb): ทับสีลูกปลาแรกเกิดด้วยสีของ material — ตั้ง .value ใหม่เมื่อปลาโตขึ้น
+ * (ไฟล์ .glb ใช้ shader ใน mollyMesh.js ซึ่งได้หลังเข้ม ท้องจาง ครีบใส ละเอียดกว่า)
+ */
+function fryTint(materials, initial) {
+  const dark = new THREE.Color(FRY_COLORS.base).multiplyScalar(1.6);
+  const white = new THREE.Color('#ffffff');
+  let v = -1;
+  const fry = {
+    get value() {
+      return v;
+    },
+    set value(next) {
+      if (next === v) return;
+      v = next;
+      materials.body.color.copy(white).lerp(dark, v);
+      materials.body.emissiveIntensity = materials.body.userData.baseGlow * (1 - v);
+      materials.fins.color.copy(white).lerp(dark, v);
+      materials.fins.opacity = 1 - (1 - FRY_FIN_OPACITY) * v;
+    },
+  };
+  materials.body.userData.baseGlow = materials.body.emissiveIntensity;
+  fry.value = initial;
+  return fry;
+}
+
+/**
+ * @param {{ variant?: string|object, detail?: 'high'|'medium'|'low', animated?: boolean, caustics?: boolean, mesh?: object|null, fry?: number }} options
  *  variant = id ใน variants.js หรือชุดสีที่ได้จาก genesToVariant (ลูกผสม)
  *  mesh    = ไฟล์ molly.glb ที่โหลดแล้ว → ใช้รูปทรงจากไฟล์และย้อมสีตามชุดสี (mollyMesh.js) ไม่มี = สร้างรูปทรงด้วยโค้ด
- * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object }}
- *  เมื่อเลิกใช้ ให้เรียก object.userData.release() (disposeObject ใน AssetLoader เรียกให้อัตโนมัติ)
+ *  fry     = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
+ * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object, fry: { value: number } }}
+ *  fry = ตั้ง .value ใหม่เมื่อปลาโตขึ้น · เมื่อเลิกใช้ ให้เรียก object.userData.release() (disposeObject ใน AssetLoader เรียกให้อัตโนมัติ)
  */
-export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true, mesh = null } = {}) {
+export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true, mesh = null, fry = 0 } = {}) {
   const V = typeof variant === 'object' && variant ? variant : getMollyVariant(variant);
   const D = MOLLY_DETAIL[detail] ? detail : 'high';
-  const fromFile = mesh && createMeshMolly(mesh, V, { detail: D, animated, caustics });
+  const fromFile = mesh && createMeshMolly(mesh, V, { detail: D, animated, caustics, fry });
   if (fromFile) return fromFile;
   const geo = getMollyGeometry(D);
   // ลูกผสมทุกตัวมีลายเฉพาะตัว → ใช้ texture เล็กลงเพื่อประหยัดหน่วยความจำ
@@ -108,5 +136,5 @@ export function createMolly({ variant = 'dalmatian', detail = 'high', animated =
   group.add(body, eyes, fins);
   group.userData.parts = { body, eyes, fins };
   group.userData.release = release;
-  return { object: group, swimUniforms, materials, variant: V };
+  return { object: group, swimUniforms, materials, variant: V, fry: fryTint(materials, fry) };
 }

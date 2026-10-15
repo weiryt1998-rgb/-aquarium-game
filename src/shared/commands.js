@@ -7,7 +7,7 @@ import { MISSIONS } from '../data/missions.js';
 import { TANK_TYPES, getTankType, tankTier } from '../data/tanks.js';
 import { clamp } from '../utils/math.js';
 import { FEED_WINDOW_MS, LIMITS } from './constants.js';
-import { breedGroupOf, dueAt, isPregnant, planOffspring, sanitizeFetus } from './breeding.js';
+import { breedGroupOf, dueAt, isPregnant, planOffspring, restEndsAt, sanitizeFetus } from './breeding.js';
 import { sanitizeGenes } from '../models/molly/genetics.js';
 import {
   addItem,
@@ -175,6 +175,8 @@ const HANDLERS = {
     const tank = needTank(game, c.tankId);
     const { dad, mom, tm } = needParents(tank, meta, c, ctx);
     if (isPregnant(mom)) fail('invalid', 'already-pregnant');
+    // ตัวเมียพักฟื้นหลังคลอด (เผื่อนาฬิกาต่างกัน 3 วินาที)
+    if (!ctx.predict && ctx.now < restEndsAt(mom) - 3000) fail('cooldown', 'resting');
     // นับการตั้งท้องจากเวลาที่เกิดในเครื่อง (คำสั่งอาจถูกส่งช้าตอนออฟไลน์) แต่ไม่ล้ำอนาคตและไม่เก่ากว่าหนึ่งสัปดาห์
     mom.pregnantAt = Math.round(clamp(isNum(c.at) ? c.at : ctx.now, ctx.now - 7 * 86_400_000, ctx.now));
     // ลูกในท้อง (สายพันธุ์ + ยีนสี) สุ่มในเครื่องที่ผสมพันธุ์ ตรวจรูปแบบที่นี่ (คำสั่งจากเวอร์ชันเก่าที่ไม่มี fetus → สุ่มให้)
@@ -184,7 +186,7 @@ const HANDLERS = {
     ctx.simTouched?.add(tank.id);
   },
 
-  /** ตัวเมียที่ตั้งท้องครบกำหนดคลอดลูก (ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้) */
+  /** ตัวเมียที่ตั้งท้องครบกำหนดคลอดลูก 1 ตัว แล้วพักฟื้น (ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้) */
   fishBorn(game, meta, c, ctx) {
     const tank = needTank(game, c.tankId);
     if (!c.motherId) return legacyBirth(game, meta, tank, c, ctx);
@@ -200,6 +202,8 @@ const HANDLERS = {
     delete mom.pregnantAt;
     delete mom.fetus;
     mom.breedCooldown = CONFIG.breeding.cooldown;
+    // นับพักฟื้นจากเวลาที่คลอดในเครื่อง (คำสั่งอาจถูกส่งช้า) แต่ไม่ล้ำอนาคตและไม่เก่ากว่าหนึ่งสัปดาห์
+    mom.lastBirthAt = Math.round(clamp(isNum(c.at) ? c.at : ctx.now, ctx.now - 7 * 86_400_000, ctx.now));
     game.stats.fishBorn += 1;
     bumpMissions(game, EV.FISH_BORN, 1, ctx.day);
     ctx.simTouched?.add(tank.id);

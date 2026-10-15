@@ -5,7 +5,7 @@ import type { Vec3Like } from './vec.ts';
  */
 
 /** สถานะพฤติกรรม (Finite State Machine) */
-export type FishState = 'idle' | 'explore' | 'seekFood' | 'eat' | 'rest' | 'school' | 'avoid' | 'hide';
+export type FishState = 'idle' | 'explore' | 'seekFood' | 'eat' | 'rest' | 'school' | 'avoid' | 'hide' | 'court';
 
 export const STATE_LABEL: Record<FishState, string> = {
   idle: 'ว่ายเล่นสบาย ๆ',
@@ -16,6 +16,7 @@ export const STATE_LABEL: Record<FishState, string> = {
   school: 'ว่ายรวมฝูง',
   avoid: 'หลบสิ่งกีดขวาง',
   hide: 'หลบซ่อนตัว',
+  court: 'กำลังเกี้ยวพาราสี',
 };
 
 export type Zone = 'top' | 'middle' | 'bottom' | 'any';

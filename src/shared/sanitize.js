@@ -59,6 +59,8 @@ function sanitizeFish(raw, taken, now = Date.now()) {
     const fetus = raw.fetus ? sanitizeFetus(raw.fetus, fish) : null;
     if (fetus) fish.fetus = fetus;
   }
+  // พักฟื้นหลังคลอด (เฉพาะตัวเมีย) — เวลาต้องไม่ล้ำอนาคต
+  if (gender === 'f' && isNum(raw.lastBirthAt) && raw.lastBirthAt > 0) fish.lastBirthAt = Math.min(raw.lastBirthAt, now);
   return fish;
 }
 

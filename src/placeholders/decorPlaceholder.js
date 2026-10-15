@@ -598,7 +598,58 @@ function buildBubbler(item) {
   return [mesh(merge(parts), { roughness: 0.8 })];
 }
 
+// ── หอย (ระบบนิเวศ) ──────────────────────────────────────────
+// หันหัวไป +Z ฐาน (เท้า) ที่ y = 0 — ขนาดจริงถูกปรับตาม item.height ภายหลัง
+
+/** หอยฝาเดียว: เท้า + หนวด 2 เส้น + เปลือกตาม look.shell */
+function buildSnail(item) {
+  const look = item.look ?? {};
+  const body = new THREE.Color(look.body ?? '#8a7a66');
+  const shellColor = new THREE.Color(item.color ?? '#d9b43a');
+  const parts = [];
+  // เท้า: แคปซูลแบนยาวตามแกน z
+  const foot = new THREE.CapsuleGeometry(0.2, 0.75, 4, 10).rotateX(Math.PI / 2).scale(1, 0.42, 1).translate(0, 0.085, 0.05);
+  parts.push(part(foot, (p, _n, out) => out.copy(body).multiplyScalar(0.85 + 0.25 * smoothstep(0, 0.17, p.y))));
+  for (const side of [-1, 1]) {
+    const tentacle = new THREE.CylinderGeometry(0.018, 0.032, 0.32, 6).translate(0, 0.16, 0);
+    parts.push(part(tentacle, body, alignMatrix(new THREE.Vector3(side * 0.08, 0.12, 0.52), new THREE.Vector3(side * 0.45, 0.6, 1))));
+  }
+  const shell = look.shell ?? 'nerite';
+  if (shell === 'ramshorn') {
+    // เปลือกขดแบนแนวตั้ง (วงใหญ่ + วงใน)
+    const ring = (p, _n, out) => out.copy(shellColor).multiplyScalar(0.75 + 0.3 * Math.abs(Math.sin(Math.atan2(p.y - 0.42, p.z + 0.08) * 6)));
+    parts.push(part(new THREE.TorusGeometry(0.24, 0.14, 10, 20).rotateY(Math.PI / 2).translate(0, 0.42, -0.08), ring));
+    parts.push(part(new THREE.TorusGeometry(0.1, 0.08, 8, 14).rotateY(Math.PI / 2).translate(0.03, 0.42, -0.08), ring));
+  } else if (shell === 'mystery') {
+    // เปลือกกลมโต + ยอดเกลียวเล็ก แถบสีจาง ๆ ตามแนวเกลียว
+    const band = (p, _n, out) => out.copy(shellColor).multiplyScalar(0.85 + 0.2 * Math.sin(p.y * 22 + p.x * 6));
+    parts.push(part(new THREE.SphereGeometry(0.42, 18, 14).scale(0.95, 0.95, 1.05).translate(0, 0.44, -0.08), band));
+    parts.push(part(new THREE.SphereGeometry(0.2, 12, 10).translate(0.1, 0.78, -0.22), band));
+    parts.push(part(new THREE.SphereGeometry(0.09, 8, 6).translate(0.15, 0.95, -0.28), band));
+  } else {
+    // เนอไรต์: เปลือกครึ่งทรงกลม ลายม้าลายดำ-เหลือง
+    const zebra = (p, _n, out) => out.copy(Math.sin(Math.atan2(p.y - 0.18, p.z + 0.05) * 9 + p.x * 4) > 0.25 ? '#1e1a14' : shellColor);
+    parts.push(part(new THREE.SphereGeometry(0.36, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.6).scale(1, 0.85, 1.1).translate(0, 0.16, -0.05), zebra));
+  }
+  return [mesh(merge(parts), { roughness: 0.55 })];
+}
+
+/** หอยสองฝา: ฝาล่างฝังทราย + ฝาบน (ชื่อ shell_top — เกมหมุนอ้า-หุบที่บานพับด้านหลัง) มีเส้นวงปีบนเปลือก */
+function buildClam(item) {
+  const base = new THREE.Color(item.color ?? '#6f6a4a');
+  const rings = (p, _n, out) => out.copy(base).multiplyScalar(0.75 + 0.35 * Math.abs(Math.sin(Math.hypot(p.x * 0.8, p.z) * 26)));
+  const half = (top) => new THREE.SphereGeometry(0.5, 22, 10, 0, Math.PI * 2, top ? 0 : Math.PI / 2, Math.PI / 2).scale(1.25, top ? 0.42 : 0.36, 0.9).translate(0, 0.19, 0);
+  const lower = mesh(merge([part(half(false), rings)]), { roughness: 0.6 });
+  const upper = mesh(merge([part(half(true), rings)]), { roughness: 0.6 });
+  upper.name = 'shell_top';
+  // เนื้อหอยด้านใน (เห็นตอนอ้าฝา)
+  const inner = mesh(merge([part(new THREE.SphereGeometry(0.42, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.2, 0.12, 0.85).translate(0, 0.18, 0), '#f0d9c4')]), { roughness: 0.4 });
+  return [lower, inner, upper];
+}
+
 const BUILDERS = {
+  snail: buildSnail,
+  clam: buildClam,
   vallis: buildVallis,
   fern: buildFern,
   stem: buildStemPlant,

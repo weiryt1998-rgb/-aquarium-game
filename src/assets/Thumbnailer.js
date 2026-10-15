@@ -1,28 +1,26 @@
 import * as THREE from 'three';
 import { disposeObject } from './AssetLoader.js';
+import { OffscreenShot } from '../render/OffscreenShot.js';
 import { genesKey } from '../models/molly/genetics.js';
+import { isColorHidden } from '../models/molly/fry.js';
 
 const SIZE = 192;
 
 /**
  * เรนเดอร์รูปตัวอย่างของปลา/ของตกแต่งสำหรับใช้ใน UI (ร้านค้า แถบตกแต่ง)
- * ใช้ renderer แยกขนาดเล็ก → ได้รูปจากโมเดลจริงอัตโนมัติเมื่อใส่ไฟล์ .glb
+ * ใช้ renderer หลักของเกมวาดลง render target (OffscreenShot) — ไม่เปิด WebGL context แยก (มือถือหน่วยความจำ GPU ไม่พอ)
+ * → ได้รูปจากโมเดลจริงอัตโนมัติเมื่อใส่ไฟล์ .glb
  */
 export class Thumbnailer {
-  constructor(factory) {
+  /** @param {THREE.WebGLRenderer} renderer renderer หลักของเกม */
+  constructor(factory, renderer) {
     this.factory = factory;
     this.cache = new Map();
-    this.renderer = null;
+    this.shot = new OffscreenShot(renderer);
+    this.scene = null;
   }
 
   #setup() {
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(SIZE, SIZE, false);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
-    this.renderer.setClearColor(0x000000, 0);
-
     this.scene = new THREE.Scene();
     this.scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x6a5a48, 1.6));
     const key = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -36,6 +34,11 @@ export class Thumbnailer {
   /** @param {object} [genes] ยีนสีของปลาลูกผสม — ได้รูปลายเฉพาะตัว */
   /** @param {number} [growth] ช่วงวัยของปลาตัวนั้น — ลูกปลาที่มีโมเดลแยกได้รูปลูกปลา (ไม่ระบุ = ตัวเต็มวัย) */
   fish(species, genes = null, growth = 1) {
+    // ลูกปลาสอดที่ยังไม่เผยสี: รูปเดียวกันทุกตัว (ไม่ให้รูปตัวอย่างบอกใบ้สีจริง — models/molly/fry.js)
+    if (isColorHidden(species, growth)) {
+      const baby = this.factory.isBabyLook(species, growth);
+      return this.#render(`fish:molly-fry${baby ? ':baby' : ''}`, () => this.factory.createFish(species, { animated: false, growth: 0 }).object, new THREE.Vector3(-1, 0.22, 0.45));
+    }
     const baby = this.factory.isBabyLook(species, growth);
     const key = `fish:${species.id}${genes ? `:${genesKey(genes)}` : ''}${baby ? ':baby' : ''}`;
     return this.#render(key, () => this.factory.createFish(species, { animated: false, genes, growth: baby ? 0 : 1 }).object, new THREE.Vector3(-1, 0.22, 0.45));
@@ -49,7 +52,7 @@ export class Thumbnailer {
     if (this.cache.has(key)) return this.cache.get(key);
     let url = '';
     try {
-      if (!this.renderer) this.#setup();
+      if (!this.scene) this.#setup();
       const object = build();
       this.scene.add(object);
       object.updateMatrixWorld(true);
@@ -61,8 +64,7 @@ export class Thumbnailer {
       this.camera.far = dist * 4;
       this.camera.updateProjectionMatrix();
       this.camera.lookAt(sphere.center);
-      this.renderer.render(this.scene, this.camera);
-      url = this.renderer.domElement.toDataURL('image/png');
+      url = this.shot.capture(this.scene, this.camera, { width: SIZE, height: SIZE, exposure: 1.1 });
       this.scene.remove(object);
       disposeObject(object);
     } catch (err) {

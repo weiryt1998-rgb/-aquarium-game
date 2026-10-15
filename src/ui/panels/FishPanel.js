@@ -46,7 +46,7 @@ export class FishPanel extends Panel {
           <img src="${this.game.thumbs.fish(f.species, f.data.genes, f.data.growth)}" alt="" draggable="false">
           <div class="info">
             <b>${escapeHtml(f.data.name)} ${genderIcon(f.data.gender)}${isPregnant(f.data) ? ' <span title="ตั้งท้อง">🤰</span>' : ''}</b>
-            <small>${f.species.name}${f.data.genes ? ` (${describeGenes(f.data.genes)})` : ''} · ${growth}${f.data.health < 30 ? ' · <span class="warn">ป่วย</span>' : ''}</small>
+            <small>${f.colorHidden ? 'ลูกปลาสอด (ยังไม่เผยสี 🎨)' : `${f.species.name}${f.data.genes ? ` (${describeGenes(f.data.genes)})` : ''}`} · ${growth}${f.data.health < 30 ? ' · <span class="warn">ป่วย</span>' : ''}</small>
             <div class="mini-meters">
               <span title="ความอิ่ม">🍽️ ${meter(f.data.satiety, 'satiety')}</span>
               <span title="สุขภาพ">❤️ ${meter(f.data.health, 'health')}</span>

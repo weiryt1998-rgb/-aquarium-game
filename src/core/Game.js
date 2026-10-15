@@ -13,6 +13,7 @@ import { Bubbles } from '../world/Bubbles.js';
 import { Sparkles } from '../world/Sparkles.js';
 import { FishManager, fishIdentity } from '../systems/FishManager.js';
 import { FoodSystem } from '../systems/FoodSystem.js';
+import { WasteSystem } from '../systems/WasteSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
 import { CareSystem } from '../systems/CareSystem.js';
 import { AlertSystem } from '../systems/AlertSystem.js';
@@ -54,8 +55,9 @@ export class Game {
     this.sceneMgr = new SceneManager(canvas, this.settings);
     this.assets = new AssetLoader();
     this.models = new ModelFactory(this.assets, { detail: () => this.sceneMgr.quality?.fishDetail ?? 'high' });
-    this.thumbs = new Thumbnailer(this.models);
-    this.tankPreviews = new TankPreviewer(this.models);
+    // รูปตัวอย่างใช้ renderer หลัก (ไม่เปิด WebGL context แยก — มือถือหน่วยความจำ GPU ไม่พอแล้วเกมเด้งออก)
+    this.thumbs = new Thumbnailer(this.models, this.sceneMgr.renderer);
+    this.tankPreviews = new TankPreviewer(this.models, this.sceneMgr);
 
     this.room = new Room(this.sceneMgr.scene);
     this.aquarium = new Aquarium(this.sceneMgr);
@@ -65,6 +67,8 @@ export class Game {
     this.sceneMgr.scene.add(this.sparkles.points);
 
     this.food = new FoodSystem(this);
+    /** ของเสียที่ปลาปล่อย (ภาพของระบบนิเวศ — หอยเก็บกิน/กรอง) */
+    this.waste = new WasteSystem(this);
     this.coins = new CoinSystem(this);
     this.decor = new DecorManager(this);
     this.fish = new FishManager(this);
@@ -130,6 +134,7 @@ export class Game {
     this.bubbles.setTank(this.aquarium.dims, (x, z) => this.aquarium.heightAt(x, z));
     this.sparkles.clear();
     this.food.clear();
+    this.waste.clear();
     this.coins.clear();
     this.decor.load(tank);
     this.sim = new TankSimulation(tank, this.#environment());
@@ -413,6 +418,7 @@ export class Game {
     this.sceneMgr.update(dt);
     this.fish.update(dt, this.time);
     this.food.update(dt, this.time);
+    this.waste.update(dt, this.time);
     this.coins.update(dt, this.time);
     this.decor.update(dt, this.time);
     this.alerts.update(dt);
@@ -446,6 +452,6 @@ export class Game {
 
   /** สภาพแวดล้อมของตู้จากฝั่งเกม (ของตกแต่ง ขนาดตู้) ให้ engine ใช้คำนวณ */
   #environment() {
-    return { decorHappiness: this.decor.happinessScore, cleanBonus: this.decor.cleanBonus, capacity: this.fish.capacity };
+    return { decorHappiness: this.decor.happinessScore, cleanBonus: this.decor.cleanBonus, capacity: this.fish.capacity, ecology: this.decor.ecology };
   }
 }

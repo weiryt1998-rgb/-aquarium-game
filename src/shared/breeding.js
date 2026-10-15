@@ -4,12 +4,16 @@ import { crossGenes, sanitizeGenes, variantGenes } from '../models/molly/genetic
 import { isNum } from './economy.js';
 
 /**
- * การตั้งท้องของปลาตัวเมีย — ใช้ร่วมกันทั้งในเกมและฝั่งตรวจคำสั่ง
- * fish.pregnantAt = เวลาจริง (ms) ที่ผสมพันธุ์ ไม่มีฟิลด์นี้ = ไม่ได้ตั้งท้อง
+ * การตั้งท้องของปลาตัวเมีย (ออกลูกเป็นตัวแบบปลาสอด ใช้กับทุกสายพันธุ์) — ใช้ร่วมกันทั้งในเกมและฝั่งตรวจคำสั่ง
+ * fish.pregnantAt  = เวลาจริง (ms) ที่ผสมพันธุ์ ไม่มีฟิลด์นี้ = ไม่ได้ตั้งท้อง
+ * fish.lastBirthAt = เวลาจริง (ms) ที่คลอดลูกครั้งล่าสุด — ตัวเมียพักฟื้น CONFIG.breeding.rest ก่อนผสมพันธุ์ใหม่
  */
 
 /** ระยะตั้งท้องเป็นมิลลิวินาทีจริง (เร่งตาม CONFIG.timeScale) */
 export const gestationMs = () => (CONFIG.breeding.gestation * 1000) / CONFIG.timeScale;
+
+/** ระยะพักฟื้นหลังคลอดเป็นมิลลิวินาทีจริง (เร่งตาม CONFIG.timeScale) */
+export const restMs = () => (CONFIG.breeding.rest * 1000) / CONFIG.timeScale;
 
 export const isPregnant = (fish) => fish?.gender === 'f' && isNum(fish.pregnantAt) && fish.pregnantAt > 0;
 
@@ -18,6 +22,11 @@ export const dueAt = (fish) => fish.pregnantAt + gestationMs();
 
 /** ความคืบหน้าการตั้งท้อง 0..1 */
 export const pregnancyProgress = (fish, now = Date.now()) => (isPregnant(fish) ? Math.min(1, Math.max(0, (now - fish.pregnantAt) / gestationMs())) : 0);
+
+/** เวลาที่ตัวเมียพักฟื้นหลังคลอดเสร็จ (ms) — 0 = ไม่ได้พักฟื้น */
+export const restEndsAt = (fish) => (fish?.gender === 'f' && isNum(fish.lastBirthAt) && fish.lastBirthAt > 0 ? fish.lastBirthAt + restMs() : 0);
+
+export const isResting = (fish, now = Date.now()) => now < restEndsAt(fish);
 
 // ── การผสมข้ามสี ───────────────────────────────────────────────
 

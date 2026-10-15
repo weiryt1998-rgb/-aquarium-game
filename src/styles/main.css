@@ -610,6 +610,13 @@ svg {
   font-size: 1rem;
 }
 
+.decor-panel header small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
 .cat-tabs {
   display: flex;
   gap: 4px;

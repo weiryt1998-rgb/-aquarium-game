@@ -5,9 +5,10 @@ import { Fish } from '../entities/Fish.js';
 import { getSpecies } from '../data/fish.js';
 import { getTankType } from '../data/tanks.js';
 import { formatDuration, rand } from '../utils/math.js';
-import { breedGroupOf, gestationMs } from '../shared/breeding.js';
+import { breedGroupOf, gestationMs, restMs } from '../shared/breeding.js';
 import { FishAI } from '../ai/FishAI.ts';
 import { describeGenes } from '../models/molly/genetics.js';
+import { hasFryLook } from '../models/molly/fry.js';
 
 /** ค่าที่สุ่มในเครื่องตอนสร้างปลาใหม่ — ส่งไปกับคำสั่งให้เซิร์ฟเวอร์สร้างปลาตัวเดียวกัน */
 export const fishIdentity = (r) => ({ id: r.id, name: r.name, gender: r.gender, breedCooldown: r.breedCooldown, coinTimer: r.coinTimer });
@@ -196,11 +197,15 @@ export class FishManager {
     this.ai.startle(at, amount, radius);
   }
 
-  /** หลัง engine คำนวณจังหวะใหม่: ปรับขนาดตัวตามการเติบโต */
+  /** หลัง engine คำนวณจังหวะใหม่: ปรับขนาดตัวตามการเติบโต (+ สีลูกปลาสอดค่อย ๆ เผย) */
   syncFromSim() {
     for (const fish of this.list) {
       if (fish.dying) continue;
       fish.updateScale();
+      // เทียบกับสถานะที่แสดงอยู่ (engine ปรับการเติบโตไปแล้วก่อนเรียกฟังก์ชันนี้)
+      const hidden = fish.colorHidden;
+      if (fish.shownHidden && !hidden) this.#revealColor(fish);
+      fish.shownHidden = hidden;
       // ลูกปลาโตพ้นวัยเด็ก → เปลี่ยนเป็นโมเดลตัวเต็มวัย (มีฟองอากาศเล็ก ๆ ตอนเปลี่ยนร่าง)
       if (fish.refreshLook()) {
         const p = fish.position;
@@ -208,6 +213,19 @@ export class FishManager {
         if (this.game.selectedFish === fish) this.game.ui.fishCard.show(fish);
       }
     }
+  }
+
+  /** ลูกปลาสอดโตจนเผยสีจริงครบ → ประกายระยิบรอบตัว + บอกผู้เล่นว่าได้สีอะไร (และค้นพบสายพันธุ์ใหม่ตอนนี้ ไม่ใช่ตอนคลอด) */
+  #revealColor(fish) {
+    const game = this.game;
+    const p = fish.position;
+    game.sparkles.burst(p, ['#ffffff', '#ffe9a8', '#bfe8ff'], 40);
+    game.bubbles.emit(p.x, p.y, p.z, 8, { spread: 0.15, minSize: 0.03, maxSize: 0.07 });
+    game.sound.play('born');
+    const look = fish.data.genes ? ` ${describeGenes(fish.data.genes)}` : '';
+    game.ui.toast(`🎨 "${fish.data.name}" เผยสีแล้ว! เป็น${fish.species.name}${look}`, 'success');
+    if (game.state.discover(fish.species.id)) game.ui.toast(`📘 ค้นพบสายพันธุ์ใหม่: ${fish.species.name}`, 'success');
+    if (game.selectedFish === fish) game.ui.fishCard.show(fish);
   }
 
   /**
@@ -234,12 +252,28 @@ export class FishManager {
       case 'died':
         this.#die(e.fish, e.cause);
         break;
+      case 'courtStart':
+        // ตัวผู้ว่ายตามเกี้ยวพาราสีตัวเมีย (Fish AI สถานะ court) — ฟองอากาศเล็ก ๆ ตอนเริ่มเกี้ยว
+        if (this.ai.court(e.dadId, e.momId)) {
+          const p = this.getById(e.dadId).position;
+          game.bubbles.emit(p.x, p.y, p.z, 3, { spread: 0.1, minSize: 0.02, maxSize: 0.05 });
+        }
+        break;
+      case 'courtEnd':
+        this.ai.endCourt(e.dadId);
+        break;
       case 'mated':
+        this.ai.endCourt(e.dadId);
         this.#mated(e);
         break;
       case 'birthBlocked': {
         const mom = this.getById(e.momId);
-        if (mom) game.ui.toast(`🤰 "${mom.data.name}" ครบกำหนดคลอดแล้ว แต่ตู้เต็ม — ขายหรือย้ายปลาออกเพื่อให้มีที่ว่าง`, 'warn');
+        if (!mom) break;
+        const why =
+          e.reason === 'population'
+            ? `ปลาในตู้ถึงเพดานการขยายพันธุ์ (${game.sim.breedingCap} ตัว) เพื่อให้เกมลื่น — ขายหรือย้ายปลาออกแล้วลูกจะคลอดเอง`
+            : 'แต่ตู้เต็ม — ขายหรือย้ายปลาออกเพื่อให้มีที่ว่าง';
+        game.ui.toast(`🤰 "${mom.data.name}" ครบกำหนดคลอดแล้ว ${why}`, 'warn');
         break;
       }
       case 'born':
@@ -275,7 +309,8 @@ export class FishManager {
     const p = mom.position;
     this.game.bubbles.emit(p.x, p.y, p.z, 6, { spread: 0.15, minSize: 0.03, maxSize: 0.07 });
     const cross = mom.species !== dad.species ? ` กับ "${dad.data.name}" (${dad.species.name})` : '';
-    const kind = fetus.genes ? ' ลูกจะเป็นลูกผสมสีใหม่ 🌈' : '';
+    // ลูกปลาสอดแรกเกิดยังไม่เห็นสี → ไม่บอกล่วงหน้าว่าเป็นลูกผสม ให้ลุ้นตอนลูกโต
+    const kind = hasFryLook(mom.species) ? ' ลุ้นกันว่าลูกจะได้สีอะไร 🎨' : '';
     this.game.ui.toast(`🤰 "${mom.data.name}" (${mom.species.name})${cross} ตั้งท้องแล้ว!${kind} จะคลอดในอีกประมาณ ${formatDuration(gestationMs() / 1000)}`, 'success');
     this.game.events.emit(EV.FISH_PREGNANT, { fish: mom, father: dad });
   }
@@ -289,10 +324,13 @@ export class FishManager {
     const p = baby.position;
     this.game.bubbles.emit(p.x, p.y, p.z, 10, { spread: 0.2, minSize: 0.03, maxSize: 0.08 });
     this.game.sound.play('born');
-    const look = record.genes ? ` — ${baby.species.name} ${describeGenes(record.genes)}` : '';
+    // ลูกปลาสอด: ตัวสีเข้มยังไม่เห็นสีจริง → ไม่บอกสี/สายพันธุ์ จนกว่าจะโตแล้วเผยสี (#revealColor)
+    const hidden = baby.colorHidden;
+    const look = hidden ? ' — ลูกปลาตัวสีเข้ม โตแล้วจะเผยสีจริง ลุ้นกันเลย!' : record.genes ? ` — ${baby.species.name} ${describeGenes(record.genes)}` : '';
     const momName = mom ? `"${mom.data.name}" (${mom.species.name}) ` : '';
-    this.game.ui.toast(`🐣 ${momName}คลอดลูกแล้ว! ยินดีต้อนรับ "${baby.data.name}" ${baby.data.gender === 'm' ? '♂' : '♀'}${look}`, 'success');
-    if (this.game.state.discover(baby.species.id)) this.game.ui.toast(`📘 ค้นพบสายพันธุ์ใหม่: ${baby.species.name}`, 'success');
+    const rest = mom ? ` · แม่ปลาพักฟื้น ${formatDuration(restMs() / 1000)}` : '';
+    this.game.ui.toast(`🐣 ${momName}คลอดลูกแล้ว! ยินดีต้อนรับ "${baby.data.name}" ${baby.data.gender === 'm' ? '♂' : '♀'}${look}${rest}`, 'success');
+    if (!hidden && this.game.state.discover(baby.species.id)) this.game.ui.toast(`📘 ค้นพบสายพันธุ์ใหม่: ${baby.species.name}`, 'success');
     this.game.events.emit(EV.FISH_BORN, { fish: baby, mother: mom });
     this.game.events.emit(EV.FISH_COUNT, { count: this.count });
   }

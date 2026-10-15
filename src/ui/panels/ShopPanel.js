@@ -96,7 +96,7 @@ export class ShopPanel extends Panel {
     else if (count.m > 0) advice = 'ขาดตัวเมีย';
     else if (count.f > 0) advice = 'ขาดตัวผู้';
     else advice = 'ต้องมีทั้ง ♂ และ ♀ ถึงจะมีลูก';
-    const help = 'ต้องมีตัวผู้และตัวเมียชนิดเดียวกันในตู้ เมื่อโตเต็มวัยและมีความสุข ตัวเมียจะตั้งท้องแล้วคลอดลูก';
+    const help = 'ต้องมีตัวผู้และตัวเมียชนิดเดียวกันในตู้ เมื่อโตเต็มวัย สุขภาพดี และมีความสุข ตัวผู้จะเกี้ยวพาราสี แล้วตัวเมียตั้งท้องและคลอดลูกครั้งละ 1 ตัว';
     return `
       <div class="gender-pick" role="radiogroup" aria-label="เลือกเพศ">
         <span>เพศ</span>

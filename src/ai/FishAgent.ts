@@ -14,7 +14,11 @@ import type { FishAI } from './FishAI.ts';
  */
 
 const MAX_PITCH = 0.55; // เงย/ก้มได้ไม่เกิน ~31°
+/** จังหวะเกี้ยวพาราสี (วินาที): ว่ายเคียงข้างโชว์ตัว COURT_DISPLAY วินาที แล้วพุ่งเข้าประชิดจนครบรอบ */
+const COURT_CYCLE = 5;
+const COURT_DISPLAY = 3.8;
 const _want = new Vec3();
+const _court = new Vec3();
 const _tmp = new Vec3();
 const _dir = new Vec3();
 const _ahead = new Vec3();
@@ -60,6 +64,9 @@ export class FishAgent {
   private hazardTime = 0;
   /** เพิ่งได้ยินเสียงโรยอาหาร (วินาทีที่เหลือ) — มองหาอาหารไกลขึ้น */
   foodAlert = 0;
+  /** ตัวเมียที่ตัวผู้ตัวนี้กำลังเกี้ยว / ตัวผู้ที่กำลังเกี้ยวตัวเมียตัวนี้ (ระบบขยายพันธุ์เป็นคนจับคู่ — ดู setMate) */
+  mate: FishAgent | null = null;
+  courtedBy: FishAgent | null = null;
 
   /** 0 หมดแรง → 100 เต็มที่ */
   energy: number;
@@ -97,7 +104,8 @@ export class FishAgent {
     const young = n.growth < 1 ? 0.85 : 1;
     const old = 1 - 0.12 * smoothstep(3 * 3600, 12 * 3600, n.age);
     const tired = 0.7 + 0.3 * smoothstep(5, 40, this.energy);
-    return this.species.speed * this.mods.speed * sick * young * old * tired * (n.pregnant ? 0.85 : 1);
+    // ตัวเมียที่ถูกเกี้ยวว่ายช้าลงเล็กน้อย (ตัวผู้ตามทัน)
+    return this.species.speed * this.mods.speed * sick * young * old * tired * (n.pregnant ? 0.85 : 1) * (this.courtedBy ? 0.85 : 1);
   }
 
   /** อัตราหมุนหัวสูงสุด (เรเดียน/วินาที) */
@@ -109,6 +117,14 @@ export class FishAgent {
   startle(amount: number): void {
     this.stress = Math.min(100, this.stress + amount * this.mods.sensitivity);
     if (this.stress >= this.mods.hideStress) this.thinkTimer = 0;
+  }
+
+  /** เริ่มเกี้ยวตัวเมีย mate (null = เลิกเกี้ยว) แล้วตัดสินใจใหม่ทันที */
+  setMate(mate: FishAgent | null): void {
+    if (this.mate) this.mate.courtedBy = null;
+    this.mate = mate;
+    if (mate) mate.courtedBy = this;
+    this.thinkTimer = 0;
   }
 
   // ── ตัดสินใจ (FSM) ──────────────────────────────────────────
@@ -148,6 +164,7 @@ export class FishAgent {
         this.stateMin = 0.5;
         break;
       case 'seekFood':
+      case 'court':
         this.stateMin = 0;
         break;
     }
@@ -175,19 +192,25 @@ export class FishAgent {
     }
     if (this.state === 'seekFood') this.targetFood = null;
 
-    // 3) อยู่สถานะเดิมจนครบเวลาขั้นต่ำ (ไม่เปลี่ยนใจถี่)
+    // 3) ตัวผู้ที่ถูกจับคู่ → ว่ายตามเกี้ยวพาราสีตัวเมีย (กลับมาเกี้ยวต่อหลังหลบ/กินอาหาร)
+    if (this.mate) {
+      if (this.state !== 'court') this.enter('court', world, ai);
+      return;
+    }
+
+    // 4) อยู่สถานะเดิมจนครบเวลาขั้นต่ำ (ไม่เปลี่ยนใจถี่)
     const settled = this.stateTime >= this.stateMin;
     if (this.state === 'hide' && (this.stress > 25 || !settled)) return;
     if (this.state === 'rest' && (this.energy < 85 || !settled) && n.health >= 25) return;
     if (this.state !== 'seekFood' && !settled) return;
 
-    // 4) เหนื่อยหรือป่วย → พัก
+    // 5) เหนื่อยหรือป่วย → พัก
     if (this.energy < this.mods.restBelow || n.health < 25) {
       if (this.state !== 'rest') this.enter('rest', world, ai);
       return;
     }
 
-    // 5) เลือกตามบุคลิก (สุ่มแบบถ่วงน้ำหนัก + โบนัสให้ทำต่อ)
+    // 6) เลือกตามบุคลิก (สุ่มแบบถ่วงน้ำหนัก + โบนัสให้ทำต่อ)
     const p = this.personality;
     const mates = ai.countMates(this, 3);
     const keep = (s: FishState) => (this.state === s ? 0.25 : 0);
@@ -397,6 +420,33 @@ export class FishAgent {
       case 'avoid':
         this.seek(this.target, max * 0.5, 1);
         return max * 0.7;
+      case 'court': {
+        const m = this.mate;
+        if (!m) {
+          this.thinkTimer = 0;
+          this.seek(this.target, max * 0.4, 1);
+          return max * 0.4;
+        }
+        // แบบปลาสอดตัวผู้: ว่ายเคียงข้างตัวเมียโชว์ครีบ สลับซ้าย/ขวาทุกรอบ แล้วพุ่งเข้าประชิดใต้ท้องตัวเมีย
+        const t = this.stateTime + this.phase;
+        const len = Math.max(m.needs.length, 0.3);
+        _court.copy(m.pos);
+        if (t % COURT_CYCLE < COURT_DISPLAY) {
+          const side = Math.floor(t / COURT_CYCLE) % 2 ? 1 : -1;
+          const off = len * 0.8 + this.radius;
+          // ด้านข้างตัวเมีย (ตั้งฉากกับทิศหัวบนระนาบ xz) เยื้องไปข้างหน้าเล็กน้อย
+          _court.x += m.heading.x * len * 0.5 + m.heading.z * side * off;
+          _court.z += m.heading.z * len * 0.5 - m.heading.x * side * off;
+          const far = smoothstep(1, 4, Math.sqrt(this.pos.distanceSq(m.pos)));
+          const speed = Math.max(m.speed * 1.05, max * (0.6 + 0.7 * far)); // อยู่ไกล → รีบว่ายตามไป
+          this.seek(_court, speed, 0.5);
+          return speed;
+        }
+        _court.addScaled(m.heading, -len * 0.3);
+        _court.y -= len * 0.15;
+        this.seek(_court, max * 1.25, 0.25);
+        return max * 1.25;
+      }
     }
   }
 

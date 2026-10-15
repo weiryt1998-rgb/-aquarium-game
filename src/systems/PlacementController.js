@@ -60,7 +60,7 @@ export class PlacementController {
     this.select(null);
     if (atDecorLimit(this.game.state.activeTank, item)) {
       this.game.sound.play('error');
-      this.game.ui.toast(`${item.name}วางได้ตู้ละ ${item.maxPerTank} ชิ้น`, 'warn');
+      this.game.ui.toast(`${item.name}วางได้ตู้ละ ${item.maxPerTank} ${item.critter ? 'ตัว' : 'ชิ้น'}`, 'warn');
       return;
     }
     if (!this.game.state.canAfford(item.price)) {
@@ -94,7 +94,8 @@ export class PlacementController {
     this.selected = decor;
     if (decor) {
       decor.setHighlight(true);
-      this.game.aquarium.showMarker(decor.data.x, decor.data.z, decor.item.radius, true);
+      // ตำแหน่งในฉาก (หอยอาจคลานออกจากจุดที่วางไว้ — ของตกแต่งอื่นอยู่ตรงจุดที่วางเสมอ)
+      this.game.aquarium.showMarker(decor.group.position.x, decor.group.position.z, decor.item.radius, true);
     } else {
       this.game.aquarium.hideMarker();
     }
@@ -158,8 +159,9 @@ export class PlacementController {
       this.state = 'moving';
       this.moved = false;
       this.valid = true;
-      this.moveOrigin = { x: decor.data.x, z: decor.data.z };
-      this.dragOffset = point ? { x: decor.data.x - point.x, z: decor.data.z - point.z } : { x: 0, z: 0 };
+      const at = decor.group.position;
+      this.moveOrigin = { x: at.x, z: at.z };
+      this.dragOffset = point ? { x: at.x - point.x, z: at.z - point.z } : { x: 0, z: 0 };
     } else {
       this.select(null);
     }

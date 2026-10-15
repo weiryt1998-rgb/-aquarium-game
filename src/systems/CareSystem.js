@@ -17,7 +17,7 @@ export class CareSystem {
   }
 
   get stats() {
-    return this.game.sim?.stats ?? { cleanliness: this.cleanliness, avgHappiness: 0, avgHealth: 0, avgSatiety: 0, crowdPenalty: 0 };
+    return this.game.sim?.stats ?? { cleanliness: this.cleanliness, avgHappiness: 0, avgHealth: 0, avgSatiety: 0, crowdPenalty: 0, ecology: 0 };
   }
 
   get cleanliness() {
@@ -63,6 +63,7 @@ export class CareSystem {
     this.game.sim.clean();
     this.game.state.data.lastCleanAt = Date.now();
     this.game.food.clear();
+    this.game.waste?.clear(); // ดูดตะกอน/ของเสียออกไปด้วย
     this.syncVisuals();
     const { w, d } = this.game.aquarium.dims;
     for (let i = 0; i < 6; i++) {

@@ -1,9 +1,10 @@
 import { CONFIG } from '../config.js';
 import { getSpecies } from '../data/fish.js';
-import { breedGroupOf, dueAt, isPregnant, planOffspring } from '../shared/breeding.js';
+import { breedGroupOf, dueAt, isPregnant, isResting, planOffspring } from '../shared/breeding.js';
 import { conditionOf, eat, healthDrain, newMood, secondsUntilDeath, sizeFactor, stepFish } from './needs.ts';
 import { createFishRecord } from './records.ts';
 import { dirtRate, waterStageIndex } from './water.ts';
+import { NO_ECOLOGY, ecologyReduction } from './ecology.ts';
 import type { DeathCause, Environment, FishCondition, FishMood, FishRecord, FoodEffect, SimEvent, SpeciesLike, TankRecord, TankStats } from './types.ts';
 
 /**
@@ -12,7 +13,7 @@ import type { DeathCause, Environment, FishCondition, FishMood, FishRecord, Food
  *
  *   const sim = new TankSimulation(tank, env);
  *   ทุกเฟรม: sim.advance(dtจริง)  → คืนจำนวนจังหวะที่คำนวณ (ส่วนใหญ่ 0 — เฟรมนั้นไม่ต้องคำนวณอะไร)
- *            for (const e of sim.drainEvents()) ...  (เหรียญ, โต, ตาย, อาการเปลี่ยน, สภาพน้ำ, ผสมพันธุ์, คลอด)
+ *            for (const e of sim.drainEvents()) ...  (เหรียญ, โต, ตาย, อาการเปลี่ยน, สภาพน้ำ, เกี้ยวพาราสี, ผสมพันธุ์, คลอด)
  *   การกระทำของผู้เล่น: feed / clean / heal / addDirt
  *
  * ค่าที่ไม่ต้องบันทึก (ความสุข ผลของอาหาร) เก็บใน moods แยกตาม id ปลา — record จากเซฟกลางถูกแทนที่ได้ตลอด
@@ -24,15 +25,19 @@ export class TankSimulation {
   /** เวลาจำลองสะสมที่ยังไม่ถึงจังหวะถัดไป */
   private acc = 0;
   private breedAcc = 0;
+  /** เวลาจำลองรวม (วินาทีเกม) ใช้นับเวลาเกี้ยวพาราสี */
+  private clock = 0;
   private readonly moods = new Map<string, FishMood>();
   private readonly conditions = new Map<string, FishCondition>();
   /** ตัวเมียที่ครบกำหนดคลอดแต่ตู้เต็ม (แจ้งครั้งเดียว) */
   private readonly blockedBirths = new Set<string>();
+  /** คู่ที่กำลังเกี้ยวพาราสี: id ตัวเมีย → ตัวผู้ + เวลาที่จะผสมพันธุ์ (ค่าชั่วคราว ไม่บันทึก — โหลดเกมใหม่ก็เริ่มเกี้ยวใหม่) */
+  private readonly courtships = new Map<string, { dadId: string; until: number }>();
   private events: SimEvent[] = [];
   private waterStage: number;
   private readonly random: () => number;
   private readonly now: () => number;
-  stats: TankStats = { cleanliness: 100, avgHappiness: 0, avgHealth: 0, avgSatiety: 0, crowdPenalty: 0 };
+  stats: TankStats = { cleanliness: 100, avgHappiness: 0, avgHealth: 0, avgSatiety: 0, crowdPenalty: 0, ecology: 0 };
 
   constructor(tank: TankRecord, env: Environment, { random = Math.random, now = () => Date.now() }: { random?: () => number; now?: () => number } = {}) {
     this.tank = tank;
@@ -67,10 +72,13 @@ export class TankSimulation {
 
   /** คำนวณระบบนิเวศ 1 จังหวะ (dt วินาทีเกม) */
   tick(dt: number): void {
+    this.clock += dt;
     const tank = this.tank;
     const living = tank.fish;
     const biomass = living.reduce((sum, f) => sum + ((getSpecies(f.speciesId) as SpeciesLike & { length?: number })?.length ?? 0.7) * sizeFactor(f), 0);
-    tank.cleanliness = Math.min(100, Math.max(0, tank.cleanliness - dirtRate(biomass, this.env.cleanBonus) * dt));
+    // หอย (ระบบนิเวศ) ทำให้น้ำสกปรกช้าลง
+    const dirt = dirtRate(biomass, this.env.cleanBonus) * (1 - ecologyReduction(this.env.ecology ?? NO_ECOLOGY, tank.cleanliness));
+    tank.cleanliness = Math.min(100, Math.max(0, tank.cleanliness - dirt * dt));
     const crowdPenalty = Math.max(0, living.length - this.env.capacity * 0.85) * 4;
     const ctx = { cleanliness: tank.cleanliness, decorHappiness: this.env.decorHappiness, crowdPenalty };
 
@@ -163,6 +171,19 @@ export class TankSimulation {
     return this.tank.fish.filter((f) => this.condition(f.id) === condition);
   }
 
+  /** คู่ที่ปลาตัวนี้กำลังเกี้ยวพาราสีอยู่ (id) — null = ไม่ได้เกี้ยว */
+  courtingPartner(fishId: string): string | null {
+    const c = this.courtships.get(fishId);
+    if (c) return c.dadId;
+    for (const [momId, x] of this.courtships) if (x.dadId === fishId) return momId;
+    return null;
+  }
+
+  /** จำนวนปลาสูงสุดที่ระบบขยายพันธุ์พาเกิดใหม่ได้ (ความจุตู้ หรือเพดานประชากร แล้วแต่อันไหนน้อยกว่า) */
+  get breedingCap(): number {
+    return Math.min(this.env.capacity, CONFIG.breeding.maxPopulation);
+  }
+
   drainEvents(): SimEvent[] {
     const out = this.events;
     this.events = [];
@@ -174,6 +195,8 @@ export class TankSimulation {
     this.moods.delete(fishId);
     this.conditions.delete(fishId);
     this.blockedBirths.delete(fishId);
+    this.courtships.delete(fishId);
+    for (const [momId, c] of this.courtships) if (c.dadId === fishId) this.courtships.delete(momId);
   }
 
   // ── ภายใน ──────────────────────────────────────────────────
@@ -223,29 +246,53 @@ export class TankSimulation {
       avgHealth: avg((f) => f.health),
       avgSatiety: avg((f) => f.satiety),
       crowdPenalty: Math.max(0, n - this.env.capacity * 0.85) * 4,
+      ecology: ecologyReduction(this.env.ecology ?? NO_ECOLOGY, this.tank.cleanliness),
     };
   }
 
   /**
-   * การขยายพันธุ์ (ทุก CONFIG.breeding.checkInterval วินาทีเกม)
-   * 1) ตัวเมียที่ตั้งท้องครบกำหนด → คลอดลูก (ต้องมีที่ว่างในตู้)
-   * 2) ตัวผู้และตัวเมียกลุ่มพันธุ์เดียวกันที่พร้อม → ผสมพันธุ์ ตัวเมียตั้งท้อง (ปลาสอดต่างสีได้ลูกผสม — planOffspring)
+   * พร้อมผสมพันธุ์: โตเต็มวัย สุขภาพดี (ไม่หิว/ไม่ป่วย) มีความสุข พ้นช่วงพักของตัวผู้ ไม่ได้ตั้งท้องหรือพักฟื้นหลังคลอด
+   * @param slack ผ่อนเกณฑ์ความสุข/สุขภาพระหว่างเกี้ยว (ไม่เลิกกลางคันเพราะค่าแกว่งนิดหน่อย)
+   */
+  private canBreed(f: FishRecord, now: number, slack = 0): boolean {
+    const B = CONFIG.breeding;
+    return (
+      f.growth >= 1 &&
+      f.health >= B.minHealth - slack &&
+      conditionOf(f) === 'healthy' &&
+      this.happiness(f.id) >= B.minHappiness - slack &&
+      f.breedCooldown <= 0 &&
+      !isPregnant(f) &&
+      !isResting(f, now)
+    );
+  }
+
+  /**
+   * การขยายพันธุ์ (ทุก CONFIG.breeding.checkInterval วินาทีเกม ไม่ใช่ทุกเฟรม) — ทุกสายพันธุ์ออกลูกเป็นตัวแบบปลาสอด
+   * 1) ตัวเมียที่ตั้งท้องครบกำหนด → คลอดลูก 1 ตัว (ต้องมีที่ว่าง) แล้วพักฟื้น CONFIG.breeding.rest
+   * 2) คู่ที่เกี้ยวครบเวลา → ผสมพันธุ์ ตัวเมียตั้งท้อง (ปลาสอดต่างสีได้ลูกผสม — planOffspring)
+   * 3) ตัวผู้และตัวเมียสายพันธุ์เดียวกันที่พร้อม → ตัวผู้เริ่มว่ายตามเกี้ยวพาราสี (courtStart → Fish AI แสดงท่าทาง)
    */
   private checkBreeding(): void {
     const now = this.now();
     this.deliverBabies(now);
-    if (this.tank.fish.length >= this.env.capacity) return;
+    this.updateCourtships(now);
     const B = CONFIG.breeding;
-    const ready = this.tank.fish.filter(
-      (f) => f.growth >= 1 && this.happiness(f.id) >= B.minHappiness && f.health >= B.minHealth && f.breedCooldown <= 0 && !isPregnant(f),
-    );
+    const fish = this.tank.fish;
+    // นับลูกที่จะตามมา (ตั้งท้องอยู่ + กำลังเกี้ยว) ด้วย — คลอดครบทุกตัวแล้วประชากรต้องไม่เกินเพดาน
+    let room = this.breedingCap - fish.length - this.courtships.size - fish.filter(isPregnant).length;
+    if (room <= 0) return;
+    const busy = new Set<string>();
+    for (const [momId, c] of this.courtships) busy.add(momId).add(c.dadId);
     const byGroup = new Map<string, FishRecord[]>();
-    for (const f of ready) {
+    for (const f of fish) {
+      if (busy.has(f.id) || !this.canBreed(f, now)) continue;
       const group = breedGroupOf(getSpecies(f.speciesId)) as string;
       if (!byGroup.has(group)) byGroup.set(group, []);
       byGroup.get(group)!.push(f);
     }
     for (const group of byGroup.values()) {
+      if (room <= 0) break;
       const males = group.filter((f) => f.gender === 'm');
       const females = group.filter((f) => f.gender === 'f');
       if (!males.length || !females.length) continue;
@@ -253,20 +300,40 @@ export class TankSimulation {
       const species = getSpecies(mom.speciesId) as SpeciesLike;
       if (this.random() > species.care.breedChance) continue;
       const dad = males[Math.floor(this.random() * males.length)];
-      const fetus = planOffspring(mom, dad);
+      this.courtships.set(mom.id, { dadId: dad.id, until: this.clock + B.courtship });
+      room--;
+      this.events.push({ type: 'courtStart', momId: mom.id, dadId: dad.id });
+    }
+  }
+
+  /** เกี้ยวครบเวลา → ผสมพันธุ์ / คู่ที่ไม่พร้อมแล้ว (หิว ป่วย ถูกขาย) → เลิกเกี้ยว */
+  private updateCourtships(now: number): void {
+    for (const [momId, c] of this.courtships) {
+      const mom = this.tank.fish.find((f) => f.id === momId);
+      const dad = this.tank.fish.find((f) => f.id === c.dadId);
+      if (!mom || !dad || !this.canBreed(mom, now, 10) || !this.canBreed(dad, now, 10)) {
+        this.courtships.delete(momId);
+        this.events.push({ type: 'courtEnd', momId, dadId: c.dadId });
+        continue;
+      }
+      if (this.clock < c.until) continue;
+      this.courtships.delete(momId);
+      const fetus = planOffspring(mom, dad, this.random);
       mom.pregnantAt = now;
       mom.fetus = fetus;
-      dad.breedCooldown = B.cooldown;
+      dad.breedCooldown = CONFIG.breeding.cooldown;
       this.events.push({ type: 'mated', momId: mom.id, dadId: dad.id, fetus });
     }
   }
 
-  /** ตัวเมียที่ครบกำหนดคลอด (รวมถึงที่ครบระหว่างปิดเกม) — ลูกเกิดจากแม่ ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้ */
+  /** ตัวเมียที่ตั้งท้องครบกำหนด (รวมถึงที่ครบระหว่างปิดเกม) คลอดลูกครั้งละ 1 ตัว — ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้ */
   private deliverBabies(now: number): void {
+    const cap = this.breedingCap;
     for (const mom of [...this.tank.fish]) {
       if (!isPregnant(mom) || now < dueAt(mom)) continue;
-      if (this.tank.fish.length >= this.env.capacity) {
-        if (!this.blockedBirths.has(mom.id)) this.events.push({ type: 'birthBlocked', momId: mom.id });
+      // ตู้เต็ม/ถึงเพดานประชากร → รอคลอดไว้ก่อน (ไม่ลบปลาตัวไหน) จนกว่าจะมีที่ว่าง
+      if (this.tank.fish.length >= cap) {
+        if (!this.blockedBirths.has(mom.id)) this.events.push({ type: 'birthBlocked', momId: mom.id, reason: cap < this.env.capacity ? 'population' : 'full' });
         this.blockedBirths.add(mom.id);
         continue;
       }
@@ -279,6 +346,7 @@ export class TankSimulation {
       delete mom.pregnantAt;
       delete mom.fetus;
       mom.breedCooldown = CONFIG.breeding.cooldown;
+      mom.lastBirthAt = now;
       this.events.push({ type: 'born', momId: mom.id, baby });
     }
   }

@@ -59,11 +59,13 @@ export function reconcileGame(game, next, { adopt = {}, server = next, sent = nu
       rec.speciesId = src.speciesId;
       rec.name = src.name;
       rec.gender = src.gender;
-      // การตั้งท้องเปลี่ยนด้วยคำสั่งเท่านั้น (ผสมพันธุ์/คลอด) → ใช้ค่าจาก next เสมอ
+      // การตั้งท้อง/พักฟื้นหลังคลอดเปลี่ยนด้วยคำสั่งเท่านั้น (ผสมพันธุ์/คลอด) → ใช้ค่าจาก next เสมอ
       if (src.pregnantAt) rec.pregnantAt = src.pregnantAt;
       else delete rec.pregnantAt;
       if (src.fetus) rec.fetus = cloneData(src.fetus);
       else delete rec.fetus;
+      if (src.lastBirthAt) rec.lastBirthAt = src.lastBirthAt;
+      else delete rec.lastBirthAt;
       if (src.genes) rec.genes = cloneData(src.genes);
       const sf = serverFish.get(src.id);
       if (!sf) return; // ปลาที่เพิ่งซื้อ/เกิดในเครื่องนี้และยังไม่ถึงคลาวด์ → ใช้ค่าในเครื่อง

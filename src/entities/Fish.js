@@ -3,6 +3,7 @@ import { forEachMaterial, disposeObject } from '../assets/AssetLoader.js';
 import { angleDelta, clamp, damp, lerp, pick, rand } from '../utils/math.js';
 import { noise2 } from '../utils/noise.js';
 import { isPregnant, pregnancyProgress } from '../shared/breeding.js';
+import { fryAmount, isColorHidden } from '../models/molly/fry.js';
 
 const _desired = new THREE.Vector3();
 const _steer = new THREE.Vector3();
@@ -51,6 +52,8 @@ export class Fish {
     this.dying = false;
     this.dyingTime = 0;
     this.updateScale();
+    /** สถานะ "ยังไม่เผยสี" ที่แสดงอยู่ล่าสุด — FishManager ใช้จับจังหวะเผยสี */
+    this.shownHidden = this.colorHidden;
   }
 
   /** สร้างโมเดล 3 มิติตามช่วงวัย (ลูกปลาบางสายพันธุ์มีโมเดลแยก — ดู ModelFactory.isBabyLook) */
@@ -62,6 +65,7 @@ export class Fish {
     this.swim = visual.swimUniforms;
     this.walk = visual.walkUniforms ?? null;
     this.rig = visual.rig ?? null; // ขยับโครงกระดูกด้วยโค้ด (ม้าน้ำ)
+    this.fry = visual.fry ?? null; // สีลูกปลาแรกเกิดทับสีจริง (ปลาสอด — models/molly/fry.js)
     // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ปลาอวกาศ) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
     this.trail = visual.trail ?? null;
     // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
@@ -104,6 +108,13 @@ export class Fish {
 
   updateScale() {
     this.group.scale.setScalar(this.length);
+    // ลูกปลาสอด: สีจริงค่อย ๆ เผยออกมาเมื่อโตขึ้น
+    if (this.fry) this.fry.value = fryAmount(this.species, this.data.growth);
+  }
+
+  /** ยังไม่เผยสีจริง (ลูกปลาสอดแรกเกิด) — UI ซ่อนชื่อสายพันธุ์/ยีนไว้ให้ผู้เล่นลุ้น */
+  get colorHidden() {
+    return isColorHidden(this.species, this.data.growth);
   }
 
   // ── การเคลื่อนที่ ────────────────────────────────────────────

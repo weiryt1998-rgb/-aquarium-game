@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { disposeObject, forEachMaterial } from '../assets/AssetLoader.js';
 import { hashString } from '../utils/math.js';
 import { PearlClam } from './PearlClam.js';
+import { Critter } from './Critter.js';
 
 const HIGHLIGHT = new THREE.Color('#2f6f3f');
 const BLACK = new THREE.Color('#000000');
@@ -16,12 +17,18 @@ export class Decoration {
     this.preview = preview;
     this.group = new THREE.Group();
     this.group.userData.decor = this;
-    this.object = game.models.createDecor(item, hashString(data.id)).object;
+    const visual = game.models.createDecor(item, hashString(data.id));
+    this.object = visual.object;
     this.clam = item.pearl && !preview ? new PearlClam(this.object, item) : null;
     this.group.add(this.object);
     this.bubbleId = null;
+    /** ตำแหน่งที่วางล่าสุด (หอยคลานออกจากจุดนี้ได้ จึงเทียบกับข้อมูลจากคลาวด์ด้วยค่านี้แทนตำแหน่งในฉาก) */
+    this.placed = { x: data.x, z: data.z };
+    this.critter = null;
     this.setPosition(data.x, data.z);
     this.setRotation(data.rotY ?? 0);
+    // หอย (ของตกแต่งที่มีชีวิต) — ขยับตัวเองทุกเฟรมใน DecorManager.update
+    this.critter = item.critter && !preview ? new Critter(this, { mixer: visual.mixer }) : null;
     if (item.bubbles && !preview) this.#addBubbles();
   }
 
@@ -29,16 +36,19 @@ export class Decoration {
   setPosition(x, z) {
     this.data.x = x;
     this.data.z = z;
+    this.placed = { x, z };
     const aq = this.game.aquarium;
     const r = this.item.radius * 0.6;
     const y = Math.min(aq.heightAt(x, z), aq.heightAt(x + r, z), aq.heightAt(x - r, z), aq.heightAt(x, z + r), aq.heightAt(x, z - r)) - 0.04;
     this.group.position.set(x, y, z);
+    this.critter?.reset(x, z);
     if (this.bubbleId) this.game.bubbles.moveSource(this.bubbleId, ...this.#bubblePoint());
   }
 
   setRotation(rotY) {
     this.data.rotY = rotY;
     this.group.rotation.y = rotY;
+    if (this.critter) this.critter.yaw = rotY; // หอยที่คลานได้: หันหัวใหม่แล้วคลานต่อจากทิศนี้
   }
 
   /** สิ่งกีดขวางทรงกระบอกให้ปลาว่ายหลบ (null = ว่ายผ่านได้) */
@@ -66,6 +76,7 @@ export class Decoration {
   }
 
   dispose() {
+    this.critter?.dispose();
     if (this.bubbleId) this.game.bubbles.removeSource(this.bubbleId);
     disposeObject(this.group);
   }

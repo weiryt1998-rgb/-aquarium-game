@@ -1,3 +1,5 @@
+import type { EcologyRoles } from './ecology.ts';
+
 /**
  * ชนิดข้อมูลของ Simulation Engine (ระบบนิเวศในตู้) — ไม่มีอะไรเกี่ยวกับ Three.js/DOM
  * record ของปลาและตู้เป็นข้อมูลเดียวกับที่บันทึกลงเซฟกลาง (shared/sanitize.js)
@@ -25,6 +27,8 @@ export interface FishRecord {
   genes?: unknown;
   pregnantAt?: number;
   fetus?: Fetus;
+  /** เวลาจริง (ms) ที่คลอดลูกครั้งล่าสุด (ตัวเมียพักฟื้นหลังคลอด) */
+  lastBirthAt?: number;
 }
 
 /** ตู้ 1 ใบในเซฟ */
@@ -62,6 +66,8 @@ export interface Environment {
   cleanBonus: number;
   /** จำนวนปลาสูงสุดของตู้ */
   capacity: number;
+  /** บทบาทของหอยในตู้ (กินตะไคร่ กินของเสีย กรองน้ำ — ดู sim/ecology.ts) ไม่ระบุ = ไม่มีหอย */
+  ecology?: EcologyRoles;
 }
 
 /** ค่าที่ไม่ต้องบันทึก (คำนวณใหม่ได้) ของปลาแต่ละตัว */
@@ -95,9 +101,12 @@ export type SimEvent =
   | { type: 'died'; fish: FishRecord; cause: DeathCause }
   | { type: 'condition'; fishId: string; condition: FishCondition; previous: FishCondition; secondsLeft: number | null }
   | { type: 'water'; stage: number; previous: number }
+  | { type: 'courtStart'; momId: string; dadId: string }
+  | { type: 'courtEnd'; momId: string; dadId: string }
   | { type: 'mated'; momId: string; dadId: string; fetus: Fetus }
   | { type: 'born'; momId: string; baby: FishRecord }
-  | { type: 'birthBlocked'; momId: string };
+  /** full = ตู้เต็มตามความจุ, population = ถึงเพดานประชากรของระบบขยายพันธุ์ (CONFIG.breeding.maxPopulation) */
+  | { type: 'birthBlocked'; momId: string; reason: 'full' | 'population' };
 
 /** ค่าเฉลี่ยระดับตู้ (แสดงบน HUD) */
 export interface TankStats {
@@ -106,4 +115,6 @@ export interface TankStats {
   avgHealth: number;
   avgSatiety: number;
   crowdPenalty: number;
+  /** สัดส่วนความสกปรกที่หอยช่วยลดตอนนี้ (0..CONFIG.ecology.maxReduction) */
+  ecology: number;
 }

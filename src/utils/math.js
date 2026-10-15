@@ -97,5 +97,5 @@ export function formatDuration(seconds) {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m} นาที`;
   const h = Math.floor(m / 60);
-  return `${h} ชม. ${m % 60} นาที`;
+  return m % 60 ? `${h} ชม. ${m % 60} นาที` : `${h} ชม.`;
 }

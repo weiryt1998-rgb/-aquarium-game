@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createDecorRecord } from '../core/GameState.js';
 import { Decoration } from '../entities/Decoration.js';
 import { getDecorItem } from '../data/decor.js';
+import { NO_ECOLOGY, algaeControl, sumEcology } from '../sim/ecology.ts';
 
 const _pearl = new THREE.Vector3();
 
@@ -17,6 +18,10 @@ export class DecorManager {
     this.covers = [];
     this.happinessScore = 0;
     this.cleanBonus = 0;
+    /** บทบาทของหอยทั้งตู้ (กินตะไคร่ กินของเสีย กรองน้ำ) ส่งให้ Simulation Engine — ดู sim/ecology.ts */
+    this.ecology = NO_ECOLOGY;
+    /** หอยในตู้ (ของตกแต่งที่มีชีวิต) */
+    this.critters = [];
   }
 
   load(tank) {
@@ -71,11 +76,12 @@ export class DecorManager {
       }
       decor.data = record;
       if (decor.id === skipId) continue;
-      if (decor.group.position.x !== record.x || decor.group.position.z !== record.z) {
+      // เทียบกับตำแหน่งที่วาง (หอยคลานออกไปจากจุดวางได้ — ไม่ดึงกลับทุกครั้งที่ซิงก์)
+      if (decor.placed.x !== record.x || decor.placed.z !== record.z) {
         decor.setPosition(record.x, record.z);
         changed = true;
       }
-      if (decor.group.rotation.y !== record.rotY) {
+      if (!decor.critter && decor.group.rotation.y !== record.rotY) {
         decor.setRotation(record.rotY);
         changed = true;
       }
@@ -88,8 +94,18 @@ export class DecorManager {
     return changed;
   }
 
-  /** เปิด-ปิดฝาหอยตามเวลาไข่มุก */
+  /** เปิด-ปิดฝาหอยตามเวลาไข่มุก + หอยที่มีชีวิตคลาน/กิน/กรองน้ำ (หยุดนิ่งตอนอยู่ในโหมดตกแต่ง) */
   update(dt, time) {
+    if (this.critters.length) {
+      const game = this.game;
+      const ctx = (this.critterCtx ??= {});
+      ctx.aquarium = game.aquarium;
+      ctx.waste = game.waste;
+      ctx.obstacles = this.obstacles;
+      ctx.frozen = game.placement.active;
+      ctx.algae = game.aquarium.algae?.level ?? 0;
+      for (const d of this.critters) d.critter.update(dt, time, ctx);
+    }
     for (const d of this.items) {
       if (!d.clam?.update(dt, time, d.data)) continue;
       const p = d.clam.pearlPosition();
@@ -124,12 +140,16 @@ export class DecorManager {
     const happiness = this.items.reduce((s, d) => s + (d.item.happiness ?? 0), 0);
     this.happinessScore = Math.min(1, happiness / 30);
     this.cleanBonus = Math.min(0.5, this.items.reduce((s, d) => s + (d.item.cleanBonus ?? 0), 0));
+    this.critters = this.items.filter((d) => d.critter);
+    this.ecology = sumEcology(this.items.map((d) => d.item));
+    this.game.aquarium.setAlgaeControl?.(algaeControl(this.ecology));
   }
 
-  /** ตรวจว่าวางทับของชิ้นอื่นมากเกินไปไหม (พืชวางซ้อนได้มากกว่า) */
+  /** ตรวจว่าวางทับของชิ้นอื่นมากเกินไปไหม (พืชวางซ้อนได้มากกว่า · หอยเคลื่อนที่ได้ จึงไม่นับการทับกัน) */
   overlaps(item, x, z, ignore = null) {
+    if (item.critter) return false;
     return this.items.some((d) => {
-      if (d === ignore) return false;
+      if (d === ignore || d.item.critter) return false;
       const factor = item.obstacle && d.item.obstacle ? 0.7 : 0.3;
       const min = (item.radius + d.item.radius) * factor;
       const dx = d.data.x - x;
@@ -151,6 +171,7 @@ export class DecorManager {
       d.dispose();
     }
     this.items = [];
+    this.critters = [];
     this.obstacles = [];
     this.covers = [];
   }

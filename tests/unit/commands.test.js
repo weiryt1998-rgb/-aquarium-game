@@ -9,7 +9,7 @@ import { getFood } from '../../src/data/food.js';
 import { getDecorItem } from '../../src/data/decor.js';
 import { todayKey } from '../../src/utils/math.js';
 import { T0, ctxAt, fishRecord, makeGame } from '../helpers/fixtures.js';
-import { gestationMs, planOffspring } from '../../src/shared/breeding.js';
+import { gestationMs, planOffspring, restMs } from '../../src/shared/breeding.js';
 import { seededRandom } from '../../src/utils/math.js';
 
 const run = (game, cmd, ctx = ctxAt(T0), meta = { tanks: {}, writers: {} }) => applyCommand(game, meta, cmd, ctx);
@@ -209,6 +209,27 @@ test('ผสมพันธุ์: ตัวเมียตั้งท้อง
   assert.equal(mom.breedCooldown, CONFIG.breeding.cooldown);
   assert.equal(game.stats.fishBorn, 1);
   rejects(() => run(game, born(mom.id, 'fish_b4'), ctxAt(T0 + 2 * G), meta), 'invalid'); // คลอดไปแล้ว
+});
+
+test('หลังคลอด: ตัวเมียพักฟื้น 30 นาที (นับจากเวลาที่คลอดในเครื่อง) ก่อนผสมพันธุ์ใหม่ได้', () => {
+  const dad = fishRecord('guppy', { gender: 'm' });
+  const mom = fishRecord('guppy', { gender: 'f' });
+  const game = makeGame({ fish: [dad, mom] });
+  const tank = game.tanks[0];
+  const meta = { tanks: {}, writers: {} };
+  const G = gestationMs();
+  const R = restMs();
+  assert.equal(G, 15 * 60 * 1000);
+  assert.equal(R, 30 * 60 * 1000);
+  run(game, { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id] }, ctxAt(T0), meta);
+  // คำสั่งคลอดส่งช้า 10 นาที → นับพักฟื้นจากตอนคลอดจริงในเครื่อง
+  run(game, { type: 'fishBorn', tankId: tank.id, motherId: mom.id, at: T0 + G, fish: { id: 'fish_r1', name: 'ลูก', gender: 'm' } }, ctxAt(T0 + G + 600_000), meta);
+  assert.equal(mom.lastBirthAt, T0 + G);
+  assert.equal(tank.fish.length, 3, 'คลอดครั้งละ 1 ตัว');
+  const mated = { type: 'fishMated', tankId: tank.id, parents: [dad.id, mom.id] };
+  rejects(() => run(game, mated, ctxAt(T0 + G + R - 60_000), meta), 'cooldown');
+  run(game, mated, ctxAt(T0 + G + R), meta);
+  assert.ok(mom.pregnantAt > 0);
 });
 
 test('ผสมข้ามสี: ปลาสอดต่างสีผสมกันได้ ลูกเป็นลูกผสมตามยีนที่กำหนดตอนตั้งท้อง', () => {

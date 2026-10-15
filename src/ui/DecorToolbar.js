@@ -2,6 +2,11 @@ import { DECOR_CATEGORIES, DECOR_ITEMS } from '../data/decor.js';
 import { atDecorLimit } from '../shared/economy.js';
 import { ICONS } from './icons.js';
 import { priceHtml } from './helpers.js';
+import { ecologyReduction } from '../sim/ecology.ts';
+
+/** บทบาทของหอยเป็นข้อความสั้น ๆ */
+const ecologyText = (e = {}) =>
+  [e.algae && `กินตะไคร่`, e.waste && `เก็บกินของเสีย`, e.filter && `กรองฝุ่นขยะในน้ำ`].filter(Boolean).join(' · ') || 'ช่วยระบบนิเวศ';
 
 /** แถบเครื่องมือโหมดตกแต่ง: เลือกของ (ซ้าย), ปุ่มหมุน/ขาย (ล่าง), คำแนะนำ (บน) */
 export class DecorToolbar {
@@ -38,16 +43,21 @@ export class DecorToolbar {
         const active = placement.previewItem?.id === item.id;
         const full = atDecorLimit(state.activeTank, item);
         const poor = full || !state.canAfford(item.price);
-        const title = item.pearl ? `${item.name} — เปิดฝาพร้อมไข่มุกทุก ${item.pearl.interval / 60} นาที แตะเก็บได้ ${item.pearl.reward.coins} เหรียญ` : item.name;
+        const title = item.pearl
+          ? `${item.name} — เปิดฝาพร้อมไข่มุกทุก ${item.pearl.interval / 60} นาที แตะเก็บได้ ${item.pearl.reward.coins} เหรียญ`
+          : item.critter
+            ? `${item.name} — ${item.description} (${ecologyText(item.ecology)} · ตู้ละไม่เกิน ${item.maxPerTank} ตัว)`
+            : item.name;
         return `
           <button class="decor-item ${active ? 'active' : ''} ${poor ? 'poor' : ''}" data-action="place" data-id="${item.id}" title="${title}">
             <img src="${this.game.thumbs.decor(item)}" alt="" draggable="false">
             <span>${item.name}</span>
-            ${full ? '<small>ตู้ละ 1 ชิ้น</small>' : priceHtml(item.price)}
+            ${full ? `<small>ครบ ${item.maxPerTank ?? 1} ${item.critter ? 'ตัว' : 'ชิ้น'}แล้ว</small>` : priceHtml(item.price)}
           </button>`;
       })
       .join('');
     const sel = placement.selected;
+    const eco = ecologyReduction(this.game.decor.ecology, state.activeTank.cleanliness);
     this.root.innerHTML = `
       <div class="decor-hint">${
         placement.state === 'placing'
@@ -55,7 +65,7 @@ export class DecorToolbar {
           : 'เลือกของจากแถบซ้าย แล้วแตะพื้นทรายเพื่อวาง · ลากของในตู้เพื่อย้าย · คลิกขวาลาก = หมุนกล้อง'
       }</div>
       <aside class="decor-panel">
-        <header><b>🪴 ตกแต่งตู้</b></header>
+        <header><b>🪴 ตกแต่งตู้</b>${eco > 0 ? `<small title="หอยในตู้ช่วยกินตะไคร่ เก็บของเสีย และกรองน้ำ">🐌 ระบบนิเวศช่วยให้น้ำสกปรกช้าลง ${Math.round(eco * 100)}%</small>` : ''}</header>
         <div class="cat-tabs">
           ${DECOR_CATEGORIES.map((c) => `<button class="${c.id === this.category ? 'active' : ''}" data-action="cat" data-id="${c.id}" title="${c.name}">${c.icon}<span>${c.name}</span></button>`).join('')}
         </div>

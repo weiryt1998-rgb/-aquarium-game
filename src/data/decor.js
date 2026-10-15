@@ -15,6 +15,16 @@
  * maxPerTank  = วางได้สูงสุดกี่ชิ้นต่อตู้ (ไม่ระบุ = ไม่จำกัด)
  * pearl       = ผลิตไข่มุกเป็นระยะ (ดู shared/economy.js → pearlReadyAt)
  * model.fallback = false → ไม่ใช้ไฟล์กลางของหมวด (plant.glb / rock.glb) แทน เพราะรูปทรงเฉพาะตัว
+ *
+ * ── หอย (หมวด critter) = ของตกแต่งที่มีชีวิต เคลื่อนที่ได้ ไม่ตาย ไม่ต้องดูแล ไม่ขยายพันธุ์ ──
+ * critter.move  = 'glass' คลานบนกระจกด้านในฝั่งซ้าย หลัง ขวา (วางบนทรายแล้วคลานไปเกาะกระจกเอง · ไม่เกาะกระจกหน้า ไม่บังวิว)
+ *                 'floor' คลานบนพื้นทราย ไปเก็บกินของเสียที่ปลาปล่อยลงมา
+ *                 'stay'  ฝังตัวอยู่กับที่ อ้าฝาดูดฝุ่นขยะที่ลอยลงมาใกล้ ๆ (หอยสองฝา)
+ * critter.speed = ความเร็วคลาน (หน่วยตู้/วินาที) · critter.gape = มุมอ้าฝาสูงสุด (เรเดียน, หอยสองฝา)
+ * ecology       = บทบาทในระบบนิเวศ { algae กินตะไคร่, waste กินของเสีย, filter กรองน้ำ } (ดู src/sim/ecology.ts)
+ * look.shell    = รูปเปลือกของโมเดลชั่วคราว: 'nerite' | 'mystery' | 'ramshorn' (หอยฝาเดียว), 'clam' (หอยสองฝา)
+ * ใส่โมเดลจริง: public/models/decor/<id>.glb หันหัวไป +Z ฐาน (เท้า) อยู่ที่ y = 0 — ถ้ามีคลิปแอนิเมชันชื่อ crawl/walk/move จะเล่นตอนคลาน
+ *               หอยสองฝา: ตั้งชื่อ node ฝาบนว่า shell_top เกมจะอ้า-หุบให้
  */
 
 const decorModel = (id, extra = {}) => ({ url: `models/decor/${id}.glb`, rotation: [0, 0, 0], fit: 'height', ...extra });
@@ -23,6 +33,7 @@ export const DECOR_CATEGORIES = [
   { id: 'plant', name: 'พืชน้ำ', icon: '🌿', fallbackModel: 'models/decor/plant.glb' },
   { id: 'rock', name: 'หิน', icon: '🪨', fallbackModel: 'models/decor/rock.glb' },
   { id: 'ornament', name: 'ของตกแต่ง', icon: '🏰', fallbackModel: null },
+  { id: 'critter', name: 'หอย', icon: '🐌', fallbackModel: null },
 ];
 
 export const DECOR_ITEMS = [
@@ -136,6 +147,22 @@ export const DECOR_ITEMS = [
     color: '#5f9e3a',
   },
   {
+    id: 'plant_alien',
+    name: 'พืชเอเลี่ยนสีฟ้า',
+    category: 'plant',
+    price: { coins: 180 },
+    // จาก Fish/Meshy_AI_Blue_Alien_Plant_04_….glb (แปลงด้วย scripts/build-model.mjs --error 0.01)
+    model: decorModel('plant_alien', { fallback: false }),
+    placeholder: 'stem',
+    height: 2.0,
+    radius: 0.9,
+    obstacle: false,
+    happiness: 5,
+    cleanBonus: 0.07,
+    sway: true,
+    color: '#3fa9e8',
+  },
+  {
     id: 'rock_grey',
     name: 'หินแม่น้ำ',
     category: 'rock',
@@ -236,6 +263,36 @@ export const DECOR_ITEMS = [
     happiness: 5,
     cleanBonus: 0,
     color: '#7a5634',
+  },
+  {
+    id: 'driftwood_mossy',
+    name: 'ขอนไม้มอส',
+    category: 'ornament',
+    price: { coins: 220 },
+    // จาก Fish/Meshy_AI_aquarium_mossy_driftw_….glb (แปลงด้วย scripts/build-model.mjs --error 0.01) มอสเขียวช่วยกรองน้ำเล็กน้อย
+    model: decorModel('driftwood_mossy', { fallback: false }),
+    placeholder: 'driftwood',
+    height: 2.1,
+    radius: 1.05,
+    obstacle: true,
+    happiness: 6,
+    cleanBonus: 0.03,
+    color: '#5f7a3a',
+  },
+  {
+    id: 'cliff_sanctuary',
+    name: 'วิหารผาโบราณ',
+    category: 'ornament',
+    price: { coins: 450 },
+    // จาก Fish/Meshy_AI_Ancient_Cliffside_San_….glb (แปลงด้วย scripts/build-model.mjs --error 0.01)
+    model: decorModel('cliff_sanctuary', { fallback: false }),
+    placeholder: 'castle',
+    height: 2.8,
+    radius: 1.1,
+    obstacle: true,
+    happiness: 8,
+    cleanBonus: 0,
+    color: '#a39274',
   },
   {
     id: 'castle',
@@ -357,6 +414,126 @@ export const DECOR_ITEMS = [
     cleanBonus: 0.12,
     bubbles: { rate: 14 },
     color: '#9fb3c8',
+  },
+
+  // ── หอย: ระบบนิเวศใต้น้ำ (โมเดลชั่วคราวจากโค้ดจนกว่าจะมีไฟล์ .glb) ──
+  {
+    id: 'snail_nerite',
+    name: 'หอยเนอไรต์ลายม้าลาย',
+    description: 'คลานเกาะกระจกกินตะไคร่ทั้งวัน ช่วยให้กระจกใสและน้ำสกปรกช้าลง',
+    category: 'critter',
+    price: { coins: 120 },
+    // จาก Fish/Meshy_AI_Nerite_Snail_….glb (แปลงด้วย scripts/build-model.mjs)
+    model: decorModel('snail_nerite', { fallback: false }),
+    placeholder: 'snail',
+    look: { shell: 'nerite', body: '#8a7a66' },
+    height: 0.22,
+    radius: 0.24,
+    obstacle: false,
+    happiness: 1,
+    cleanBonus: 0,
+    maxPerTank: 6,
+    critter: { move: 'glass', speed: 0.055 },
+    ecology: { algae: 0.05 },
+    color: '#d9b43a',
+  },
+  {
+    id: 'snail_ramshorn',
+    name: 'หอยเขาแกะแดง',
+    description: 'หอยตัวจิ๋วเปลือกขดสีแดง คลานเก็บของเสียบนพื้นทราย และแทะตะไคร่บ้างเล็กน้อย',
+    category: 'critter',
+    price: { coins: 80 },
+    // จาก Fish/Meshy_AI_Ramshorn_Snail_….glb
+    model: decorModel('snail_ramshorn', { fallback: false }),
+    placeholder: 'snail',
+    look: { shell: 'ramshorn', body: '#c46a5a' },
+    height: 0.22,
+    radius: 0.2,
+    obstacle: false,
+    happiness: 1,
+    cleanBonus: 0,
+    maxPerTank: 6,
+    critter: { move: 'floor', speed: 0.05 },
+    ecology: { waste: 0.035, algae: 0.01 },
+    color: '#c8352b',
+  },
+  {
+    id: 'snail_bladder',
+    name: 'หอยบลัดเดอร์',
+    description: 'หอยตัวจิ๋วเปลือกบางใส คลานเกาะกระจกเล็มตะไคร่ และเก็บเศษของเสียที่ติดกระจกไปด้วย',
+    category: 'critter',
+    price: { coins: 60 },
+    // จาก Fish/Meshy_AI_Bladder_Snail_….glb
+    model: decorModel('snail_bladder', { fallback: false }),
+    placeholder: 'snail',
+    look: { shell: 'mystery', body: '#9a8b78' },
+    height: 0.18,
+    radius: 0.17,
+    obstacle: false,
+    happiness: 1,
+    cleanBonus: 0,
+    maxPerTank: 6,
+    critter: { move: 'glass', speed: 0.06 },
+    ecology: { algae: 0.03, waste: 0.015 },
+    color: '#c9a77a',
+  },
+  {
+    id: 'snail_trumpet',
+    name: 'หอยมาเลเซีย',
+    description: 'หอยเปลือกเรียวแหลมเหมือนแตร คลานคุ้ยพื้นทรายกินของเสียและเศษตะกอนที่จมลงก้นตู้',
+    category: 'critter',
+    price: { coins: 90 },
+    // จาก Fish/Meshy_AI_Malaysian_Trumpet_Sna_….glb
+    model: decorModel('snail_trumpet', { fallback: false }),
+    placeholder: 'snail',
+    look: { shell: 'mystery', body: '#8f7f6a' },
+    height: 0.18,
+    radius: 0.24,
+    obstacle: false,
+    happiness: 1,
+    cleanBonus: 0,
+    maxPerTank: 6,
+    critter: { move: 'floor', speed: 0.045 },
+    ecology: { waste: 0.04 },
+    color: '#8a6a48',
+  },
+  {
+    id: 'snail_mystery',
+    name: 'หอยเชอรี่สีทอง',
+    description: 'หอยตัวโตสีทองอร่าม คลานหาของเสียที่ปลาปล่อยลงมาบนพื้นทรายกินจนเกลี้ยง',
+    category: 'critter',
+    price: { coins: 150 },
+    model: decorModel('snail_mystery', { fallback: false }),
+    placeholder: 'snail',
+    look: { shell: 'mystery', body: '#e9d9b5' },
+    height: 0.5,
+    radius: 0.32,
+    obstacle: false,
+    happiness: 2,
+    cleanBonus: 0,
+    maxPerTank: 4,
+    critter: { move: 'floor', speed: 0.07 },
+    ecology: { waste: 0.05 },
+    color: '#f0b324',
+  },
+  {
+    id: 'clam_freshwater',
+    name: 'หอยกาบน้ำจืด',
+    description: 'ฝังตัวในทราย อ้าฝาดูดฝุ่นขยะที่ลอยลงมาเป็นเครื่องกรองน้ำธรรมชาติ ยิ่งน้ำขุ่นยิ่งกรองได้มาก',
+    category: 'critter',
+    price: { coins: 200 },
+    model: decorModel('clam_freshwater', { fallback: false, fit: 'width', size: 0.8 }),
+    placeholder: 'clam',
+    look: { shell: 'clam' },
+    height: 0.3,
+    radius: 0.4,
+    obstacle: false,
+    happiness: 2,
+    cleanBonus: 0,
+    maxPerTank: 3,
+    critter: { move: 'stay', gape: 0.32 },
+    ecology: { filter: 0.05 },
+    color: '#6f6a4a',
   },
 ];
 
