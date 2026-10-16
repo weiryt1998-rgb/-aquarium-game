@@ -18,9 +18,9 @@ export const FISH_MODEL_LENGTH = 1.35;
 /** โมเดลปลาที่สร้างด้วยโค้ดแบบละเอียด (species.procedural.type) — ใช้แทนโมเดลชั่วคราว ถ้าไม่มีไฟล์ .glb ของสายพันธุ์นั้น */
 const PROCEDURAL_FISH = {
   // ลูกปลาสอดแรกเกิดยังไม่เห็นสีจริง (fry.js) — สีค่อย ๆ เผยตามการเติบโต
-  molly: (species, { animated, detail, genes, mesh, growth }) =>
-    createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh, fry: fryAmount(species, growth) }),
-  spacefish: (species, { animated, detail, mesh }) => createSpaceFish({ variant: species.procedural.variant, detail, animated, mesh }),
+  molly: (species, { animated, detail, genes, mesh, growth, baby }) =>
+    createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh, fry: fryAmount(species, growth), baby }),
+  spacefish: (species, { animated, detail, mesh, baby }) => createSpaceFish({ variant: species.procedural.variant, detail, animated, mesh, baby }),
 };
 
 /**
@@ -124,7 +124,7 @@ export class ModelFactory {
       const baby = this.isBabyLook(species, growth);
       const url = baby ? species.procedural.babyMesh : species.procedural.mesh;
       const mesh = url ? (this.assets.first([url])?.gltf ?? null) : null;
-      const { object, swimUniforms, trail = null, fry = null } = procedural(species, { animated, detail: this.detail(), genes, mesh, growth });
+      const { object, swimUniforms, trail = null, fry = null } = procedural(species, { animated, detail: this.detail(), genes, mesh, growth, baby });
       return { object, mixer: null, swimUniforms, trail, baby, fry, isPlaceholder: false };
     }
 

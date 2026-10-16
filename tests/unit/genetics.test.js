@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SPOT_REFS, crossGenes, describeGenes, genesKey, genesToVariant, mixHex, sanitizeGenes, variantGenes } from '../../src/models/molly/genetics.js';
 import { planOffspring, sanitizeFetus } from '../../src/shared/breeding.js';
-import { MOLLY_VARIANT_IDS } from '../../src/models/molly/variants.js';
+import { MOLLY_VARIANT_IDS, barSpec } from '../../src/models/molly/variants.js';
 import { seededRandom } from '../../src/utils/math.js';
 
 const COLORS = ['dalmatian', 'redhead', 'golden', 'calico', 'golddust'];
@@ -43,6 +43,18 @@ test('ยีน → ชุดสีสำหรับวาด: id คงที�
   assert.equal(v.spots[0].count, SPOT_REFS['calico:1'].count * 2);
   assert.notEqual(genesKey(g), genesKey({ ...g, seed: 1235 }), 'ลายต่างตัวกันได้ texture คนละชุด');
   assert.equal(mixHex('#000000', '#ffffff', 0.5), '#808080');
+});
+
+test('ลายบั้งของดัลเมเชียนถ่ายทอดให้ลูกผสม: คงค่าบั้ง/สีพื้นระหว่างบั้ง และจำกัดจำนวนบั้งเมื่อยีนหนาแน่นมาก', () => {
+  const g = sanitizeGenes({ ...variantGenes('golden'), spots: [{ ref: 'dalmatian:1', color: '#0b0c0e', k: 2 }], seed: 42 });
+  const layer = genesToVariant(g).spots[0];
+  assert.deepEqual(layer.bars, SPOT_REFS['dalmatian:1'].bars);
+  assert.equal(layer.count, SPOT_REFS['dalmatian:1'].count * 2);
+  const spec = barSpec(layer);
+  assert.equal(spec.count, 12, 'บั้งไม่เกิน 12');
+  assert.equal(spec.glow.front, SPOT_REFS['dalmatian:1'].glow.front);
+  assert.equal(barSpec(SPOT_REFS['dalmatian:0']), null, 'ชั้นลายจุดไม่ใช่ลายบั้ง');
+  assert.equal(describeGenes(g), 'ตัวสีทอง · ลายบั้งหินอ่อน');
 });
 
 test('ตรวจยีนจากภายนอก: ค่าผิดรูปแบบถูกแก้ ค่าที่ใช้ไม่ได้คืน null', () => {

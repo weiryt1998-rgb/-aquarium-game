@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Fish } from '../src/entities/Fish.js';
+import { AssetLoader } from '../src/assets/AssetLoader.js';
 import { ModelFactory } from '../src/assets/ModelFactory.js';
 import { getSpecies } from '../src/data/fish.js';
-import { QUALITY } from '../src/config.js';
+import { CONFIG, QUALITY } from '../src/config.js';
+import { pregnancyProgress } from '../src/shared/breeding.js';
 import { applyShaderMods, causticsMod, sharedUniforms } from '../src/render/shaderMods.js';
 import { SPACEFISH_VARIANT_IDS } from '../src/models/spacefish/variants.js';
 import { Sparkles } from '../src/world/Sparkles.js';
@@ -79,14 +81,19 @@ const sparkles = new Sparkles();
 scene.add(sparkles.points);
 
 // ── สถานะ ──────────────────────────────────────────────────────
-const state = { mode: 'hero', view: 'hero', variant: 'nebula_blue', detail: 'high', paused: false };
-const factory = new ModelFactory({ first: () => null }, { detail: () => state.detail });
+const state = { mode: 'breed', view: 'hero', variant: 'nebula_blue', detail: 'high', shape: 'file', age: 'adult', speed: 180, paused: false };
+// รูปทรงจากไฟล์ spacefish.glb / spacefish_baby.glb (เหมือนในเกม) หรือรูปทรงที่สร้างด้วยโค้ด (ตัวสำรองเมื่อไม่มีไฟล์)
+const assets = new AssetLoader();
+const { procedural } = getSpecies('spacefish_nebula_blue');
+await assets.preload([procedural.mesh, procedural.babyMesh]);
+const factory = new ModelFactory({ first: (urls) => (state.shape === 'file' ? assets.first(urls) : null) }, { detail: () => state.detail });
 const game = { models: factory, sparkles };
 let fishes = [];
 
-function makeFish(variant) {
+function makeFish(variant, extra = {}) {
   const species = getSpecies(`spacefish_${variant}`);
-  const record = { id: `p${Math.random()}`, speciesId: species.id, name: 'ดาว', gender: 'f', satiety: 80, health: 100, growth: 1, age: 0, breedCooldown: 99, coinTimer: 99 };
+  const growth = state.age === 'baby' ? 0.1 : 1;
+  const record = { id: `p${Math.random()}`, speciesId: species.id, name: 'ดาว', gender: 'f', satiety: 80, health: 100, growth, age: 0, breedCooldown: 99, coinTimer: 99, ...extra };
   const fish = new Fish(game, record, species);
   scene.add(fish.group);
   fishes.push(fish);
@@ -101,8 +108,17 @@ function rebuild() {
   fishes = [];
   sparkles.clear();
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY[state.detail].pixelRatio));
+  breed.mom = null;
   if (state.mode === 'tank') {
     SPACEFISH_VARIANT_IDS.forEach((v) => aquarium.randomPoint('middle', 0.8, makeFish(v).position));
+  } else if (state.mode === 'breed') {
+    // ตัวเมียตั้งท้องตั้งแต่เริ่ม + ตัวผู้ว่ายอยู่ด้วย (ไม่ผูกกับเซฟใด ๆ — แค่ดูการตั้งท้อง คลอด และลูกปลาโต)
+    breed.mom = makeFish(state.variant, { gender: 'f', growth: 1, pregnantAt: Date.now() });
+    makeFish(state.variant, { gender: 'm', growth: 1 });
+    for (const f of fishes) aquarium.randomPoint('middle', 1.2, f.position);
+    breed.born = 0;
+    breed.elapsed = 0;
+    breed.rest = 0;
   } else if (state.mode === 'lineup') {
     // 6 สีเรียงกัน 2 แถว หันข้าง
     SPACEFISH_VARIANT_IDS.forEach((v, i) => {
@@ -117,9 +133,60 @@ function rebuild() {
     f.position.set(0, 2, 0);
     f.yaw = 0;
   }
-  floor.visible = state.mode === 'tank';
+  floor.visible = state.mode === 'tank' || state.mode === 'breed';
   setView(state.mode === 'hero' ? state.view : state.mode);
 }
+
+// ── เร่งเฉพาะหน้าทดสอบ: นับเวลาแบบ dt เพื่อหยุดพัก/เปลี่ยนความเร็วได้โดยความคืบหน้าไม่กระโดด ──
+const MAX_BABIES = 4;
+const BABY_GROWTH_SPEED = 20; // คงโมเดลลูกปลาไว้ประมาณ 15 วินาทีเพื่อดูรายละเอียด
+const breed = { mom: null, born: 0, elapsed: 0, rest: 0 };
+
+function stepBreeding(dt) {
+  const mom = breed.mom;
+  if (!mom) return;
+  const now = Date.now();
+  // โตเฉพาะลูกที่มีอยู่ก่อนเฟรมนี้ ลูกแรกเกิดเริ่มจาก growth = 0 เสมอ
+  for (const f of fishes) {
+    if (!f.isPreviewBaby || f.data.growth >= 1) continue;
+    f.data.growth = Math.min(1, f.data.growth + (dt * BABY_GROWTH_SPEED) / f.species.care.growTime);
+    f.updateScale();
+    f.refreshLook();
+  }
+  if (mom.data.pregnantAt) {
+    breed.elapsed = Math.min(CONFIG.breeding.gestation, breed.elapsed + dt * state.speed);
+    // ให้ Fish.updateVisual ใช้ความคืบหน้าเดียวกับนาฬิกาพรีวิว โดยไม่แก้ CONFIG ของเกม
+    mom.data.pregnantAt = now - (breed.elapsed * 1000) / CONFIG.timeScale;
+  } else {
+    breed.rest = Math.max(0, breed.rest - dt);
+    if (breed.rest === 0) {
+      breed.elapsed = 0;
+      mom.data.pregnantAt = now;
+    }
+  }
+  // ครบกำหนดคลอด → ลูกปลาแรกเกิด 1 ตัวข้างแม่ แล้วตั้งท้องใหม่ในอีก 3 วินาที (ดูได้หลายรอบ)
+  if (mom.data.pregnantAt && breed.elapsed >= CONFIG.breeding.gestation) {
+    delete mom.data.pregnantAt;
+    const babies = fishes.filter((f) => f.isPreviewBaby);
+    if (babies.length >= MAX_BABIES) {
+      scene.remove(babies[0].group);
+      babies[0].dispose();
+      fishes.splice(fishes.indexOf(babies[0]), 1);
+    }
+    const baby = makeFish(state.variant, { gender: Math.random() < 0.5 ? 'f' : 'm', growth: 0 });
+    baby.position.copy(mom.position).add(new THREE.Vector3(0.25, -0.1, 0));
+    baby.isPreviewBaby = true;
+    breed.born++;
+    breed.rest = 3;
+  }
+  const babies = fishes.filter((f) => f.isPreviewBaby);
+  const growth = babies.map((f) => `${Math.round(f.data.growth * 100)}%${f.babyLook ? '' : ' (ตัวเต็มวัยแล้ว)'}`).join(', ');
+  const remaining = Math.ceil((CONFIG.breeding.gestation - breed.elapsed) / state.speed);
+  const preg = mom.data.pregnantAt ? `ตั้งท้อง ${Math.round(pregnancyProgress(mom.data, now) * 100)}% · คลอดใน ${remaining} วินาที` : 'เพิ่งคลอด พักก่อนตั้งท้องใหม่';
+  breedInfo.textContent = `ท้อง ×${state.speed} · ${preg} · คลอดแล้ว ${breed.born} ตัว · ลูกปลาโต ×${BABY_GROWTH_SPEED}${growth ? `: ${growth}` : ''}`;
+  document.getElementById('birthNow').disabled = !mom.data.pregnantAt;
+}
+const breedInfo = document.getElementById('breedInfo');
 
 function setView(view) {
   if (state.mode === 'hero') state.view = view;
@@ -127,15 +194,16 @@ function setView(view) {
   const d = 3.4;
   const pos = {
     tank: [0, 3.4, 11],
+    breed: [0, 3.0, 8.5],
     lineup: [0, 2.1, 8.2],
     hero: [2.4, 0.6, 1.9],
     front: [0, 0.1, d],
     side: [d, 0.05, 0],
     top: [0, d, -0.01],
   }[view] ?? [d, 0, 0];
-  if (view === 'tank' || view === 'lineup') {
+  if (view === 'tank' || view === 'breed' || view === 'lineup') {
     camera.position.set(...pos);
-    controls.target.set(0, view === 'tank' ? 2 : 2.05, 0);
+    controls.target.set(0, view === 'lineup' ? 2.05 : 2, 0);
   } else {
     camera.position.copy(c).add(new THREE.Vector3(...pos));
     controls.target.copy(c);
@@ -145,9 +213,12 @@ function setView(view) {
 }
 
 // ── UI ─────────────────────────────────────────────────────────
-const MODES = { hero: 'ดูใกล้', lineup: '6 สี', tank: 'ว่ายในตู้ (AI เกม)' };
+const MODES = { hero: 'ดูใกล้', lineup: '6 สี', tank: 'ว่ายในตู้ (AI เกม)', breed: 'ทดสอบออกลูก (เร่งเวลา)' };
+const SPEEDS = { 5: 'เร็ว ×5', 20: '×20', 60: '×60', 180: '×180 (5 วินาที)' };
 const VIEWS = { hero: 'มุมสวย', front: 'หน้า', side: 'ข้าง', top: 'บน' };
 const DETAILS = { high: 'สูง', medium: 'กลาง', low: 'ต่ำ (มือถือ)' };
+const AGES = { adult: 'ตัวเต็มวัย', baby: 'ลูกปลาแรกเกิด' };
+const SHAPES = { file: 'รูปทรงจากไฟล์ .glb', code: 'รูปทรงจากโค้ด (สำรอง)' };
 
 function buttons(el, items, current, onClick) {
   el.replaceChildren(
@@ -170,7 +241,16 @@ function renderButtons() {
   views.style.display = state.mode === 'hero' ? '' : 'none';
   buttons(views, VIEWS, state.view, setView);
   const variantsEl = document.getElementById('variants');
-  variantsEl.style.display = state.mode === 'hero' ? '' : 'none';
+  variantsEl.style.display = state.mode === 'hero' || state.mode === 'breed' ? '' : 'none';
+  const speedsEl = document.getElementById('speeds');
+  speedsEl.style.display = state.mode === 'breed' ? '' : 'none';
+  buttons(speedsEl, SPEEDS, String(state.speed), (s) => {
+    state.speed = Number(s);
+    renderButtons();
+  });
+  breedInfo.style.display = state.mode === 'breed' ? '' : 'none';
+  document.getElementById('breedActions').style.display = state.mode === 'breed' ? '' : 'none';
+  if (state.mode === 'breed') stepBreeding(0);
   const variants = Object.fromEntries(SPACEFISH_VARIANT_IDS.map((id) => [id, getSpecies(`spacefish_${id}`).nameEn.replace('Space Fish · ', '')]));
   buttons(variantsEl, variants, state.variant, (v) => {
     state.variant = v;
@@ -180,12 +260,25 @@ function renderButtons() {
     state.detail = d;
     rebuild();
   });
+  buttons(document.getElementById('ages'), AGES, state.age, (a) => {
+    state.age = a;
+    rebuild();
+  });
+  buttons(document.getElementById('shapes'), SHAPES, state.shape, (s) => {
+    state.shape = s;
+    rebuild();
+  });
   document.getElementById('pause').className = state.paused ? 'active' : '';
 }
 
 document.getElementById('pause').onclick = () => {
   state.paused = !state.paused;
   renderButtons();
+};
+document.getElementById('birthNow').onclick = () => {
+  if (!breed.mom?.data.pregnantAt) return;
+  breed.elapsed = CONFIG.breeding.gestation;
+  step(0);
 };
 document.getElementById('hide').onclick = () => {
   const body = document.getElementById('body');
@@ -215,8 +308,9 @@ function step(dt) {
   sharedUniforms.uTime.value += dt;
   ctx.time += dt;
   ctx.fish = fishes;
+  if (state.mode === 'breed') stepBreeding(dt);
   for (const f of fishes) {
-    if (state.mode === 'tank') f.updateMovement(dt, ctx);
+    if (state.mode === 'tank' || state.mode === 'breed') f.updateMovement(dt, ctx);
     else {
       // ว่ายอยู่กับที่ เร็ว-ช้าสลับกัน (เห็นแสงพลังงานแรงขึ้นตอนเร่ง) — ประกายดาวลอยไปทางหางเหมือนว่ายผ่าน
       const fwd = 0.45 + 0.4 * Math.max(0, Math.sin(ctx.time * 0.5));

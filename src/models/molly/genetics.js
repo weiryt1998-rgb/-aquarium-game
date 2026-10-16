@@ -31,7 +31,10 @@ export const SPOT_REFS = Object.fromEntries(PALETTES.flatMap((v) => spotLayersOf
 /** ชื่อเรียกลายแต่ละชั้น (ใช้บรรยายลูกผสม) */
 const SPOT_NAMES = {
   'dalmatian:0': 'จุดดัลเมเชียน',
+  'dalmatian:1': 'ลายบั้งหินอ่อน',
   'redhead:0': 'จุดครีบ',
+  'redhead:1': 'จุดแดง',
+  'redhead:2': 'จุดดำประปราย',
   'calico:0': 'ด่างส้ม',
   'calico:1': 'จุดดำ',
   'golddust:0': 'ลายด่างเข้ม',

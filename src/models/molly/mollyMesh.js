@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { applyShaderMods, causticsMod } from '../../render/shaderMods.js';
 import { createMollySwimMod, createMollySwimUniforms } from './mollySwim.js';
 import { FRY_COLORS, FRY_FIN_OPACITY } from './fry.js';
+import { barSpec } from './variants.js';
 
 /**
  * ปลาสอดจากไฟล์โมเดล public/models/fish/molly.glb (แปลงจากโมเดล Meshy ด้วย scripts/build-molly-model.mjs)
@@ -24,6 +25,10 @@ const MAX_LAYERS = 3;
 const SPOT_BOOST = 1.2;
 /** สัดส่วนของจุดขนาดใหญ่ (ครึ่งบนของช่วงขนาด) */
 const BIG_SPOTS = 0.3;
+/** ก้านครีบหลังของ molly.glb แผ่ออกจากจุดโคน (y, z) — [y, z, มุมกึ่งกลาง, ช่วงมุมทั้งครีบ] และระยะ [โคนครีบ, ปลายครีบ] จากจุดนั้น */
+const DORSAL_FAN = [0.0, 0.25, 0.64, 0.8];
+const DORSAL_LEN = [0.3, 0.75];
+const vecGlsl = (a) => a.map((x) => x.toFixed(3)).join(', ');
 
 const PAINT_VERTEX_PARS = /* glsl */ `
 #ifndef MOLLY_AFIN
@@ -34,8 +39,23 @@ attribute float aEye;
 varying vec3 vPaintPos;
 varying vec3 vPaintNormal;
 varying vec2 vPaintFin;
+flat varying float vPaintFinId;
 varying float vPaintEye;
+uniform float uBelly;
 `;
+
+/**
+ * พุงกลม: ขยายครึ่งล่างช่วงกลางลำตัวออกจากแกนกลางลำตัว (ทั้งลงล่างและออกด้านข้าง) ครีบท้อง/ครีบก้นขยับตามผิวไปด้วย
+ * ทำกับรูปทรงพักก่อนท่าว่าย — ลายคำนวณจาก vPaintPos (ตำแหน่งเดิม) จึงไม่ยืดตาม
+ */
+const BELLY_VERTEX = /* glsl */ `
+{
+  float bt = 0.5 - position.z;
+  float bAlong = exp(-pow((bt - 0.52) / 0.27, 2.0));
+  float bBelow = smoothstep(0.1, -0.22, position.y);
+  vec2 bAxis = vec2(0.0, 0.03);
+  transformed.xy = bAxis + (transformed.xy - bAxis) * (1.0 + uBelly * bAlong * bBelow);
+}`;
 
 const PAINT_FRAGMENT_PARS = /* glsl */ `
 uniform vec3 uBodyBase;
@@ -56,6 +76,11 @@ uniform vec4 uSpotBig[${MAX_LAYERS}];
 uniform vec4 uSpotFin[${MAX_LAYERS}];
 uniform vec4 uSpotShape[${MAX_LAYERS}];
 uniform float uSpotMatte[${MAX_LAYERS}];
+uniform vec4 uSpotBarA[${MAX_LAYERS}];
+uniform vec4 uSpotBarB[${MAX_LAYERS}];
+uniform vec4 uSpotBarC[${MAX_LAYERS}];
+uniform vec3 uSpotGlow[${MAX_LAYERS}];
+uniform vec3 uSpotGlowFront[${MAX_LAYERS}];
 uniform float uPaintSeed;
 uniform float uTexRef;
 uniform float uTexPatches;
@@ -68,6 +93,7 @@ uniform float uFryFinOpacity;
 varying vec3 vPaintPos;
 varying vec3 vPaintNormal;
 varying vec2 vPaintFin;
+flat varying float vPaintFinId;
 varying float vPaintEye;
 
 vec3 mollyHash(vec3 p) {
@@ -105,6 +131,84 @@ float mollySpot(vec3 p, vec3 n, vec3 offset, vec4 grid, vec4 shape, float salt) 
   float soft = 0.08 + 0.12 * shape.z;
   return 1.0 - smoothstep(r * (1.0 - soft), r, len / wob);
 }
+
+// value noise 3 มิติ (0..1) ใช้ทำขอบบั้งให้คดเคี้ยวและลายหินอ่อน
+float mollyNoise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  vec2 e = vec2(0.0, 1.0);
+  return mix(
+    mix(mix(mollyHash(i).x, mollyHash(i + e.yxx).x, f.x), mix(mollyHash(i + e.xyx).x, mollyHash(i + e.yyx).x, f.x), f.y),
+    mix(mix(mollyHash(i + e.xxy).x, mollyHash(i + e.yxy).x, f.x), mix(mollyHash(i + e.xyy).x, mollyHash(i + e.yyy).x, f.x), f.y),
+    f.z);
+}
+
+// ลายบั้งแนวตั้ง + ลายหินอ่อน 1 ชั้นบนลำตัว: t = 0 ปลายจมูก → 1 โคนหาง, up = +1 สันหลัง → -1 ท้อง
+// A = (จำนวนบั้ง, t เริ่ม, t สิ้นสุด, ความกว้างเทียบช่วงห่าง)  B = (ขอบล่างช่วงหน้า, ขอบล่างช่วงท้าย, หินอ่อน, ความเอียง)
+// px = ขนาด 1 พิกเซลบนตัวปลา (หน่วยลำตัว)
+float mollyBars(vec3 p, float t, float up, vec4 A, vec4 B, float salt, float px) {
+  float nA = mollyNoise(p * 8.0 + salt);
+  float nB = mollyNoise(p * 21.0 + salt * 1.7 + 3.1);
+  // ลายละเอียดของหินอ่อน (ยืดคอนทราสต์ให้กระจายเต็มช่วง 0..1) — ปลาอยู่ไกลจนลายเล็กกว่าพิกเซลจะค่อย ๆ เป็นค่ากลาง กันลายกะพริบ
+  // หมุนแกนก่อนสุ่ม ลายจุดเล็ก ๆ จะได้ไม่เรียงเป็นเหลี่ยมตามแกน
+  vec3 pr = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64) * p;
+  float nC = clamp((mollyNoise(pr * 110.0 + salt * 0.7 + 7.9) - 0.5) * 2.2 + 0.5, 0.0, 1.0);
+  nC = mix(nC, 0.5, smoothstep(0.3, 0.8, px * 110.0));
+  // ขอบบั้งคดเคี้ยว เอียงไปทางหัวตามความสูงเล็กน้อย
+  float tt = t + (nA - 0.5) * 0.09 + (nB - 0.5) * 0.05 - B.w * p.y;
+  float x = clamp((tt - A.y) / max(A.z - A.y, 0.05), 0.0, 1.0);
+  // ช่วงท้ายบั้งถี่กว่าช่วงหน้า ~1.6 เท่า (ลำตัวเรียวลง)
+  float u = x * (0.77 + 0.23 * x) * (A.x - 1.0);
+  float k = floor(u + 0.5);
+  vec3 h = mollyHash(vec3(k, salt, 3.7));
+  float w = A.w * (0.75 + 0.5 * h.x) * (0.9 + 0.3 * x); // บั้งช่วงโคนหางหนากว่า
+  // ความเข้มของบั้ง 1 กลางบั้ง → 0 นอกบั้ง ไล่แบบนุ่ม แล้วตัดด้วยลายละเอียด → ขอบบั้งแตกเป็นจุด/ก้อนแบบหินอ่อน
+  float b = 1.0 - smoothstep(w * 0.5 - 0.13, w * 0.5 + 0.13, abs(u - k - (h.y - 0.5) * 0.25));
+  b *= smoothstep(A.y - 0.04, A.y, tt) * (1.0 - smoothstep(A.z, A.z + 0.04, tt));
+  // ขอบล่าง: ช่วงท้องป่องบั้งสั้น ช่วงโคนหางยาวเกือบรอบตัว ปลายบั้งค่อย ๆ แตกเป็นจุด
+  float low = mix(B.x, B.y, smoothstep(A.y, A.z, t));
+  b *= smoothstep(low - 0.15, low + 0.2, up + (nB - 0.5) * 0.3);
+  // รูพรุนกลางบั้ง
+  float m = nA * 0.62 + nB * 0.38;
+  b *= smoothstep(0.3 * B.z - 0.05, 0.3 * B.z + 0.05, m);
+  float fleck = mix(0.5, nC, B.z);
+  float bar = smoothstep(-0.05, 0.05, b - fleck);
+  // ก้อนดำบนหัว (มากสุดที่กระหม่อม/จมูก) แก้ม และตามสันหลัง
+  // dark = สัดส่วนพื้นที่สีดำโดยประมาณ → แปลงเป็นระดับตัดของ noise (m กระจายรอบ 0.5)
+  float head = 1.0 - smoothstep(0.22, 0.32, t);
+  float dark = B.z * max(head * mix(0.2, 0.55, smoothstep(-0.45, 0.4, up)), 0.35 * smoothstep(0.6, 0.92, up));
+  float level = mix(1.0, 0.5 + (0.5 - dark) * 0.42, smoothstep(0.0, 0.15, dark));
+  float marble = smoothstep(-0.05, 0.05, smoothstep(-0.07, 0.07, m - level) - fleck);
+  return max(bar, marble);
+}
+
+// ริ้วดำตามก้านครีบหาง/ครีบหลัง n = จำนวนริ้ว — ก้านครีบแผ่ออกจากโคน จึงใช้มุมรอบจุดโคนเป็นพิกัดขวางก้าน
+// และระยะจากจุดโคน (0 โคนครีบ → 1 ปลายครีบ) เป็นพิกัดตามก้าน
+float mollyStreaks(vec3 p, float id, float n, float salt) {
+  // จุดโคน (y, z), มุมกึ่งกลาง, ช่วงมุมทั้งครีบ, ระยะโคน, ระยะปลาย
+  vec4 fan;
+  vec2 len;
+  if (n < 0.5 || id < 0.5) return 0.0;
+  if (id < 1.5) {
+    fan = vec4(-0.02, -0.5, 0.0, 1.9);
+    len = vec2(0.0, 0.48);
+  } else if (id < 2.5) {
+    fan = vec4(${vecGlsl(DORSAL_FAN)});
+    len = vec2(${vecGlsl(DORSAL_LEN)});
+  } else return 0.0;
+  vec2 d = vec2(p.y - fan.x, fan.y - p.z);
+  float r = (length(d) - len.x) / (len.y - len.x);
+  float u = ((atan(d.x, d.y) - fan.z) / fan.w + 0.5) * n + (mollyNoise(p * 16.0 + salt) - 0.5) * 0.7;
+  float k = floor(u);
+  vec3 h = mollyHash(vec3(k, salt, id * 5.3));
+  float w = (0.4 + 0.4 * h.y) * step(h.x, 0.85);
+  float s = 1.0 - smoothstep(w * 0.5 - 0.06, w * 0.5 + 0.03, abs(fract(u) - 0.5) + (mollyNoise(p * 45.0 + salt) - 0.5) * 0.12);
+  // ริ้วแต่ละเส้นเริ่ม/จบไม่เท่ากัน
+  float a0 = 0.1 + 0.35 * h.z;
+  float a1 = a0 + 0.35 + 0.6 * fract(h.z * 7.31);
+  return s * smoothstep(a0, a0 + 0.1, r) * (1.0 - smoothstep(a1, a1 + 0.15, r));
+}
 `;
 
 const PAINT_FRAGMENT = /* glsl */ `
@@ -134,13 +238,36 @@ mCol = mix(mCol, mFinCol, mFinAmt);
 
 float mMatte = 0.0;
 bool mOnFin = vPaintFin.x > 0.5;
+float mPx = length(fwidth(vPaintPos)); // ขนาด 1 พิกเซลบนตัวปลา (คำนวณนอก if เพราะ derivative ต้องอยู่ใน control flow เดียวกันทั้งกลุ่มพิกเซล)
+// สีพื้นระหว่างบั้ง (ชั้นลายบั้ง) ทาก่อนลายทุกชั้นเพื่อไม่ให้กลบจุดของชั้นอื่น:
+// เหนือขอบล่างของบั้ง (ท้องยังเป็นสีตัว) ช่วงหน้าสี front → ช่วงท้ายสี color
+for (int i = 0; i < ${MAX_LAYERS}; i++) {
+  if (i >= uSpotCount) break;
+  if (uSpotBarA[i].x < 0.5) continue;
+  vec4 A = uSpotBarA[i];
+  vec4 C = uSpotBarC[i];
+  float low = mix(uSpotBarB[i].x, uSpotBarB[i].y, smoothstep(A.y, A.z, mT));
+  float g = C.z * smoothstep(low - 0.1, low + 0.35, mN.y) * smoothstep(A.y - 0.08, A.y + 0.05, mT);
+  vec3 ground = mix(uSpotGlowFront[i], uSpotGlow[i], smoothstep(C.y - 0.12, C.y + 0.12, mT));
+  mCol = mix(mCol, ground, g * (1.0 - mFinAmt));
+}
 for (int i = 0; i < ${MAX_LAYERS}; i++) {
   if (i >= uSpotCount) break;
   float s;
-  if (uSpotShape[i].w > 0.5 && uTexPatches > 0.5) s = mPatch;
+  float salt = float(i) * 7.13 + uPaintSeed * 91.0;
+  if (uSpotBarA[i].x > 0.5) {
+    // ลำตัว = บั้ง, ครีบ = ริ้วตามก้านครีบ — โคนครีบที่ติดมากับ mesh ลำตัว (สามเหลี่ยมที่มีทั้งจุดลำตัวและจุดครีบ)
+    // ค่อย ๆ เปลี่ยนจากบั้งเป็นริ้ว ส่วนชนิดครีบใช้ค่า flat เพราะค่าที่ interpolate ข้ามรอยต่อ (เช่น 0 → 2) จะผ่าน 1 ซึ่งเป็นรหัสของหาง
+    #ifdef MOLLY_FINS
+      float onFin = 1.0;
+    #else
+      float onFin = smoothstep(0.15, 0.6, vPaintFin.x);
+    #endif
+    s = onFin < 0.999 ? mollyBars(vPaintPos, mT, mN.y, uSpotBarA[i], uSpotBarB[i], salt, mPx) * (1.0 - onFin) : 0.0;
+    if (onFin > 0.001) s = max(s, mollyStreaks(vPaintPos, vPaintFinId, uSpotBarC[i].x, salt) * onFin);
+  } else if (uSpotShape[i].w > 0.5 && uTexPatches > 0.5) s = mPatch;
   else {
     vec3 off = vec3(uPaintSeed * 37.0 + float(i) * 5.3);
-    float salt = float(i) * 7.13 + uPaintSeed * 91.0;
     // จุดเล็กกับจุดใหญ่ใช้ตารางคนละขนาด จุดใหญ่จะได้ไม่ถูกจำกัดด้วยช่องเล็ก ๆ ของจุดที่หนาแน่น
     s = mOnFin
       ? mollySpot(vPaintPos, mN, off, uSpotFin[i], uSpotShape[i], salt)
@@ -179,9 +306,10 @@ const FRY_PAINT = {
 /**
  * @param {object} paint uniform ของชุดสี (จาก getPaint) ใช้ร่วมกันทุกตัวที่สีเดียวกัน
  * @param {{ value: number }} fry สีลูกปลาแรกเกิดของตัวนี้ 0..1 (แยกต่อตัว — ปรับตามการเติบโต)
+ * @param {number} belly ขยายพุงเพิ่ม (สัดส่วน เช่น 0.2 = กว้างขึ้น 20% ตรงกลางพุง) 0 = รูปทรงตามไฟล์
  */
-function createPaintMod(paint, texRef = 0.97, texPatches = true, fry = { value: 0 }) {
-  const own = { uTexRef: { value: texRef }, uTexPatches: { value: texPatches ? 1 : 0 }, uFry: fry, ...FRY_PAINT };
+function createPaintMod(paint, texRef = 0.97, texPatches = true, fry = { value: 0 }, belly = 0) {
+  const own = { uTexRef: { value: texRef }, uTexPatches: { value: texPatches ? 1 : 0 }, uFry: fry, uBelly: { value: belly }, ...FRY_PAINT };
   return {
     key: 'molly-paint',
     apply(shader) {
@@ -192,7 +320,9 @@ function createPaintMod(paint, texRef = 0.97, texPatches = true, fry = { value: 
         vPaintPos = position;
         vPaintNormal = normal;
         vPaintFin = aFin;
-        vPaintEye = aEye;`,
+        vPaintFinId = aFin.x;
+        vPaintEye = aEye;
+        ${BELLY_VERTEX}`,
       );
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${PAINT_FRAGMENT_PARS}`)
@@ -232,6 +362,10 @@ function getPaint(V) {
   const color = (hex) => ({ value: new THREE.Color(hex) });
   const layers = spotLayers(V).slice(0, MAX_LAYERS);
   const pad = (fn, empty) => Array.from({ length: MAX_LAYERS }, (_, i) => (layers[i] ? fn(layers[i]) : empty()));
+  // ชั้นลายบั้งไม่สุ่มจุด (ตารางจุดว่าง) ใช้ uSpotBar* แทน
+  const bars = layers.map(barSpec);
+  const padBars = (fn) => Array.from({ length: MAX_LAYERS }, (_, i) => (bars[i] ? fn(bars[i]) : new THREE.Vector4()));
+  const noGrid = () => new THREE.Vector4(1, 0, 0, 0);
   const head = V.head;
   paint = {
     uBodyBase: color(V.body.base),
@@ -248,20 +382,23 @@ function getPaint(V) {
     uSpotCount: { value: layers.length },
     uSpotColor: { value: pad((L) => new THREE.Color(L.color), () => new THREE.Color()) },
     // จุดแบ่งเป็น 2 ขนาด: เล็ก (minSize → กึ่งกลาง) และใหญ่ (กึ่งกลาง → maxSize)
-    uSpotSmall: { value: pad((L) => bodySpots(L, false), () => new THREE.Vector4(1, 0, 0, 0)) },
-    uSpotBig: { value: pad((L) => bodySpots(L, true), () => new THREE.Vector4(1, 0, 0, 0)) },
+    uSpotSmall: { value: pad((L) => (L.bars ? noGrid() : bodySpots(L, false)), noGrid) },
+    uSpotBig: { value: pad((L) => (L.bars ? noGrid() : bodySpots(L, true)), noGrid) },
     uSpotFin: {
-      value: pad(
-        (L) => {
-          // finSize ในชุดสีเทียบกับขนาด texture ครีบ (ครีบยาว ~0.4 หน่วยลำตัว)
-          const maxR = (L.finSize ?? 0.05) * 0.4;
-          return new THREE.Vector4(...spotGrid((L.finCount ?? 0) * FIN_PIECES, maxR, FIN_AREA), maxR * 0.35, maxR);
-        },
-        () => new THREE.Vector4(1, 0, 0, 0),
-      ),
+      value: pad((L) => {
+        if (L.bars) return noGrid();
+        // finSize ในชุดสีเทียบกับขนาด texture ครีบ (ครีบยาว ~0.4 หน่วยลำตัว)
+        const maxR = (L.finSize ?? 0.05) * 0.4;
+        return new THREE.Vector4(...spotGrid((L.finCount ?? 0) * FIN_PIECES, maxR, FIN_AREA), maxR * 0.35, maxR);
+      }, noGrid),
     },
     uSpotShape: { value: pad((L) => new THREE.Vector4(L.sizePow ?? 2.3, L.back ?? 0.3, L.blur ?? 0.5, L.patches ? 1 : 0), () => new THREE.Vector4()) },
     uSpotMatte: { value: pad((L) => L.matte ?? 0.85, () => 0) },
+    uSpotBarA: { value: padBars((b) => new THREE.Vector4(b.count, b.from, b.to, b.width)) },
+    uSpotBarB: { value: padBars((b) => new THREE.Vector4(b.low[0], b.low[1], b.marble, b.slant)) },
+    uSpotBarC: { value: padBars((b) => new THREE.Vector4(b.streaks, b.glow?.from ?? 0, b.glow?.amount ?? 0, 0)) },
+    uSpotGlow: { value: Array.from({ length: MAX_LAYERS }, (_, i) => new THREE.Color(bars[i]?.glow?.color ?? '#000000')) },
+    uSpotGlowFront: { value: Array.from({ length: MAX_LAYERS }, (_, i) => new THREE.Color(bars[i]?.glow?.front ?? '#000000')) },
     uPaintSeed: { value: V.seed ?? 0.1234 },
   };
   paints.set(V.id, paint);
@@ -296,11 +433,12 @@ function prepare(gltf) {
 /**
  * @param {object} gltf ไฟล์ molly.glb ที่โหลดแล้ว
  * @param {object} V ชุดสี (variants.js หรือ genesToVariant)
- * @param {{ fry?: number }} options fry = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
+ * @param {{ fry?: number, belly?: number }} options fry = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
+ *  belly = ขยายพุงให้กลมขึ้น (สัดส่วน) — ตัวเต็มวัยใช้ MOLLY_BELLY, ไฟล์ลูกปลาใช้ 0
  * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object, fry: { value: number } } | null}
  *  null = ไฟล์ใช้ไม่ได้ · fry = uniform ของตัวนี้ (ตั้ง .value ใหม่เมื่อปลาโตขึ้น)
  */
-export function createMeshMolly(gltf, V, { detail = 'high', animated = true, caustics = true, fry = 0 } = {}) {
+export function createMeshMolly(gltf, V, { detail = 'high', animated = true, caustics = true, fry = 0, belly = 0 } = {}) {
   const src = prepare(gltf);
   if (!src) return null;
   const M = V.material;
@@ -342,7 +480,7 @@ export function createMeshMolly(gltf, V, { detail = 'high', animated = true, cau
 
   // texRef = ความสว่างปกติของเท็กซ์เจอร์ในไฟล์ (ลูกปลาสีเทาเข้มกว่าตัวเต็มวัยสีขาว) ให้ย้อมสีออกมาสว่างเท่ากัน
   const fryUniform = { value: fry };
-  const paint = createPaintMod(getPaint(V), src.texRef, src.texPatches, fryUniform);
+  const paint = createPaintMod(getPaint(V), src.texRef, src.texPatches, fryUniform, belly);
   let swimUniforms = null;
   let swim = null;
   if (animated) {

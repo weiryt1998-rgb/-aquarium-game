@@ -164,9 +164,9 @@ model: { url: 'models/fish/betta.glb', rotation: [0, -Math.PI / 2, 0], scale: 1.
 | --- | --- |
 | `MollyModel.js` | `createMolly({ variant, detail, animated })` — ประกอบ mesh + วัสดุ PBR (clearcoat, ประกายมุก) |
 | `mollyShape.js` | รูปทรงลำตัว ปาก ตา ครีบทั้ง 7 ชิ้น (ปรับรูปร่างได้จากตาราง `TOP` / `BOTTOM` / `WIDTH`) |
-| `mollyTextures.js` | วาดลายเกล็ด, normal map, จุดดัลเมเชียน, ก้านครีบ, ม่านตา ตอนรันไทม์ |
+| `mollyTextures.js` | วาดลายเกล็ด, normal map, ลายจุด/ลายบั้ง, ก้านครีบ, ม่านตา ตอนรันไทม์ |
 | `mollySwim.js` | แอนิเมชันว่ายใน vertex shader: ลำตัวเป็นคลื่น สะบัดหาง ครีบอกพัด โค้งตัวตอนเลี้ยว |
-| `variants.js` | ชุดสี: `dalmatian`, `redhead`, `golden`, `calico`, `golddust`, `black`, `white`, `silver` (ลายจุดหลายชั้น + สีหัว) |
+| `variants.js` | ชุดสี: `dalmatian`, `redhead`, `golden`, `calico`, `golddust`, `black`, `white`, `silver` (ลายจุดหลายชั้น + สีหัว + ลายบั้ง/หินอ่อน เช่นดัลเมเชียน) |
 
 - **หน้าทดสอบ**: `npm run dev` แล้วเปิด `/preview/molly.html` — หมุนดูรอบตัว, ดูการเลี้ยว, ใส่ปลาหลายสิบตัวเพื่อดู FPS, สลับสีและระดับรายละเอียด
   (หน้านี้ไม่ถูกรวมในไฟล์ build)

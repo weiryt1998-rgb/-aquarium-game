@@ -26,6 +26,9 @@ import { FRY_COLORS, FRY_FIN_OPACITY } from './fry.js';
 /** ความยาวรวมจากปลายจมูกถึงปลายหาง เทียบกับลำตัว 1 หน่วย */
 export const MOLLY_TOTAL_LENGTH = 1.46;
 
+/** พุงตัวเต็มวัยของไฟล์ molly.glb ขยายกลมขึ้นอีก (สัดส่วน) — ดู BELLY_VERTEX ใน mollyMesh.js */
+export const MOLLY_BELLY = 0.3;
+
 function createMaterials(variant, detail, textures) {
   const M = variant.material;
   const fancy = detail !== 'low'; // มือถือ/คุณภาพต่ำ: ใช้ MeshStandardMaterial ที่เบากว่า
@@ -103,13 +106,14 @@ function fryTint(materials, initial) {
  *  variant = id ใน variants.js หรือชุดสีที่ได้จาก genesToVariant (ลูกผสม)
  *  mesh    = ไฟล์ molly.glb ที่โหลดแล้ว → ใช้รูปทรงจากไฟล์และย้อมสีตามชุดสี (mollyMesh.js) ไม่มี = สร้างรูปทรงด้วยโค้ด
  *  fry     = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
+ *  baby    = mesh เป็นไฟล์ลูกปลา (molly_baby.glb) → ไม่ขยายพุง
  * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object, fry: { value: number } }}
  *  fry = ตั้ง .value ใหม่เมื่อปลาโตขึ้น · เมื่อเลิกใช้ ให้เรียก object.userData.release() (disposeObject ใน AssetLoader เรียกให้อัตโนมัติ)
  */
-export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true, mesh = null, fry = 0 } = {}) {
+export function createMolly({ variant = 'dalmatian', detail = 'high', animated = true, caustics = true, mesh = null, fry = 0, baby = false } = {}) {
   const V = typeof variant === 'object' && variant ? variant : getMollyVariant(variant);
   const D = MOLLY_DETAIL[detail] ? detail : 'high';
-  const fromFile = mesh && createMeshMolly(mesh, V, { detail: D, animated, caustics, fry });
+  const fromFile = mesh && createMeshMolly(mesh, V, { detail: D, animated, caustics, fry, belly: baby ? 0 : MOLLY_BELLY });
   if (fromFile) return fromFile;
   const geo = getMollyGeometry(D);
   // ลูกผสมทุกตัวมีลายเฉพาะตัว → ใช้ texture เล็กลงเพื่อประหยัดหน่วยความจำ

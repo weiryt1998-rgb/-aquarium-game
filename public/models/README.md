@@ -23,7 +23,9 @@
 | `fish/eagle_ray.glb` | ปลากระเบนนก |
 | `fish/betta_galaxy.glb` | ปลากัดกาแล็กซี (ท่าว่ายจาก shader — `model.motion`) |
 | `fish/seahorse.glb` | ม้าน้ำภูตแก้ว — เก็บโครงกระดูกไว้ (`--keep-skin`) เกมขยับหาง/หัว/ครีบตาม `model.rig` |
-| `fish/rune_guardian.glb` | ปลาผู้พิทักษ์รูน (ท่าว่ายจาก shader — `model.motion`) || `fish/spacefish.glb` | ปลาอวกาศทุกสี (รูปทรงอย่างเดียว เกมวาดลายกาแล็กซีตามสีเอง) — แปลงด้วย `node scripts/build-spacefish-model.mjs <ไฟล์จาก Meshy>.glb` |
+| `fish/rune_guardian.glb` | ปลาผู้พิทักษ์รูน (ท่าว่ายจาก shader — `model.motion`) |
+| `fish/spacefish.glb` | ปลาอวกาศทุกสี (ใช้ลายกาแล็กซีในเท็กซ์เจอร์ของโมเดล เกมเปลี่ยนสีตามสายพันธุ์) — แปลงด้วย `node scripts/build-spacefish-model.mjs Fish/โมเดลปลาอวกาศ.glb public/models/fish/spacefish.glb --texture=2048 --flex-open=3 --body=0.05,0.48,0.29,0.47 --eye-dark=0` |
+| `fish/spacefish_baby.glb` | ลูกปลาอวกาศแรกเกิดทุกสี (ใช้จนโต 50% แล้วเปลี่ยนเป็น spacefish.glb) — แปลงด้วย `node scripts/build-spacefish-model.mjs Fish/โมเดลูกกปลาอวกาศ.glb public/models/fish/spacefish_baby.glb` |
 | `fish/molly_baby.glb` | ลูกปลาสอดทุกสี (ใช้จนโต 60% แล้วเปลี่ยนเป็น molly.glb) — แปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์>.glb public/models/fish/molly_baby.glb` |
 | `fish/molly.glb` | ปลาสอดทุกสีและลูกผสม (รูปทรงอย่างเดียว เกมย้อมสี/ลายใหม่ตามสายพันธุ์และยีน) — **ห้ามวางไฟล์ทับตรง ๆ** ต้องแปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์จาก Meshy>.glb` |
 | `fish/fish.glb` | **ไฟล์กลาง** ใช้กับทุกสายพันธุ์ที่ยังไม่มีไฟล์ของตัวเอง (เกมย้อมสีให้ตามสายพันธุ์) |

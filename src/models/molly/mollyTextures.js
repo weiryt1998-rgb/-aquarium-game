@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { clamp, seededRandom, smoothstep } from '../../utils/math.js';
-import { circumference, FIN_RAYS_PER_TEXTURE, T_END } from './mollyShape.js';
+import { clamp, lerp, seededRandom, smoothstep } from '../../utils/math.js';
+import { circumference, FIN_RAYS_PER_TEXTURE, surfacePoint, T_END } from './mollyShape.js';
+import { barSpec } from './variants.js';
 
 /**
  * texture ของปลา Molly วาดด้วยโค้ดตอนรันไทม์ (ไม่ต้องมีไฟล์รูป)
@@ -62,6 +63,62 @@ const gillEdge = (up) => 0.2 + 0.035 * (1 - up * up);
 
 /** ชั้นลายจุดของสีนี้ (variant.spots เป็น object ชั้นเดียว หรือ array หลายชั้นก็ได้) */
 const spotLayers = (variant) => (Array.isArray(variant.spots) ? variant.spots : variant.spots ? [variant.spots] : []);
+
+/** ค่าสุ่ม 0..1 จากพิกัดจำนวนเต็ม 3 ค่า */
+function hash3(x, y, z) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** value noise 3 มิติ 0..1 (แบบเดียวกับ mollyNoise ใน mollyMesh.js) */
+function noise3(x, y, z) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const zi = Math.floor(z);
+  const fx = (x - xi) * (x - xi) * (3 - 2 * (x - xi));
+  const fy = (y - yi) * (y - yi) * (3 - 2 * (y - yi));
+  const fz = (z - zi) * (z - zi) * (3 - 2 * (z - zi));
+  const n = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz);
+  return lerp(
+    lerp(lerp(n(0, 0, 0), n(1, 0, 0), fx), lerp(n(0, 1, 0), n(1, 1, 0), fx), fy),
+    lerp(lerp(n(0, 0, 1), n(1, 0, 1), fx), lerp(n(0, 1, 1), n(1, 1, 1), fx), fy),
+    fz,
+  );
+}
+
+/**
+ * ลายบั้งแนวตั้ง + ลายหินอ่อน ณ จุด p บนผิวลำตัว (ตรรกะเดียวกับ mollyBars ใน mollyMesh.js)
+ * @param {object} b barSpec ของชั้นลาย  @param {number} t 0 ปลายจมูก → 1 โคนหาง  @param {number} up +1 สันหลัง → -1 ท้อง
+ * @param {number} seed จำนวนเต็มของชั้นลาย/ตัวปลา  @param {number} fineFade 0..1 ลดลายละเอียดเมื่อ texture ความละเอียดต่ำ
+ */
+function barsAt(b, p, t, up, seed, fineFade) {
+  const s = seed * 0.013;
+  const nA = noise3(p.x * 8 + s, p.y * 8 + s, p.z * 8 + s);
+  const nB = noise3(p.x * 21 + s * 1.7 + 3.1, p.y * 21 + s * 1.7 + 3.1, p.z * 21 + s * 1.7 + 3.1);
+  // ลายละเอียดของหินอ่อน: หมุนแกนก่อน ลายจะได้ไม่เรียงเป็นเหลี่ยม แล้วยืดคอนทราสต์ให้กระจายเต็มช่วง
+  const rx = -0.8 * p.y - 0.6 * p.z;
+  const ry = 0.8 * p.x + 0.36 * p.y - 0.48 * p.z;
+  const rz = 0.6 * p.x - 0.48 * p.y + 0.64 * p.z;
+  const nC = lerp(clamp((noise3(rx * 110 + s, ry * 110 + s, rz * 110 + s) - 0.5) * 2.2 + 0.5, 0, 1), 0.5, fineFade);
+  const tt = t + (nA - 0.5) * 0.09 + (nB - 0.5) * 0.05 - b.slant * p.y;
+  const x = clamp((tt - b.from) / Math.max(b.to - b.from, 0.05), 0, 1);
+  const u = x * (0.77 + 0.23 * x) * (b.count - 1);
+  const k = Math.floor(u + 0.5);
+  const w = b.width * (0.75 + 0.5 * hash3(k, seed, 1)) * (0.9 + 0.3 * x);
+  let bar = 1 - smoothstep(w * 0.5 - 0.13, w * 0.5 + 0.13, Math.abs(u - k - (hash3(k, seed, 2) - 0.5) * 0.25));
+  bar *= smoothstep(b.from - 0.04, b.from, tt) * (1 - smoothstep(b.to, b.to + 0.04, tt));
+  const low = lerp(b.low[0], b.low[1], smoothstep(b.from, b.to, t));
+  bar *= smoothstep(low - 0.15, low + 0.2, up + (nB - 0.5) * 0.3);
+  const m = nA * 0.62 + nB * 0.38;
+  bar *= smoothstep(0.3 * b.marble - 0.05, 0.3 * b.marble + 0.05, m);
+  const fleck = lerp(0.5, nC, b.marble);
+  const head = 1 - smoothstep(0.22, 0.32, t);
+  const dark = b.marble * Math.max(head * lerp(0.2, 0.55, smoothstep(-0.45, 0.4, up)), 0.35 * smoothstep(0.6, 0.92, up));
+  const level = lerp(1, 0.5 + (0.5 - dark) * 0.42, smoothstep(0, 0.15, dark));
+  const marble = smoothstep(-0.05, 0.05, smoothstep(-0.07, 0.07, m - level) - fleck);
+  return Math.max(smoothstep(-0.05, 0.05, bar - fleck), marble);
+}
 
 /**
  * จุด/ด่างบนลำตัว วาดเป็นก้อนรูปทรงไม่สม่ำเสมอ ชดเชยการยืดของ texture รอบตัว
@@ -128,15 +185,25 @@ function buildBodyTextures(variant, size) {
   const mouth = rgb('#2a1214');
   const head = variant.head ? { ...variant.head, color: rgb(variant.head.color) } : null;
 
-  // หน้ากากจุดแต่ละชั้น (ใช้ Canvas 2D วาดรูปทรง แล้วอ่านค่า alpha กลับมา) วาดทับกันตามลำดับ
+  // ชั้นลายวาดทับกันตามลำดับ — ลายจุด: หน้ากากจาก Canvas 2D (วาดรูปทรง แล้วอ่านค่า alpha กลับมา)
+  // ลายบั้ง: คำนวณทีละพิกเซลจากจุดบนผิวลำตัว (barsAt)
+  const seed = variant.seed ?? 0.1234; // ลูกผสมแต่ละตัวมี seed ของตัวเอง → ลายไม่ซ้ำกัน
   const layers = spotLayers(variant)
     .filter((L) => L.count > 0)
     .map((L, n) => {
+      const bars = barSpec(L);
+      if (bars) return { color: rgb(L.color), matte: L.matte ?? 0.85, bars, seed: Math.floor(seed * 1e6) + n * 7919 };
       const [, sctx] = makeCanvas(W, H);
       sctx.filter = `blur(${((L.blur ?? 0.5) * W) / 1024}px)`;
-      drawBodySpots(sctx, W, H, L, seededRandom((variant.seed ?? 0.1234) + n * 0.071)); // ลูกผสมแต่ละตัวมี seed ของตัวเอง → ลายไม่ซ้ำกัน
+      drawBodySpots(sctx, W, H, L, seededRandom(seed + n * 0.071));
       return { color: rgb(L.color), matte: L.matte ?? 0.85, alpha: sctx.getImageData(0, 0, W, H).data };
     });
+  // สีพื้นระหว่างบั้ง (ชั้นลายบั้งที่มี glow)
+  const grounds = layers.filter((L) => L.bars?.glow).map(({ bars: b }) => ({ ...b, front: rgb(b.glow.front), rear: rgb(b.glow.color) }));
+  const anyBars = layers.some((L) => L.bars);
+  const fineFade = smoothstep(0.3, 0.8, (T_END / W) * 110); // texture ความละเอียดต่ำ → ลดลายละเอียดของหินอ่อน
+  const p = new THREE.Vector3();
+  const groundColor = new THREE.Color();
 
   const height = new Float32Array(W * H);
   const [colorCanvas, cctx] = makeCanvas(W, H);
@@ -176,12 +243,19 @@ function buildBodyTextures(variant, size) {
         const k = (1 - smoothstep(head.start, reach, t)) * (0.35 + 0.65 * smoothstep(-0.85, 0.15, up));
         c.lerp(head.color, k * (head.strength ?? 0.95));
       }
+      // สีพื้นระหว่างบั้ง: เหนือขอบล่างของบั้ง (ท้องยังเป็นสีตัว) ช่วงหน้าสี front → ช่วงท้ายสี color
+      for (const G of grounds) {
+        const low = lerp(G.low[0], G.low[1], smoothstep(G.from, G.to, t));
+        const g = G.glow.amount * smoothstep(low - 0.1, low + 0.35, up) * smoothstep(G.from - 0.08, G.from + 0.05, t);
+        c.lerp(groundColor.copy(G.front).lerp(G.rear, smoothstep(G.glow.from - 0.12, G.glow.from + 0.12, t)), g);
+      }
+      if (anyBars) surfacePoint(t, v * Math.PI * 2, p);
       // ลายเกล็ด: เงาตามความนูน + ขอบเกล็ดวาวมุก
       c.multiplyScalar(1 + contrast * (cell.h - 0.6) * scaled - ridge * 0.12);
       c.lerp(rim, cell.rim * 0.22 * scaled);
       let spot = 0;
       for (const L of layers) {
-        let a = L.alpha[i * 4 + 3] / 255;
+        let a = L.bars ? barsAt(L.bars, p, t, up, L.seed, fineFade) : L.alpha[i * 4 + 3] / 255;
         if (t < 0.03) a *= smoothstep(0.012, 0.03, t);
         if (a <= 0) continue;
         // ในจุดยังเห็นลายเกล็ดจาง ๆ
@@ -236,6 +310,28 @@ function buildBodyTextures(variant, size) {
   };
 }
 
+/**
+ * ริ้วตามก้านครีบ n เส้นต่อความกว้าง texture ครีบ (x = ตามก้าน 0 โคน → 1 ปลาย, y = ขวางก้าน วนซ้ำ)
+ * แต่ละเส้นกว้าง/เริ่ม/จบไม่เท่ากัน บางช่องไม่มีริ้ว — คืน alpha ในรูปแบบเดียวกับ ImageData.data
+ */
+function drawFinStreaks(S, n, rnd) {
+  const bands = Array.from({ length: n }, () => ({ on: rnd() < 0.85, w: 0.4 + 0.4 * rnd(), a0: 0.1 + 0.35 * rnd(), len: 0.35 + 0.6 * rnd() }));
+  const out = new Uint8ClampedArray(S * S * 4);
+  for (let y = 0; y < S; y++) {
+    const yy = (y + 0.5) / S;
+    for (let x = 0; x < S; x++) {
+      const a = (x + 0.5) / S;
+      const u = yy * n + 0.1 * Math.sin(a * 6.5 + yy * Math.PI * 4); // ริ้วคดเล็กน้อย (วนซ้ำต่อกันได้ตามแกน y)
+      const k = Math.floor(u);
+      const B = bands[((k % n) + n) % n];
+      if (!B.on) continue;
+      const s = (1 - smoothstep(B.w * 0.5 - 0.06, B.w * 0.5 + 0.03, Math.abs(u - k - 0.5))) * smoothstep(B.a0, B.a0 + 0.1, a) * (1 - smoothstep(B.a0 + B.len, B.a0 + B.len + 0.15, a));
+      out[(y * S + x) * 4 + 3] = s * 255;
+    }
+  }
+  return out;
+}
+
 /** ครีบโปร่งแสง: ก้านครีบแตกแขนงที่ปลาย มีข้อปล้อง ขอบปลายครีบหยักระหว่างก้าน */
 function buildFinTexture(variant, size) {
   const S = size;
@@ -243,12 +339,14 @@ function buildFinTexture(variant, size) {
   const fbase = rgb(F.base);
   const ftip = rgb(F.tip);
   const fray = rgb(F.ray);
-  // จุดบนครีบของแต่ละชั้นลาย (finCount, finSize = ขนาดใหญ่สุดเทียบกับ texture)
+  // จุดบนครีบของแต่ละชั้นลาย (finCount, finSize = ขนาดใหญ่สุดเทียบกับ texture) — ชั้นลายบั้งเป็นริ้วตามก้านครีบแทน
   const layers = spotLayers(variant)
     .filter((L) => L.finCount > 0)
     .map((L, n) => {
-      const [, sctx] = makeCanvas(S, S);
       const rnd = seededRandom((variant.seed != null ? variant.seed + 0.5 : 0.777) + n * 0.113);
+      const bars = barSpec(L);
+      if (bars) return { color: rgb(L.color), alpha: drawFinStreaks(S, bars.streaks, rnd) };
+      const [, sctx] = makeCanvas(S, S);
       sctx.filter = 'blur(0.7px)';
       sctx.fillStyle = '#000';
       const maxR = L.finSize ?? 0.05;

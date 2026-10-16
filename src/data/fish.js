@@ -24,7 +24,7 @@
  *              (ดู src/models/molly/ — ถ้าใส่ไฟล์ .glb ของสายพันธุ์นั้นภายหลัง ไฟล์จะถูกใช้แทน)
  *              babyMesh / babyUntil = รูปทรงลูกปลา ใช้ตอนโต (growth) ไม่ถึง babyUntil
  *              mesh = ไฟล์รูปทรงที่โมเดลจากโค้ดนำไปย้อมสีตามสายพันธุ์เอง (ปลาสอดทุกสีใช้ models/fish/molly.glb,
- *                     ปลาอวกาศทุกสีใช้ models/fish/spacefish.glb)
+ *                     ปลาอวกาศทุกสีใช้ models/fish/spacefish.glb และลูกปลา models/fish/spacefish_baby.glb)
  * legendary = ปลาระดับตำนาน: มีป้าย "ตำนาน" ในร้านค้าและสมุดสะสม (ความหายากเต็ม 5 ดาว)
  */
 
@@ -84,7 +84,8 @@ function spaceFishSpecies({ variant, name, nameEn, description, gems, colors }) 
     length: 0.8,
     minTank: 0,
     model: fishModel(id),
-    procedural: { type: 'spacefish', variant, mesh: 'models/fish/spacefish.glb' },
+    // ลูกปลาแรกเกิดใช้รูปทรงลูกปลา (ตัวเรียวเล็ก ครีบใส ระบายสีอวกาศอ่อน ๆ ตามสายพันธุ์) จนโตได้ 50% แล้วเปลี่ยนเป็นตัวเต็มวัย
+    procedural: { type: 'spacefish', variant, mesh: 'models/fish/spacefish.glb', babyMesh: 'models/fish/spacefish_baby.glb', babyUntil: 0.5 },
     behavior: { speed: 0.65, zone: 'middle', schooling: false, agility: 1.5, tailBeat: 0.7 },
     care: { hungerRate: 0.09, growTime: 600, breedChance: 0.04 },
     economy: { coinValue: 55, coinInterval: 120 },
@@ -151,17 +152,17 @@ export const FISH_SPECIES = [
     variant: 'dalmatian',
     name: 'ปลาสอดดัลเมเชียน',
     nameEn: 'Dalmatian Balloon Molly',
-    description: 'ปลาสอดบอลลูนตัวกลมท้องป่อง ลายจุดดำบนพื้นขาวมุก ว่ายต้วมเตี้ยมน่ารัก เลี้ยงง่ายและออกลูกเก่ง',
+    description: 'ปลาสอดบอลลูนตัวกลมท้องป่อง พื้นขาวอมชมพูอ่อน หัวลายหินอ่อนดำ บั้งดำแบบหินอ่อนทั้งตัว ครีบสีครีมมีริ้วดำ เลี้ยงง่ายและออกลูกเก่ง',
     rarity: 2,
     coins: 160,
     economy: { coinValue: 5, coinInterval: 70 },
-    colors: ['#f3f1ec', '#111214'],
+    colors: ['#f8f0eb', '#111214'],
   }),
   mollySpecies({
     variant: 'redhead',
     name: 'ปลาสอดหัวแดง',
     nameEn: 'Red Head Balloon Molly',
-    description: 'ปลาสอดบอลลูนลำตัวขาวมุก หัวแดงส้มสะดุดตา เหมือนสวมหมวกสีแดง',
+    description: 'ปลาสอดบอลลูนลำตัวขาวมุก หัวแดงส้มสะดุดตา เหมือนสวมหมวกสีแดง โรยจุดส้มและจุดดำเล็ก ๆ บนหลังพองาม',
     rarity: 2,
     coins: 180,
     economy: { coinValue: 6, coinInterval: 70 },

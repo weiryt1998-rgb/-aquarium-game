@@ -1,7 +1,10 @@
 /**
  * แปลงโมเดลปลาจาก Meshy AI เป็นรูปทรงของปลาอวกาศ: public/models/fish/spacefish.glb
  *
- *   node scripts/build-spacefish-model.mjs <input.glb> [output.glb] [--debug]
+ *   node scripts/build-spacefish-model.mjs <input.glb> [output.glb] [--debug] [--texture=2048]
+ *
+ *   ตัวเต็มวัย: node scripts/build-spacefish-model.mjs Fish/โมเดลปลาอวกาศ.glb public/models/fish/spacefish.glb --texture=2048
+ *   ลูกปลา:    node scripts/build-spacefish-model.mjs Fish/โมเดลูกกปลาอวกาศ.glb public/models/fish/spacefish_baby.glb
  *
  * เกมใช้แค่รูปทรงกับเงาเกล็ดจากไฟล์ แล้ววาดลายกาแล็กซีตามสีของแต่ละสายพันธุ์เอง (src/models/spacefish/spaceFishMesh.js)
  *  - ถอดโครงกระดูก ย้ายพิกัด: หันหัวไป +Z ยาวรวม TOTAL_LENGTH หน่วย จุดกึ่งกลางที่ 0 (โมเดลต้องหันหัวไป +Z อยู่แล้ว)
@@ -20,6 +23,18 @@ import { computeFlex } from './lib/flex.mjs';
 
 const args = process.argv.slice(2);
 const DEBUG = args.includes('--debug');
+/** ขนาด texture ในไฟล์ (เท็กซ์เจอร์จาก Meshy เป็นชิ้นเล็ก ๆ กระจายทั้งภาพ ย่อมากไปลายดาวจะหาย) */
+const option = (name, fallback) => Number(args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1] ?? fallback);
+const TEXTURE = option('texture', 1024);
+/** ตัดครีบที่แผ่ออกด้านข้างจนถูกนับเป็นลำตัว (ครีบท้องยาว ๆ ของโมเดลปลากัด) — ดู scripts/lib/flex.mjs */
+const FLEX_OPEN = option('flex-open', 0);
+/**
+ * ลำตัวในภาพด้านข้างเป็นวงรี --body=y,z,ครึ่งความสูง,ครึ่งความยาว (หน่วยหลังย่อแล้ว) — จุดนอกวงรีนับเป็นครีบเสมอ
+ * (ครีบท้องยาวที่ห้อยลงและแผ่ออกด้านข้างจะหนาจนถูกนับเป็นลำตัว) ความพลิ้วเพิ่มตามระยะห่างจากวงรี
+ */
+const BODY = args.find((a) => a.startsWith('--body='))?.split('=')[1].split(',').map(Number) ?? null;
+/** ความสว่างสูงสุดของตาดำบนเท็กซ์เจอร์ */
+const EYE_DARK = option('eye-dark', 0.08);
 const [INPUT, OUTPUT = 'public/models/fish/spacefish.glb'] = args.filter((a) => !a.startsWith('--'));
 if (!INPUT) {
   console.error('ใช้: node scripts/build-spacefish-model.mjs <input.glb> [output.glb] [--debug]');
@@ -27,9 +42,10 @@ if (!INPUT) {
 }
 /** ความยาวรวม (ปลายปาก → ปลายหาง) ใกล้เคียงปลาอวกาศแบบสร้างด้วยโค้ด (SPACEFISH_TOTAL_LENGTH) */
 const TOTAL_LENGTH = 2.0;
+/** error = ความคลาดเคลื่อนที่ยอมให้ตอนลดโพลิกอน (ครีบพลิ้วรายละเอียดเยอะ ต้องยอมมากขึ้นถึงจะลดได้ตามเป้า) */
 const LODS = [
-  { suffix: '', triangles: 14000 },
-  { suffix: '_low', triangles: 6000 },
+  { suffix: '', triangles: 14000, error: 0.004 },
+  { suffix: '_low', triangles: 6000, error: 0.02 },
 ];
 /** ความพลิ้วที่ถือว่าเป็นครีบ (ทั้ง 3 มุมของสามเหลี่ยมต้องเกิน) */
 const FIN_FLEX = 0.22;
@@ -67,9 +83,16 @@ const uvs = prim.getAttribute('TEXCOORD_0').getArray();
 const V = pos.length / 3;
 
 // ── 2. ความพลิ้วของครีบ ─────────────────────────────────────────
-const [flex] = computeFlex([{ pos, idx: prim.getIndices().getArray() }]);
+const [flex] = computeFlex([{ pos, idx: prim.getIndices().getArray() }], { open: FLEX_OPEN });
 // ปาก/จะงอยยื่นไปข้างหน้าแคบ ๆ จึงถูกนับเป็นครีบ → ช่วงหัว (หน้าสุด 22% ของตัว) ไม่พลิ้ว
 for (let i = 0; i < V; i++) flex[i] *= 1 - smoothstep(TOTAL_LENGTH * 0.24, TOTAL_LENGTH * 0.28, pos[3 * i + 2]);
+if (BODY) {
+  const [yc, zc, b, a] = BODY;
+  for (let i = 0; i < V; i++) {
+    const e = Math.hypot((pos[3 * i + 1] - yc) / b, (pos[3 * i + 2] - zc) / a);
+    flex[i] = Math.max(flex[i], Math.min(1, Math.max(0, (e - 1) / 2)));
+  }
+}
 
 // ── 3. ตา + ความสว่างปกติของเท็กซ์เจอร์ ───────────────────────────
 const material = prim.getMaterial();
@@ -96,7 +119,7 @@ for (let i = 0; i < V; i++) {
   const [x, y, z] = [pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]];
   if (z < headZ || y < headY || Math.abs(x) < 0.02 || flex[i] >= FIN_FLEX) continue;
   const [r, g, b] = texel(i);
-  if (0.3 * r + 0.59 * g + 0.11 * b > 0.08) continue;
+  if (0.3 * r + 0.59 * g + 0.11 * b > EYE_DARK) continue;
   const e = eyes[x < 0 ? 0 : 1];
   e.pts.push([x, y, z]);
   e.sum = e.sum.map((v, a) => v + [x, y, z][a]);
@@ -144,7 +167,7 @@ function split(src) {
 const T = prim.getIndices().getCount() / 3;
 for (const lod of LODS) {
   const copy = copyPrimitive(prim);
-  simplifyPrimitive(copy, { simplifier: MeshoptSimplifier, ratio: Math.min(1, lod.triangles / T), error: 0.002 });
+  simplifyPrimitive(copy, { simplifier: MeshoptSimplifier, ratio: Math.min(1, lod.triangles / T), error: lod.error });
   const parts = split(copy);
   copy.dispose();
   ['body', 'fins'].forEach((part, k) => {
@@ -159,7 +182,7 @@ meshNode.dispose();
 await doc.transform(
   prune({ keepAttributes: true }),
   dedup(),
-  textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 88 }),
+  textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [TEXTURE, TEXTURE], quality: 88 }),
   reorder({ encoder: MeshoptEncoder }),
 );
 

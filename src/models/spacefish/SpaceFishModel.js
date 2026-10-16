@@ -120,17 +120,18 @@ function createMaterials(variant, detail, energy) {
 }
 
 /**
- * @param {{ variant?: string, detail?: 'high'|'medium'|'low', animated?: boolean, mesh?: object|null }} options mesh = ไฟล์ spacefish.glb ที่โหลดแล้ว
+ * @param {{ variant?: string, detail?: 'high'|'medium'|'low', animated?: boolean, mesh?: object|null, baby?: boolean }} options
+ *  mesh = ไฟล์ spacefish.glb ที่โหลดแล้ว · baby = mesh เป็นไฟล์ลูกปลาแรกเกิด (spacefish_baby.glb) แสงฟุ้งและประกายดาวเบากว่า
  * @returns {{ object: THREE.Group, swimUniforms: object|null, trail: object|null, variant: object }}
  */
-export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', animated = true, mesh = null } = {}) {
+export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', animated = true, mesh = null, baby = false } = {}) {
   const V = getSpaceFishVariant(variant);
   const energy = { value: 0 };
-  const fromFile = mesh && createMeshSpaceFish(mesh, V, { detail, animated, energy });
+  const fromFile = mesh && createMeshSpaceFish(mesh, V, { detail, animated, energy, baby });
   if (fromFile) {
     const { object, body, fins, swimUniforms, tailZ } = fromFile;
     object.name = `spacefish-${V.id}`;
-    const trail = animated ? addGlow(object, V, tailZ) : null;
+    const trail = animated ? addGlow(object, V, tailZ, baby) : null;
     object.userData.parts = { body, fins };
     return { object, swimUniforms, trail, variant: V };
   }
@@ -166,15 +167,15 @@ export function createSpaceFish({ variant = 'nebula_blue', detail = 'high', anim
 /**
  * แสงฟุ้งรอบตัว (เฉพาะในตู้ — รูปตัวอย่างใน UI ไม่ต้องมี) และค่าประกายดาวที่ปล่อยตามหลัง
  * @param {number} tailZ ตำแหน่งปลายหางบนแกน z (จุดปล่อยประกายดาว)
+ * @param {boolean} baby ลูกปลาแรกเกิด: แสงฟุ้งจางลงครึ่งหนึ่ง ประกายดาวน้อยลง
  */
-function addGlow(group, V, tailZ) {
-  const halo = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: getHaloTexture(), color: new THREE.Color(V.glow), transparent: true, opacity: V.light ? 0.22 : 0.32, blending: THREE.AdditiveBlending, depthWrite: false }),
-  );
+function addGlow(group, V, tailZ, baby = false) {
+  const opacity = (V.light ? 0.22 : 0.32) * (baby ? 0.5 : 1);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: getHaloTexture(), color: new THREE.Color(V.glow), transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.set(2.5, 1.7, 1);
   halo.position.set(0, -0.02, -0.35);
   halo.renderOrder = 2;
   group.add(halo);
   group.userData.release = () => halo.material.dispose(); // disposeObject ไม่ล้างวัสดุของ Sprite
-  return { colors: V.trail.map((c) => new THREE.Color(c)), rate: 16, offset: tailZ };
+  return { colors: V.trail.map((c) => new THREE.Color(c)), rate: baby ? 6 : 16, offset: tailZ };
 }

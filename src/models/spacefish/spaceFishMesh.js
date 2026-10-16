@@ -4,12 +4,13 @@ import { createFishMotionMod, createFishMotionUniforms } from '../../render/fish
 import { colorUniforms, noise } from './spaceFishShaders.js';
 
 /**
- * ปลาอวกาศจากไฟล์โมเดล public/models/fish/spacefish.glb (แปลงด้วย scripts/build-spacefish-model.mjs)
- *
- * ใช้รูปทรงและเงาเกล็ดจากไฟล์ แต่ลวดลายเป็นของปลาอวกาศทั้งหมด (คำนวณใน shader จากตำแหน่งบนตัว เหมือนแบบสร้างด้วยโค้ด):
- *  - ลำตัว: เนบิวลา 3 ชั้น ดาวระยิบระยับ เส้นพลังงานที่มีแสงวิ่ง ขอบเรืองแสง (ใช้ฟังก์ชันชุดเดียวกับ spaceFishShaders.js)
- *  - ครีบ: โปร่งแสงไล่สีจากโคนถึงปลาย แสงวิ่งจากโคนไปปลาย มีดาวเล็ก ๆ — ความไกลจากโคนมาจาก _FLEX ในไฟล์
- *  - ตา: ใช้สีเดิมของเท็กซ์เจอร์ (_EYE) เรืองแสงสีม่านตาของชุดสีเล็กน้อย
+ * ปลาอวกาศจากไฟล์โมเดล (แปลงด้วย scripts/build-spacefish-model.mjs)
+ *  - ตัวเต็มวัย public/models/fish/spacefish.glb: ใช้ลายกาแล็กซีในเท็กซ์เจอร์ของโมเดลตามเดิม แต่ "เปลี่ยนสี" ตามชุดสีของสายพันธุ์
+ *    (sfRecolor: น้ำเงิน/ฟ้า → nebula[0], ม่วง → nebula[1], ชมพู → nebula[2], ทอง → energy, ประกายขาว → star) คงความสว่างและลายเดิม
+ *    ประกายในลายกระพริบ เรืองแสงแรงขึ้นตอนว่ายเร็ว ขอบตัวเรืองแสง ครีบโปร่งแสงขึ้นที่ปลายและมีแสงวิ่งจากโคนไปปลาย
+ *  - ลูกปลาแรกเกิด public/models/fish/spacefish_baby.glb (baby: true): ใช้ความสว่างของเท็กซ์เจอร์ลูกปลาเป็นลาย
+ *    ระบายด้วยโทนสีของสายพันธุ์แบบอ่อน ๆ มีดาวเล็ก ๆ ระยิบระยับ ครีบเกือบใส
+ *  - ความไกลจากโคนครีบมาจาก _FLEX ในไฟล์ / ตา (_EYE) ใช้สีเดิมของเท็กซ์เจอร์ เรืองแสงสีม่านตาเล็กน้อย
  *  - ท่าว่าย: render/fishMotion.js ('fish') — ลำตัวเป็นคลื่น ครีบพลิ้วตามแบบหน่วงเวลา
  */
 
@@ -37,38 +38,82 @@ const meshAttrMod = {
   },
 };
 
-// ความสว่างของเท็กซ์เจอร์เทียบกับค่าปกติ (uTexRef) → เงาเกล็ด/ร่องลำตัวของโมเดล
-const TEX_SHADE = /* glsl */ `
-uniform float uTexRef;
+/** สีจากเท็กซ์เจอร์ → สีของสายพันธุ์ (ใช้ทั้งลำตัวและครีบ) — uniform สีมาจาก noise() ใน spaceFishShaders.js */
+const PAINT = /* glsl */ `
 uniform vec3 uIris;
-float sfTexLevel(vec3 lin) {
-  return pow(max(lin.r, max(lin.g, lin.b)), 1.0 / 2.2) / uTexRef;
+vec3 sfSrgb(vec3 lin) { return pow(max(lin, vec3(0.0)), vec3(1.0 / 2.2)); }
+vec3 sfLin(vec3 c) { return pow(max(c, vec3(0.0)), vec3(2.2)); }
+// สีเดิมที่สว่างที่สุด (ค่าสูงสุด = 1) — ความสว่างจริงเอามาจากเท็กซ์เจอร์
+vec3 sfUnit(vec3 c) { return c / max(max(c.r, max(c.g, c.b)), 1e-3); }
+float sfHueBand(float h, float center, float width) {
+  float d = abs(h - center);
+  d = min(d, 1.0 - d);
+  return exp(-(d * d) / (width * width));
+}
+
+// ตัวเต็มวัย: ลายกาแล็กซีในเท็กซ์เจอร์ (น้ำเงิน/ฟ้า → nebula[0], ม่วง → nebula[1], ชมพู/แดง → nebula[2], ทอง → energy, ขาว → star)
+// คงความสว่างและลายเดิม เปลี่ยนแค่สี  spark = ประกายดาวในลาย (จุดสว่างสีขาว/ทอง)
+vec3 sfRecolor(vec3 lin, out float spark) {
+  vec3 c = sfSrgb(lin);
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  float sat = (mx - mn) / max(mx, 1e-3);
+  float h = 0.0;
+  if (mx - mn > 1e-4) {
+    if (mx == c.r) h = mod((c.g - c.b) / (mx - mn), 6.0);
+    else if (mx == c.g) h = (c.b - c.r) / (mx - mn) + 2.0;
+    else h = (c.r - c.g) / (mx - mn) + 4.0;
+    h /= 6.0;
+  }
+  float wA = max(sfHueBand(h, 0.5, 0.07), sfHueBand(h, 0.62, 0.07));
+  float wB = sfHueBand(h, 0.74, 0.06);
+  float wC = max(sfHueBand(h, 0.86, 0.06), sfHueBand(h, 0.98, 0.05));
+  float wE = sfHueBand(h, 0.12, 0.08);
+  vec3 hue = wA * sfUnit(sfSrgb(uNebA)) + wB * sfUnit(sfSrgb(uNebB)) + wC * sfUnit(sfSrgb(uNebC)) + wE * sfUnit(sfSrgb(uEnergyColor));
+  hue = sfUnit(hue / max(wA + wB + wC + wE, 1e-3));
+  float v = mix(mx, 0.25 + 0.75 * mx, uLight); // ลำตัวสีอ่อน (Stardust White) ยกส่วนมืดขึ้นเล็กน้อย
+  vec3 col = mix(sfUnit(sfSrgb(uStarColor)), hue, smoothstep(0.08, 0.35, sat)) * v;
+  col = mix(sfUnit(sfSrgb(uDeep)) * v, col, smoothstep(0.04, 0.25, mx));
+  spark = smoothstep(0.72, 0.95, mx) * max(1.0 - smoothstep(0.15, 0.45, sat), wE);
+  return sfLin(col);
+}
+
+// ลูกปลาแรกเกิด: เนบิวลาสีของสายพันธุ์ไหลวนบนตัว (เข้มกว่าตัวเต็มวัย) + ลายมืด/สว่างของเท็กซ์เจอร์ลูกปลา
+// ส่วนสว่างของลาย (ท้อง เกล็ดวาว) อมสีเนบิวลาอ่อน ๆ — p = ตำแหน่งบนตัว
+vec3 sfBabyColor(vec3 lin, vec3 p) {
+  float l = dot(sfSrgb(lin), vec3(0.299, 0.587, 0.114));
+  vec3 neb = sfNebula(p * 1.3);
+  vec3 col = mix(neb * 0.8, mix(uNebA, uStarColor, 0.45), smoothstep(0.55, 0.95, l) * 0.45);
+  col *= 0.45 + 0.75 * l;
+  float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  return mix(vec3(g), col, 0.85); // ยังสีไม่จัดเท่าตัวเต็มวัย
 }
 `;
 
-function createBodyMod(variant, energy, octaves, texRef) {
-  const own = { ...colorUniforms(variant), uEnergy: energy, uSFTime: sharedUniforms.uTime, uTexRef: { value: texRef }, uIris: { value: new THREE.Color(variant.iris) } };
+function createBodyMod(variant, energy, octaves, baby) {
+  const own = { ...colorUniforms(variant), uEnergy: energy, uSFTime: sharedUniforms.uTime, uIris: { value: new THREE.Color(variant.iris) } };
+  const color = baby
+    ? /* glsl */ `
+      vec4 sfTex = texture2D(map, vMapUv);
+      vec3 sfCol = sfBabyColor(sfTex.rgb, vSpacePos);
+      float sfSpark = 0.0;
+      float sfStar = sfStars(vSpacePos * 45.0, 0.93, 0.2);`
+    : /* glsl */ `
+      vec4 sfTex = texture2D(map, vMapUv);
+      float sfSpark;
+      vec3 sfCol = sfRecolor(sfTex.rgb, sfSpark);
+      float sfStar = sfStars(vSpacePos * 30.0, 0.86, 0.22);`;
   return {
-    key: `sf-mesh-body-${octaves}`,
+    key: `sf-mesh-body-${baby ? 'baby' : 'adult'}-${octaves}`,
     apply(shader) {
       Object.assign(shader.uniforms, own);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\n${noise(octaves)}\n${TEX_SHADE}`)
+        .replace('#include <common>', `#include <common>\n${noise(octaves)}\n${PAINT}`)
         .replace(
           '#include <color_fragment>',
           /* glsl */ `#include <color_fragment>
-          vec3 sfP = vSpacePos;
-          vec3 sfNeb = sfNebula(sfP);
-          sfNeb = mix(sfNeb, uNebC, smoothstep(-0.05, -0.3, sfP.y) * 0.25);
-          float sfFlow = uSFTime * (0.5 + uEnergy * 1.2);
-          float sfR = 1.0 - abs(sfFbm(sfP * vec3(4.0, 4.0, 2.6) + vec3(0.0, 0.0, sfFlow * 0.7)) * 2.0 - 1.0);
-          float sfVein = pow(sfR, 26.0) * smoothstep(0.42, 0.62, sfNoise(sfP * 2.6 + vec3(11.0, 3.0, sfFlow * 0.15)));
-          float sfPulse = 0.45 + 0.55 * pow(0.5 + 0.5 * sin(sfP.z * 10.0 + uSFTime * (2.5 + uEnergy * 4.0)), 3.0);
-          float sfStar = sfStars(sfP * 30.0, 0.8, 0.26) + sfStars(sfP * 12.0 + 7.0, 0.9, 0.2) * 1.5;
-          vec4 sfTex = texture2D(map, vMapUv);
-          float sfShade = clamp(pow(sfTexLevel(sfTex.rgb), 0.6), 0.45, 1.35);
-          diffuseColor.rgb = mix(sfNeb * 0.4, sfNeb, uLight) * sfShade;
-          diffuseColor.rgb = mix(diffuseColor.rgb, uStarColor, clamp(sfStar, 0.0, 1.0) * 0.6);
+          ${color}
+          diffuseColor.rgb = mix(sfCol, uStarColor, clamp(sfStar, 0.0, 1.0) * 0.5);
           diffuseColor.rgb = mix(diffuseColor.rgb, sfTex.rgb, vSFEye);`,
         )
         .replace(
@@ -77,10 +122,12 @@ function createBodyMod(variant, energy, octaves, texRef) {
           {
             float sfFres = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 2.5);
             float sfBody = 1.0 - vSFEye;
-            totalEmissiveRadiance += sfNeb * mix(0.3, 0.1, uLight) * sfBody;
-            totalEmissiveRadiance += uEnergyColor * sfVein * sfPulse * (1.6 + uEnergy * 2.0) * sfBody;
-            totalEmissiveRadiance += uStarColor * sfStar * 2.5 * sfBody;
-            totalEmissiveRadiance += mix(uNebA, uNebB, 0.4) * sfFres * (0.8 + uEnergy * 0.6) * sfBody;
+            float sfTwinkle = 0.5 + 0.5 * sin(uSFTime * 3.0 + sfNoise(vSpacePos * 25.0) * 30.0);
+            float sfGlow = ${baby ? '0.5' : '1.0'};
+            totalEmissiveRadiance += sfCol * mix(0.35, 0.12, uLight) * (1.0 + uEnergy * 0.8) * sfGlow * sfBody;
+            totalEmissiveRadiance += mix(uStarColor, uEnergyColor, 0.3) * sfSpark * (0.5 + 1.3 * sfTwinkle) * (0.8 + uEnergy) * sfBody;
+            totalEmissiveRadiance += uStarColor * sfStar * 2.0 * sfBody;
+            totalEmissiveRadiance += mix(uNebA, uNebB, 0.4) * sfFres * (0.6 + uEnergy * 0.6) * sfGlow * sfBody;
             totalEmissiveRadiance += uIris * vSFEye * 0.35;
           }`,
         );
@@ -88,44 +135,55 @@ function createBodyMod(variant, energy, octaves, texRef) {
   };
 }
 
-function createFinMod(variant, energy, octaves, texRef) {
+function createFinMod(variant, energy, octaves, baby) {
   const own = {
     ...colorUniforms(variant),
     uEnergy: energy,
     uSFTime: sharedUniforms.uTime,
-    uTexRef: { value: texRef },
     uIris: { value: new THREE.Color(variant.iris) },
     uFinBase: { value: new THREE.Color(variant.fins.base) },
     uFinTip: { value: new THREE.Color(variant.fins.tip) },
   };
+  // ลูกปลา: ครีบเกือบใส สีครีบของสายพันธุ์จาง ๆ / ตัวเต็มวัย: สีจากลายในเท็กซ์เจอร์ โปร่งแสงขึ้นที่ปลายครีบ
+  const color = baby
+    ? /* glsl */ `
+      vec3 fCol = mix(sfBabyColor(fTex.rgb, vSpacePos) * 1.3, mix(uFinBase, uFinTip, fa), 0.25);
+      float fSpark = 0.0;
+      float fAlpha = mix(0.92, 0.45, pow(fa, 0.8)) + fFlow * 0.05;`
+    : /* glsl */ `
+      float fSpark;
+      vec3 fCol = sfRecolor(fTex.rgb, fSpark);
+      float fAlpha = mix(0.97, 0.6, pow(fa, 0.9)) + fFlow * 0.04;`;
   return {
-    key: `sf-mesh-fin-${octaves}`,
+    key: `sf-mesh-fin-${baby ? 'baby' : 'adult'}-${octaves}`,
     apply(shader) {
       Object.assign(shader.uniforms, own);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\n${noise(octaves)}\n${TEX_SHADE}\nuniform vec3 uFinBase;\nuniform vec3 uFinTip;`)
+        .replace('#include <common>', `#include <common>\n${noise(octaves)}\n${PAINT}\nuniform vec3 uFinBase;\nuniform vec3 uFinTip;`)
         .replace(
           '#include <color_fragment>',
           /* glsl */ `#include <color_fragment>
           float fa = clamp(vSF.y, 0.0, 1.0);
-          float fL = sfTexLevel(texture2D(map, vMapUv).rgb);
-          float fRay = smoothstep(0.75, 1.15, fL); // ก้านครีบในเท็กซ์เจอร์สว่างกว่าเยื่อครีบ
-          vec3 fCol = mix(uFinBase, uFinTip, smoothstep(0.15, 1.0, fa));
-          fCol = mix(fCol, sfNebula(vSpacePos * 1.4), 0.35 * (1.0 - fa * 0.6));
+          vec4 fTex = texture2D(map, vMapUv);
           // แสงวิ่งจากโคนไปปลายครีบ
           float fFlow = pow(0.5 + 0.5 * sin(fa * 12.0 - uSFTime * (3.0 + uEnergy * 4.0)), 8.0);
+          ${color}
           float fStar = sfStars(vSpacePos * 30.0, 0.9, 0.14);
-          float fAlpha = mix(0.95, 0.45, pow(fa, 0.8)) + fRay * 0.12 + fFlow * 0.25;
-          diffuseColor.rgb = fCol * 0.65 * clamp(fL, 0.6, 1.2);
+          diffuseColor.rgb = fCol;
           diffuseColor.a *= clamp(fAlpha, 0.0, 1.0);`,
         )
         .replace(
           '#include <emissivemap_fragment>',
           /* glsl */ `#include <emissivemap_fragment>
-          totalEmissiveRadiance += fCol * (0.4 + 0.35 * fa) * mix(1.0, 0.45, uLight);
-          totalEmissiveRadiance += uFinTip * smoothstep(0.7, 1.0, fa) * 0.5;
-          totalEmissiveRadiance += uEnergyColor * fFlow * (0.3 + fRay) * (0.8 + uEnergy * 1.4);
-          totalEmissiveRadiance += uStarColor * fStar * 1.8;`,
+          {
+            float fTwinkle = 0.5 + 0.5 * sin(uSFTime * 3.0 + sfNoise(vSpacePos * 25.0) * 30.0);
+            totalEmissiveRadiance += fCol * (0.3 + 0.2 * fa) * mix(1.0, 0.4, uLight) * ${baby ? '0.5' : '1.0'};
+            totalEmissiveRadiance += uFinTip * smoothstep(0.75, 1.0, fa) * ${baby ? '0.06' : '0.25'};
+            // แสงวิ่งตามครีบ: ครีบใหญ่ แนวแสงเป็นวงโค้งกว้าง จึงให้เห็นจาง ๆ ตอนว่ายเร็วเท่านั้น
+            totalEmissiveRadiance += uEnergyColor * fFlow * 0.12 * (0.15 + uEnergy * 1.5);
+            totalEmissiveRadiance += mix(uStarColor, uEnergyColor, 0.3) * fSpark * (0.5 + 1.3 * fTwinkle);
+            totalEmissiveRadiance += uStarColor * fStar * 1.5;
+          }`,
         );
     },
   };
@@ -149,20 +207,18 @@ function prepare(gltf) {
   const high = { body: geometry('spacefish_body'), fins: geometry('spacefish_fins') };
   const low = { body: geometry('spacefish_body_low') ?? high.body, fins: geometry('spacefish_fins_low') ?? high.fins };
   const source = meshes.spacefish_body?.material;
-  const out =
-    high.body && high.fins && source?.map
-      ? { high, low, map: source.map, normalMap: source.normalMap, normalScale: source.normalScale, texRef: source.userData.texRef ?? 0.6 }
-      : null;
+  const out = high.body && high.fins && source?.map ? { high, low, map: source.map, normalMap: source.normalMap, normalScale: source.normalScale } : null;
   prepared.set(gltf, out);
   return out;
 }
 
 /**
- * @param {object} gltf ไฟล์ spacefish.glb ที่โหลดแล้ว
+ * @param {object} gltf ไฟล์ spacefish.glb (หรือ spacefish_baby.glb) ที่โหลดแล้ว
  * @param {object} V ชุดสี (variants.js)
+ * @param {{ baby?: boolean }} options baby = ลูกปลาแรกเกิด (ไฟล์ลูกปลา ระบายสีแบบลูกปลา)
  * @returns {{ object: THREE.Group, body: THREE.Mesh, fins: THREE.Mesh, swimUniforms: object|null, tailZ: number } | null}
  */
-export function createMeshSpaceFish(gltf, V, { detail = 'high', animated = true, energy }) {
+export function createMeshSpaceFish(gltf, V, { detail = 'high', animated = true, energy, baby = false }) {
   const src = prepare(gltf);
   if (!src) return null;
   const fancy = detail !== 'low';
@@ -189,8 +245,8 @@ export function createMeshSpaceFish(gltf, V, { detail = 'high', animated = true,
     swimUniforms = { ...createFishMotionUniforms(group), uEnergy: energy };
     motion = createFishMotionMod('fish', swimUniforms);
   }
-  applyShaderMods(body, [meshAttrMod, motion, createBodyMod(V, energy, octaves, src.texRef), animated ? causticsMod : null]);
-  applyShaderMods(fins, [meshAttrMod, motion, createFinMod(V, energy, octaves, src.texRef)]);
+  applyShaderMods(body, [meshAttrMod, motion, createBodyMod(V, energy, octaves, baby), animated ? causticsMod : null]);
+  applyShaderMods(fins, [meshAttrMod, motion, createFinMod(V, energy, octaves, baby)]);
 
   if (!geo.body.boundingBox) geo.body.computeBoundingBox();
   if (!geo.fins.boundingBox) geo.fins.computeBoundingBox();
