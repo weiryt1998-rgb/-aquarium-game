@@ -491,39 +491,83 @@ export function getWoodTexture() {
   });
 }
 
-/** ผนังห้องเบลอ ๆ ด้านหลังตู้ (เหมือนถ่ายภาพหน้าชัดหลังเบลอ) */
-export function getRoomTexture() {
-  return cached('room', () => {
-    const [canvas, ctx] = makeCanvas(1024, 512);
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0, '#79a3cf');
-    g.addColorStop(0.55, '#4f77a6');
-    g.addColorStop(1, '#2c4a72');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 1024, 512);
-
-    const blob = (x, y, r, color, alpha) => {
-      const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
-      rg.addColorStop(0, color.replace('A', alpha));
-      rg.addColorStop(1, color.replace('A', 0));
-      ctx.fillStyle = rg;
-      ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    };
-    // แสงจากหน้าต่าง
-    blob(180, 120, 260, 'rgba(225,240,255,A)', 0.55);
-    blob(330, 60, 160, 'rgba(255,255,255,A)', 0.35);
-    // เฟอร์นิเจอร์ไม้ด้านขวา
-    blob(860, 330, 230, 'rgba(150,104,66,A)', 0.55);
-    blob(930, 260, 150, 'rgba(176,124,80,A)', 0.4);
-    // ต้นไม้ในกระถาง
-    blob(800, 170, 120, 'rgba(70,130,72,A)', 0.55);
-    blob(870, 120, 90, 'rgba(96,160,90,A)', 0.45);
-    blob(760, 230, 80, 'rgba(60,110,64,A)', 0.4);
-    // โบเก้
-    const rnd = seededRandom(0.31);
-    for (let i = 0; i < 26; i++) {
-      blob(rnd() * 1024, rnd() * 300, 12 + rnd() * 30, 'rgba(255,245,220,A)', 0.08 + rnd() * 0.16);
+/** พื้นไม้ลายแผ่นกระดาน (ต่อกันได้ไร้รอยต่อ) — 1 แผ่นภาพ = 4 แถวกระดาน */
+export function getFloorTexture() {
+  return cached('floor', () => {
+    const size = 512;
+    const rows = 4;
+    const rowH = size / rows;
+    const [canvas, ctx] = makeCanvas(size, size);
+    const rnd = seededRandom(0.58);
+    const tones = ['#6f4a2f', '#7b5435', '#86603d', '#664329', '#7f5a3a'];
+    for (let r = 0; r < rows; r++) {
+      // รอยต่อหัวกระดานแต่ละแถวไม่ตรงกัน
+      let x = -rnd() * size * 0.5;
+      while (x < size) {
+        const len = size * (0.45 + rnd() * 0.5);
+        ctx.fillStyle = tones[Math.floor(rnd() * tones.length)];
+        for (const dx of [0, size]) ctx.fillRect(x + dx, r * rowH, len, rowH); // วาดซ้ำอีกฝั่งให้ต่อกันได้
+        for (let i = 0; i < 9; i++) {
+          const y = r * rowH + 6 + rnd() * (rowH - 12);
+          ctx.strokeStyle = `rgba(${rnd() < 0.5 ? '40,24,12' : '160,115,75'},${0.12 + rnd() * 0.18})`;
+          ctx.lineWidth = 0.8 + rnd() * 1.6;
+          for (const dx of [0, size]) {
+            ctx.beginPath();
+            ctx.moveTo(x + dx, y);
+            ctx.bezierCurveTo(x + dx + len * 0.3, y + (rnd() - 0.5) * 6, x + dx + len * 0.7, y + (rnd() - 0.5) * 6, x + dx + len, y);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = 'rgba(28,16,8,0.7)';
+        for (const dx of [0, size]) ctx.fillRect(x + dx, r * rowH, 2, rowH);
+        x += len;
+      }
+      ctx.fillStyle = 'rgba(28,16,8,0.75)';
+      ctx.fillRect(0, r * rowH, size, 2);
     }
+    return colorTexture(canvas, { repeat: true });
+  });
+}
+
+/** ท้องฟ้านอกหน้าต่าง: ฟ้าใส เมฆบาง ๆ และแนวต้นไม้ไกล ๆ (เบลอเหมือนอยู่นอกโฟกัส) */
+export function getWindowSkyTexture() {
+  return cached('window-sky', () => {
+    const [canvas, ctx] = makeCanvas(256, 320);
+    const g = ctx.createLinearGradient(0, 0, 0, 320);
+    g.addColorStop(0, '#8cc4ef');
+    g.addColorStop(0.65, '#cfe7f7');
+    g.addColorStop(1, '#eaf4f2');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 320);
+    const rnd = seededRandom(0.83);
+    ctx.filter = 'blur(6px)';
+    for (let i = 0; i < 7; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.35})`;
+      ctx.beginPath();
+      ctx.ellipse(rnd() * 256, 30 + rnd() * 120, 30 + rnd() * 40, 10 + rnd() * 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.filter = 'blur(4px)';
+    for (let i = 0; i < 16; i++) {
+      ctx.fillStyle = ['#5f9a63', '#4d8655', '#76ad6c'][i % 3];
+      ctx.beginPath();
+      ctx.arc(rnd() * 256, 255 + rnd() * 40, 28 + rnd() * 30, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return colorTexture(canvas);
+  });
+}
+
+/** แสงเรืองกลม ๆ ขอบนุ่ม (แสงจากโคมไฟ/หน้าต่างที่ตกบนผนัง) — ใช้กับ AdditiveBlending */
+export function getSoftGlowTexture() {
+  return cached('soft-glow', () => {
+    const [canvas, ctx] = makeCanvas(128, 128);
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
     return colorTexture(canvas);
   });
 }

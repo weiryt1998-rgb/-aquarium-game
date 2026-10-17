@@ -101,7 +101,9 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 // ── สถานะ ──────────────────────────────────────────────────────
-const state = { mode: 'turntable', view: 'side', variant: 'dalmatian', count: 1, detail: 'high', shape: 'file', age: 'adult', wire: false, paused: false };
+// ?variant=rainbow = เปิดมาที่สีนั้นเลย
+const urlVariant = new URLSearchParams(location.search).get('variant');
+const state = { mode: 'turntable', view: 'side', variant: MOLLY_VARIANTS[urlVariant] ? urlVariant : 'dalmatian', count: 1, detail: 'high', shape: 'file', age: 'adult', wire: false, paused: false };
 const baseSpecies = getSpecies('molly_dalmatian');
 // รูปทรงจากไฟล์ molly.glb (เหมือนในเกม) หรือรูปทรงที่สร้างด้วยโค้ด (ตัวสำรองเมื่อไม่มีไฟล์) — สลับได้เพื่อเทียบกัน
 const assets = new AssetLoader();

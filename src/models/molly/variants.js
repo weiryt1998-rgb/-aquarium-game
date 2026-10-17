@@ -142,6 +142,26 @@ export const MOLLY_VARIANTS = {
     iris: '#d6dbe1',
     material: { roughness: 0.26, metalness: 0.5, clearcoat: 0.6, iridescence: 0.45, sheenGlow: 0.02 },
   },
+  rainbow: {
+    id: 'rainbow',
+    // special = สีหายากที่สุด ไม่มีขายในร้าน ได้จากการผสมพันธุ์เท่านั้น และไม่ใช้เป็นแหล่งกลายพันธุ์ของสีอื่น (ดู genetics.js)
+    special: true,
+    name: 'สีรุ้ง',
+    nameEn: 'Rainbow Molly',
+    // หลังน้ำเงิน ข้างตัวฟ้า ท้องขาว หัวแดงลามตามสันหลัง ด่างส้ม จุดเขียว จุดดำละเอียด ครีบทองก้านเข้มปลายฟ้า ประกายมุกแรง
+    body: { base: '#4fb3e6', back: '#1f3ea8', belly: '#fbfaf6', gill: '#f0c2b8' },
+    head: { color: '#e3262e', start: 0.16, end: 0.3, back: 0.2 },
+    scales: { contrast: 0.2, relief: 1.0, rim: '#e8f6ff' },
+    spots: [
+      { color: '#ff7a1a', count: 26, minSize: 0.03, maxSize: 0.07, sizePow: 1.2, back: 0.1, blur: 1.2, matte: 0.35, finCount: 4, finSize: 0.05 },
+      { color: '#2fbf4f', count: 30, minSize: 0.03, maxSize: 0.065, sizePow: 1.2, back: 0.15, blur: 1.2, matte: 0.3, finCount: 6, finSize: 0.06 },
+      { color: '#0b0c10', count: 160, minSize: 0.004, maxSize: 0.012, sizePow: 1.7, back: 0.45, clusters: false, finCount: 24, finSize: 0.025 },
+    ],
+    fins: { base: '#ffb400', tip: '#4fb3e6', ray: '#3a2a12', opacity: 0.86 },
+    lip: '#e8463a',
+    iris: '#e6c470',
+    material: { roughness: 0.28, metalness: 0.1, clearcoat: 0.85, iridescence: 0.85, sheenGlow: 0.08 },
+  },
 };
 
 /** ตัวอย่างโชว์ของ "ปลาสอดลูกผสม" (รูปในร้าน/สมุดสะสม) — ลูกผสมจริงแต่ละตัวใช้ยีนของตัวเอง ดู genetics.js */

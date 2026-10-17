@@ -35,6 +35,50 @@ test('ยีนลูกผสม: ได้ลักษณะใหม่ที
   assert.ok(mutated > 0, 'มีลักษณะที่ไม่มีในพ่อแม่จากการกลายพันธุ์');
 });
 
+test('ยีนลูกผสม: ได้สีหายาก (ดำ/เงิน ไม่มีขายในร้าน) ราว 10–20% ส่วนพันธุ์แท้สีเดียวกันไม่ได้สีหายาก', () => {
+  const rnd = seededRandom(0.61);
+  const N = 4000;
+  let rare = 0;
+  for (let i = 0; i < N; i++) {
+    const g = crossGenes(variantGenes(COLORS[i % 5]), variantGenes(COLORS[(i + 1 + (i % 4)) % 5]), rnd);
+    if (/^ตัวสี(ดำ|เงิน)/.test(describeGenes(g))) rare++;
+  }
+  const rate = rare / N;
+  assert.ok(rate >= 0.1 && rate <= 0.2, `สีหายาก ${(rate * 100).toFixed(1)}%`);
+  const f = (speciesId) => ({ speciesId, gender: 'f' });
+  assert.equal(planOffspring(f('molly_golden'), { ...f('molly_golden'), gender: 'm' }, () => 0).genes, undefined, 'พันธุ์แท้สีเดียวกันไม่มีการสุ่มสี');
+});
+
+test('สีรุ้ง (หายากที่สุด): ลูกผสมทั่วไปได้ราว 5% พ่อแม่สีรุ้งได้บ่อยขึ้น และไม่หลุดไปเป็นแหล่งกลายพันธุ์ของสีอื่น', () => {
+  const rnd = seededRandom(0.27);
+  const rate = (mk, n) => {
+    let hit = 0;
+    for (let i = 0; i < n; i++) {
+      const g = mk(i);
+      if (g.special === 'rainbow') hit++;
+      else assert.ok(!g.spots.some((s) => s.ref.startsWith('rainbow:')) || mk.carrier, 'ลายสีรุ้งมาจากพ่อแม่สีรุ้งเท่านั้น');
+    }
+    return hit / n;
+  };
+  const normal = rate((i) => crossGenes(variantGenes(COLORS[i % 5]), variantGenes(COLORS[(i + 2) % 5]), rnd), 20000);
+  assert.ok(normal > 0.04 && normal < 0.06,`ลูกผสมทั่วไป ${(normal * 100).toFixed(2)}%`);
+
+  const rainbow = crossGenes(variantGenes('golden'), variantGenes('calico'), () => 0);
+  assert.equal(rainbow.special, 'rainbow');
+  assert.deepEqual(sanitizeGenes(rainbow), rainbow, 'ยีนสีรุ้งผ่านการตรวจโดยไม่ถูกแก้');
+  assert.equal(rainbow.body.from, 'rainbow');
+  assert.equal(rainbow.spots.length, 3);
+  assert.equal(describeGenes(rainbow), 'ตัวสีรุ้ง 🌈 หายากที่สุด');
+  assert.equal(sanitizeGenes({ ...rainbow, special: 'golden' }).special, undefined, 'ใส่ special เป็นสีธรรมดาไม่ได้');
+
+  const one = Object.assign((i) => crossGenes(rainbow, variantGenes(COLORS[i % 5]), rnd), { carrier: true });
+  const both = Object.assign(() => crossGenes(rainbow, rainbow, rnd), { carrier: true });
+  const r1 = rate(one, 4000);
+  const r2 = rate(both, 4000);
+  assert.ok(r1 > 0.07 && r1 < 0.13, `พ่อหรือแม่สีรุ้ง ${(r1 * 100).toFixed(1)}%`);
+  assert.ok(r2 > 0.25 && r2 < 0.35, `พ่อแม่สีรุ้งทั้งคู่ ${(r2 * 100).toFixed(1)}%`);
+});
+
 test('ยีน → ชุดสีสำหรับวาด: id คงที่ตามยีน และจำนวนจุดตามความหนาแน่น', () => {
   const g = sanitizeGenes({ ...variantGenes('calico'), spots: [{ ref: 'calico:1', color: '#0b0c10', k: 2 }], seed: 1234 });
   const v = genesToVariant(g);

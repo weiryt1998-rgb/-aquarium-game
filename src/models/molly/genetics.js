@@ -12,6 +12,7 @@ import { MOLLY_VARIANTS } from './variants.js';
  *     head:  { color, end } | null,         สีหัว (แบบ Red Head)
  *     spots: [{ ref, color, k }],           ชั้นลายจุด ≤ 3 ชั้น: ref = 'calico:1' (ชั้นลายของสีนั้น), k = ความหนาแน่น
  *     seed,                                 ตำแหน่งจุดของแต่ละตัว (ลายไม่ซ้ำกัน)
+ *     special?: 'rainbow',                  สีหายากที่สุด (ชุดสี special ใน variants.js) — ไม่มี = ลูกผสมทั่วไป
  *   }
  *
  * ไฟล์นี้เป็นโค้ดล้วน (ไม่ใช้ DOM/Three.js) ใช้ได้ทั้งในเกมและฝั่งตรวจคำสั่งของเซฟกลาง
@@ -21,12 +22,16 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const MAX_SPOT_LAYERS = 3;
 const SEED_MAX = 999_999;
 
-/** ชุดสีที่ใช้เป็นแหล่งยีนได้ (ไม่รวมตัวอย่างโชว์) */
-const PALETTES = Object.values(MOLLY_VARIANTS).filter((v) => !v.showcase);
+/** ชุดสีที่ยีนอ้างอิงได้ (ไม่รวมตัวอย่างโชว์) */
+const GENE_VARIANTS = Object.values(MOLLY_VARIANTS).filter((v) => !v.showcase);
+/** ชุดสีที่ใช้สุ่มกลายพันธุ์/สีหายากได้ (ไม่รวมสีพิเศษ เช่น สีรุ้ง ซึ่งได้จากการสุ่มของตัวเองเท่านั้น) */
+const PALETTES = GENE_VARIANTS.filter((v) => !v.special);
 
 /** ชั้นลายจุดทั้งหมดที่มีในชุดสี เช่น 'calico:1' */
 const spotLayersOf = (variant) => (Array.isArray(variant.spots) ? variant.spots : variant.spots ? [variant.spots] : []);
-export const SPOT_REFS = Object.fromEntries(PALETTES.flatMap((v) => spotLayersOf(v).map((L, i) => [`${v.id}:${i}`, L])));
+export const SPOT_REFS = Object.fromEntries(GENE_VARIANTS.flatMap((v) => spotLayersOf(v).map((L, i) => [`${v.id}:${i}`, L])));
+/** ชั้นลายที่การกลายพันธุ์เพิ่มให้ได้ */
+const MUTATION_SPOT_REFS = Object.keys(SPOT_REFS).filter((r) => SPOT_REFS[r].count > 0 && PALETTES.some((p) => r.startsWith(`${p.id}:`)));
 
 /** ชื่อเรียกลายแต่ละชั้น (ใช้บรรยายลูกผสม) */
 const SPOT_NAMES = {
@@ -39,7 +44,17 @@ const SPOT_NAMES = {
   'calico:1': 'จุดดำ',
   'golddust:0': 'ลายด่างเข้ม',
   'golddust:1': 'ผงฝุ่น',
+  'rainbow:0': 'ด่างส้ม',
+  'rainbow:1': 'จุดเขียว',
+  'rainbow:2': 'จุดดำละเอียด',
 };
+
+/** สีหายาก: ชุดสีที่ไม่มีขายในร้าน ได้จากการผสมพันธุ์ปลาสอดต่างสี/ลูกผสมเท่านั้น */
+const RARE_PALETTES = ['black', 'silver'].map((id) => MOLLY_VARIANTS[id]);
+/** โอกาสที่ลูกผสมได้สีหายาก (นอกเหนือจากการกลายพันธุ์ทั่วไป) */
+const RARE_COLOR_CHANCE = 0.15;
+/** โอกาสได้สีรุ้ง (หายากที่สุด) ตามจำนวนพ่อแม่ที่เป็นสีรุ้ง [ไม่มี, 1 ตัว, ทั้งคู่] */
+const RAINBOW_CHANCE = [0.05, 0.1, 0.3];
 
 const HEAD_COLORS = ['#f0541c', '#ff8a1f', '#d8202e', '#ffb21e'];
 const SPOT_COLORS = ['#0b0c10', '#f2882a', '#2a1608', '#f0541c', '#ffd22c', '#3b5fa8'];
@@ -136,7 +151,7 @@ function mutate(g, rnd) {
     const t = 0.4 + rnd() * 0.4;
     g.body = { base: mixHex(g.body.base, p.body.base, t), back: mixHex(g.body.back, p.body.back, t), belly: mixHex(g.body.belly, p.body.belly, t), from: t >= 0.5 ? p.id : g.body.from };
   } else if (kind === 1 && g.spots.length < MAX_SPOT_LAYERS) {
-    const refs = Object.keys(SPOT_REFS).filter((r) => SPOT_REFS[r].count > 0 && !g.spots.some((s) => s.ref === r));
+    const refs = MUTATION_SPOT_REFS.filter((r) => !g.spots.some((s) => s.ref === r));
     if (refs.length) {
       const ref = pick(rnd, refs);
       g.spots.push({ ref, color: rnd() < 0.5 ? SPOT_REFS[ref].color : pick(rnd, SPOT_COLORS), k: clampK(0.5 + rnd()) });
@@ -151,6 +166,14 @@ function mutate(g, rnd) {
   }
 }
 
+/** ได้สีหายาก: สีตัวเกือบเป็นสีนั้นทั้งตัว (เหลือเฉดของพ่อแม่เล็กน้อย) และครึ่งหนึ่งได้ครีบสีเดียวกัน */
+function rareColor(g, rnd) {
+  const p = pick(rnd, RARE_PALETTES);
+  const t = 0.85 + rnd() * 0.15;
+  g.body = { base: mixHex(g.body.base, p.body.base, t), back: mixHex(g.body.back, p.body.back, t), belly: mixHex(g.body.belly, p.body.belly, t), from: p.id };
+  if (rnd() < 0.5) g.fins = { base: p.fins.base, tip: p.fins.tip, ray: p.fins.ray, opacity: p.fins.opacity };
+}
+
 /**
  * ยีนของลูก จากยีนแม่ (a) และพ่อ (b)
  * @param {() => number} rnd ตัวสุ่ม 0..1
@@ -163,7 +186,11 @@ export function crossGenes(a, b, rnd = Math.random) {
     spots: inheritSpots(a.spots, b.spots, rnd),
     seed: 1 + Math.floor(rnd() * (SEED_MAX - 1)),
   };
+  // สีรุ้ง: ได้ทั้งชุดสี (ลายจุดตาม seed ของตัวเอง) — พ่อแม่เป็นสีรุ้งยิ่งมีโอกาสมาก
+  const rainbowParents = Number(a.special === 'rainbow') + Number(b.special === 'rainbow');
+  if (rnd() < RAINBOW_CHANCE[rainbowParents]) return sanitizeGenes({ ...variantGenes('rainbow'), seed: g.seed, special: 'rainbow' });
   if (rnd() < 0.15) mutate(g, rnd);
+  if (rnd() < RARE_COLOR_CHANCE) rareColor(g, rnd);
   return sanitizeGenes(g);
 }
 
@@ -192,6 +219,7 @@ export function sanitizeGenes(raw) {
     head: raw.head && typeof raw.head === 'object' ? { color: hex(raw.head.color, HEAD_COLORS[0]), end: Math.round(num(raw.head.end, 0.2, 0.45, 0.33) * 100) / 100 } : null,
     spots,
     seed: Math.floor(num(raw.seed, 1, SEED_MAX, 1)),
+    ...(MOLLY_VARIANTS[raw.special]?.special ? { special: raw.special } : {}),
   };
 }
 
@@ -244,12 +272,16 @@ const BODY_NAMES = [
   ['แดง', '#e0402a'],
   ['ครีม', '#f3dfae'],
   ['เทา', '#8a8f96'],
+  ['ฟ้า', '#4fb3e6'],
+  ['น้ำเงิน', '#1f3ea8'],
+  ['เขียว', '#2fbf4f'],
 ];
 
 /** คำบรรยายลักษณะของลูกผสม เช่น "ตัวสีทอง · หัวแดง · จุดดัลเมเชียน" */
 export function describeGenes(genes) {
   const g = sanitizeGenes(genes);
   if (!g) return '';
+  if (g.special === 'rainbow') return 'ตัวสีรุ้ง 🌈 หายากที่สุด';
   let best = BODY_NAMES[0];
   for (const c of BODY_NAMES) if (colorDistance(c[1], g.body.base) < colorDistance(best[1], g.body.base)) best = c;
   const parts = [`ตัวสี${best[0]}`];
