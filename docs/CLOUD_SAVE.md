@@ -232,6 +232,8 @@ gameSaves/global              ← เซฟกลางชุดเดียว
     lastCleanAt               ← เวลาทำความสะอาดล่าสุด (คูลดาวน์)
     stats                     ← { feeds, coinsCollected, fishBorn, fishBought }
     lastSaved                 ← เวลาบันทึกล่าสุด
+    sunflower?                ← กระถางทานตะวันข้างตู้ { plantedAt, at, water, food, growth, health, seedsAt }
+                                ค่า ณ เวลา at — ค่าปัจจุบันคำนวณจากนาฬิกาจริง (src/shared/garden.js) ไม่มี = ยังไม่ได้ปลูก
   meta:                       ← ข้อมูลระบบ (กันส่งซ้ำ/ข้อมูลเก่า)
     writers: { w_…: { seq, at } }
     tanks: { tankId: { simRev, simBy, simAt, incomeBank, incomeAt, lastFedAt, … } }

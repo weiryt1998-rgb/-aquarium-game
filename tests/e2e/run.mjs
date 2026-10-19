@@ -483,6 +483,36 @@ test('15b) ให้อาหาร / ขายปลา / รับรางว
   assert.equal(await evalGame(B, () => window.game.state.activeTank.decor.length), placed);
 });
 
+test('15f) กระถางทานตะวัน: ปลูก / รดน้ำ / ใส่ปุ๋ย ผ่านการ์ดในเกม → เซิร์ฟเวอร์ตรวจผ่าน อีกเครื่องเห็นต้นไม้เดียวกัน', async () => {
+  const before = await cloud();
+  assert.equal(before.game.sunflower, undefined, 'เริ่มจากกระถางว่าง');
+  try {
+    await A.page.click('nav.sidebar button[data-action="garden"]');
+    await A.page.click('.garden-card [data-action="plant"]');
+    const planted = await waitCloud((d) => !!d.game.sunflower, 'plant sunflower');
+    assert.equal(planted.game.coins, before.game.coins - 20);
+    assert.equal(planted.game.sunflower.growth, 0.04);
+
+    await A.page.click('.garden-card [data-action="water"]');
+    await A.page.evaluate(() => window.game.cloud.flushNow());
+    await waitCloud((d) => d.game.sunflower.water === 100, 'water sunflower');
+    // ดินชุ่มแล้ว → ปุ่มรดน้ำกดไม่ได้
+    assert.equal(await A.page.isDisabled('.garden-card [data-action="water"]'), true);
+
+    // ปุ๋ยในดินถูกใช้ไปตลอดเวลา (ปลูกไปได้ไม่กี่วินาที ปุ๋ยเหลือ 29.99%) → ใส่เพิ่ม 70% ได้เกือบเต็ม ไม่ใช่ 100 พอดี
+    await A.page.click('.garden-card [data-action="fertilize"]');
+    const fed = await waitCloud((d) => d.game.sunflower.food > 99, 'fertilize sunflower');
+    assert.equal(fed.game.coins, planted.game.coins - 25);
+    assert.equal(await coinsOf(A), fed.game.coins);
+    await A.page.waitForTimeout(1500); // ให้ภาพถุงปุ๋ยเทลงกระถาง
+    await A.page.screenshot({ path: path.join(OUT_DIR, `sunflower-${MODE}.png`) });
+    await waitFor(async () => (await evalGame(B, () => window.game.state.data.sunflower?.food ?? 0)) > 99, { message: 'B sees sunflower' });
+  } finally {
+    // ปิดการ์ดเสมอ ไม่ให้บังปุ่มที่การทดสอบถัดไปต้องกด
+    await A.page.evaluate(() => window.game.ui.gardenCard.hide());
+  }
+});
+
 test('15e) Fish AI ในเกมจริง: ปลาว่ายไปกินอาหาร ไม่ออกนอกตู้ ไม่ทะลุของตกแต่ง และแต่ละตัวมีบุคลิกต่างกัน', async () => {
   // ให้ปลาหิวพอจะสนใจอาหาร แล้วโรยอาหารผ่านปุ่มในเกม
   await A.page.evaluate(() => {

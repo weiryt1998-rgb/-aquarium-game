@@ -34,6 +34,9 @@ export function reconcileGame(game, next, { adopt = {}, server = next, sent = nu
   live.collection = { ...next.collection };
   live.missions = cloneData(next.missions);
   live.stats = { ...next.stats };
+  // ต้นทานตะวันเปลี่ยนด้วยคำสั่งเท่านั้น (ค่าระหว่างนั้นคำนวณจากเวลา) → ใช้ตาม next เสมอ
+  if (next.sunflower) live.sunflower = { ...next.sunflower };
+  else delete live.sunflower;
 
   const movingDecorId = game.placement?.state === 'moving' ? game.placement.selected?.id : null;
   const liveTanks = new Map(live.tanks.map((t) => [t.id, t]));

@@ -65,6 +65,10 @@
 | `decor/plant_alien.glb` | พืชเอเลี่ยนสีฟ้า |
 | `decor/driftwood_mossy.glb` | ขอนไม้มอส |
 | `decor/cliff_sanctuary.glb` | วิหารผาโบราณ |
+| `decor/sunken_stump.glb` | ตอไม้จม |
+| `decor/dome_house.glb` | บ้านโดม |
+| `decor/stone_bridge.glb` | สะพานหิน (ปลาว่ายลอดใต้โค้งได้) |
+| `decor/shipwreck.glb` | เรืออับปาง |
 | `decor/<id>.glb` | ไฟล์ของแต่ละชิ้นตาม `id` ใน `src/data/decor.js` เช่น `plant_fern.glb` (ถ้ามีจะใช้แทนไฟล์กลาง) |
 
 ข้อกำหนดของโมเดลของตกแต่ง
@@ -72,6 +76,18 @@
 - จุด origin ควรอยู่ที่ฐานของโมเดล (ส่วนที่วางบนพื้นทราย)
 - เกมจะปรับให้สูงเท่ากับค่า `height` ของชิ้นนั้น หรือให้กว้างเท่า `model.size` ถ้าตั้ง `fit: 'width'`
 - พืชน้ำจะโยกไหวตามน้ำให้อัตโนมัติ
+
+## กระถางทานตะวันข้างตู้ — `garden/`
+
+| ไฟล์ | ใช้กับ |
+| --- | --- |
+| `garden/sunflower.glb` | กระถางทานตะวันบนโต๊ะทางขวาของตู้ (ต้นไม้มีชีวิต ต้องรดน้ำ ใส่ปุ๋ย — กฎใน `src/shared/garden.js`) — แปลงจาก `Fish/Meshy_AI_sunflower_retextured_….glb` ด้วย `node scripts/build-model.mjs <ไฟล์> public/models/garden/sunflower.glb --error 0.01` |
+
+ข้อกำหนดของโมเดลทานตะวัน
+
+- กระถางกับต้นไม้อยู่ใน mesh เดียวกันได้ เกมแยกด้วยความสูง: สูงกว่าผิวดิน = ต้นไม้ (โต/โค้ง/เหี่ยว/เปลี่ยนสีใน shader)
+- ดอกหันไปทาง **+Z** · ถ้าเปลี่ยนไฟล์ ให้วัดตำแหน่งผิวดิน/ปากกระถาง/ดอกใหม่แล้วแก้ค่า `MODEL` ใน `src/world/Sunflower.js`
+- ตรวจท่าทางทุกขั้นได้ที่หน้า `/preview/sunflower.html` ตอนรัน `npm run dev` (ไม่มีไฟล์ = ใช้โมเดลชั่วคราวจากโค้ด, `?procedural` บังคับดูโมเดลชั่วคราว)
 
 ## หอย (ระบบนิเวศใต้น้ำ) — `decor/`
 

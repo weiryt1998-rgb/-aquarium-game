@@ -358,6 +358,7 @@ svg {
 }
 
 .sidebar button {
+  position: relative; /* จุดแดง .badge ของปุ่มต้นไม้ */
   width: 74px;
   padding: 8px 4px 6px;
   border-radius: 16px;
@@ -830,6 +831,95 @@ svg {
   flex: 1;
   font-size: 0.82rem;
   padding: 8px 6px;
+}
+
+/* ── การ์ดกระถางทานตะวัน (ใช้กรอบเดียวกับการ์ดปลา) ──
+   จอใหญ่: เปิดทางซ้ายข้างแถบเมนู ไม่บังกระถางที่อยู่ขวาของตู้ (จอเล็กอยู่ด้านล่างเหมือนการ์ดปลา) */
+.garden-card {
+  top: 108px; /* ใต้ป้ายชื่อตู้ */
+  left: 124px;
+  right: auto;
+  animation-name: slide-in-left;
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+.gc-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 2.2rem;
+  border-radius: 14px;
+  background: radial-gradient(circle, rgba(255, 214, 90, 0.35), rgba(80, 140, 60, 0.35));
+}
+
+.gc-title {
+  display: block;
+  padding-left: 6px;
+  font-size: 1.1rem;
+}
+
+.bar.water i {
+  background: linear-gradient(90deg, #3d9bff, #7fe0ff);
+}
+
+.bar.fertilizer i {
+  background: linear-gradient(90deg, #b98a4a, #f0d48a);
+}
+
+.gc-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.gc-actions > button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  font-size: 1.2rem;
+}
+
+.gc-actions > button span {
+  font-size: 0.8rem;
+}
+
+.gc-actions > button small,
+.gc-actions > button .price {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ปุ่มที่ควรกดตอนนี้: เรืองแสงเป็นจังหวะ (ไม่ขยับตำแหน่ง ปุ่มจึงกดง่าย) */
+.gc-actions > button.ready {
+  border-color: rgba(255, 220, 90, 0.8);
+  animation: gc-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes gc-glow {
+  50% {
+    box-shadow: 0 0 0 3px rgba(255, 220, 90, 0.35), 0 0 14px rgba(255, 220, 90, 0.45);
+  }
+}
+
+.gc-actions > button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.gc-hint {
+  margin-top: 8px;
+  min-height: 1.1em;
+  font-size: 0.76rem;
+  color: var(--muted);
 }
 
 /* ───────────────────────── หน้าต่าง (modal) ───────────────────────── */

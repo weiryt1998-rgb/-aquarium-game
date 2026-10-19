@@ -16,6 +16,8 @@ import { FoodSystem } from '../systems/FoodSystem.js';
 import { WasteSystem } from '../systems/WasteSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
 import { CareSystem } from '../systems/CareSystem.js';
+import { GardenSystem } from '../systems/GardenSystem.js';
+import { SUNFLOWER_MODEL } from '../world/Sunflower.js';
 import { AlertSystem } from '../systems/AlertSystem.js';
 import { TankSimulation } from '../sim/TankSimulation.ts';
 import { DecorManager } from '../systems/DecorManager.js';
@@ -73,6 +75,8 @@ export class Game {
     this.decor = new DecorManager(this);
     this.fish = new FishManager(this);
     this.care = new CareSystem(this);
+    /** กระถางทานตะวันข้างตู้ (ต้นไม้มีชีวิต ต้องรดน้ำ ใส่ปุ๋ย) */
+    this.garden = new GardenSystem(this);
     this.alerts = new AlertSystem(this);
     /** Simulation Engine ของตู้ที่แสดงอยู่ (สร้างใหม่ทุกครั้งที่โหลด/ย้ายตู้) */
     this.sim = null;
@@ -100,7 +104,7 @@ export class Game {
   }
 
   async init() {
-    await this.assets.preload(this.models.allModelUrls(), (p) => this.ui.start.setProgress(p));
+    await this.assets.preload([...this.models.allModelUrls(), SUNFLOWER_MODEL], (p) => this.ui.start.setProgress(p));
     const tank = this.state.activeTank;
     const offline = this.state.catchUpTank(tank, Date.now(), { giveCoins: !this.state.isNewGame });
     this.loadTank(tank);
@@ -129,6 +133,7 @@ export class Game {
     this.selectFish(null);
     this.aquarium.build(type, this.sceneMgr.quality);
     this.room.build(this.aquarium.dims);
+    this.garden.place(this.aquarium.dims);
     this.sceneMgr.setupLights(this.aquarium.dims);
     this.sceneMgr.frameTank(this.aquarium.dims);
     this.bubbles.setTank(this.aquarium.dims, (x, z) => this.aquarium.heightAt(x, z));
@@ -252,6 +257,7 @@ export class Game {
     if (this.selectedFish === fish) return;
     if (this.selectedFish && this.sceneMgr.followTarget === this.selectedFish.group) this.sceneMgr.stopFollow();
     this.selectedFish = fish;
+    if (fish) this.ui.gardenCard.hide(); // การ์ดอยู่ตำแหน่งเดียวกัน
     this.ui.fishCard.show(fish);
   }
 
@@ -345,7 +351,7 @@ export class Game {
     return true;
   }
 
-  /** แตะในฉาก (ไม่ได้ลาก): เก็บเหรียญ → เก็บไข่มุก → เลือกปลา → ยกเลิกการเลือก */
+  /** แตะในฉาก (ไม่ได้ลาก): เก็บเหรียญ → เก็บไข่มุก → เลือกปลา → กระถางทานตะวัน → ยกเลิกการเลือก */
   handleTap(raycaster) {
     const ray = raycaster.ray;
     const coin = this.coins.pick(ray);
@@ -359,6 +365,12 @@ export class Game {
       return;
     }
     const fish = this.fish.pick(ray);
+    if (!fish && this.garden.pick(ray)) {
+      this.sound.play('click');
+      this.selectFish(null);
+      this.ui.gardenCard.show();
+      return;
+    }
     if (fish) this.sound.play('bubble');
     this.selectFish(fish);
   }
@@ -421,6 +433,7 @@ export class Game {
     this.waste.update(dt, this.time);
     this.coins.update(dt, this.time);
     this.decor.update(dt, this.time);
+    this.garden.update(dt, this.time);
     this.alerts.update(dt);
     this.bubbles.update(dt, this.time);
     this.sparkles.update(dt, this.time);

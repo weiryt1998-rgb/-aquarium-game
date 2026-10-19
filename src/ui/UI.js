@@ -6,6 +6,7 @@ import { ICONS, coinIcon, gemIcon } from './icons.js';
 import { collectRefs } from './helpers.js';
 import { DecorToolbar } from './DecorToolbar.js';
 import { FishCard } from './FishCard.js';
+import { GardenCard } from './GardenCard.js';
 import { StartScreen } from './StartScreen.js';
 import { ShopPanel } from './panels/ShopPanel.js';
 import { FishPanel } from './panels/FishPanel.js';
@@ -36,6 +37,7 @@ const TEMPLATE = /* html */ `
       <button data-action="decor"><span class="ico">🪴</span><span>ตกแต่ง</span></button>
       <button data-action="food"><span class="ico">🥫</span><span>อาหาร</span></button>
       <button data-action="shop"><span class="ico">🏪</span><span>ร้านค้า</span></button>
+      <button data-action="garden" title="กระถางทานตะวันข้างตู้"><span class="ico">🌻</span><span>ต้นไม้</span><i class="badge" data-ref="gardenBadge"></i></button>
     </nav>
 
     <div class="tank-label" data-ref="tankLabel"></div>
@@ -66,6 +68,7 @@ const TEMPLATE = /* html */ `
 
   <div class="decor-toolbar hidden"></div>
   <div class="fish-card hidden"></div>
+  <div class="fish-card garden-card hidden"></div>
   <div class="modal-root"></div>
   <div class="toasts" data-ref="toasts"></div>
   <div class="floaters" data-ref="floaters"></div>
@@ -93,7 +96,8 @@ export class UI {
     };
     this.activePanel = null;
     this.decorToolbar = new DecorToolbar(this, root.querySelector('.decor-toolbar'));
-    this.fishCard = new FishCard(this, root.querySelector('.fish-card'));
+    this.fishCard = new FishCard(this, root.querySelector('.fish-card:not(.garden-card)'));
+    this.gardenCard = new GardenCard(this, root.querySelector('.garden-card'));
     this.start = new StartScreen(this, root.querySelector('.start-screen'));
     if (game.cloud) {
       this.refs.saveStatus.classList.remove('hidden');
@@ -127,7 +131,13 @@ export class UI {
         break;
       case 'decor':
         this.closeAll();
+        this.gardenCard.hide();
         game.placement.enter();
+        break;
+      case 'garden':
+        this.closeAll();
+        game.selectFish(null);
+        this.gardenCard.toggle();
         break;
       case 'screenshot':
         game.takeScreenshot();
@@ -225,8 +235,10 @@ export class UI {
     const claimable = this.game.missions.claimableCount > 0;
     this.refs.plusBadge.classList.toggle('show', claimable);
     this.refs.menuBadge.classList.toggle('show', claimable);
+    this.refs.gardenBadge.classList.toggle('show', this.game.garden.needsCare);
     this.activePanel?.tick(step);
     this.fishCard.update();
+    this.gardenCard.update();
     this.decorToolbar.tick();
   }
 

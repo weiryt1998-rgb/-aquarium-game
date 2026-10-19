@@ -59,6 +59,7 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
 | ซูม / เลื่อนกล้อง | ล้อเมาส์ / ลากขวา | หนีบสองนิ้ว |
 | เก็บเหรียญ / ดูข้อมูลปลา | คลิก | แตะ |
 | ให้อาหาร | ปุ่มขวาล่าง หรือกด `F` | ปุ่มขวาล่าง |
+| ดูแลกระถางทานตะวัน (รดน้ำ / ใส่ปุ๋ย / เก็บเมล็ด) | คลิกกระถางข้างตู้ หรือปุ่ม 🌻 ต้นไม้ | แตะกระถาง หรือปุ่ม 🌻 ต้นไม้ |
 | โหมดตกแต่ง: วาง / ย้าย | คลิกพื้นทราย / ลากของ | แตะ / ลาก |
 | โหมดตกแต่ง: หมุนของ / ยกเลิก | `R` / `Esc` หรือคลิกขวา | ปุ่มหมุน / ยกเลิก |
 | โหมดตกแต่ง: หมุนกล้อง | ลากขวา | สองนิ้ว |
@@ -70,7 +71,8 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
 ├── vite.config.js           ตั้งค่า Vite + ปลั๊กอินสร้างรายชื่อไฟล์โมเดล
 ├── public/models/           ← วางไฟล์ .glb ที่นี่ (ดู public/models/README.md)
 │   ├── fish/
-│   └── decor/
+│   ├── decor/
+│   └── garden/              กระถางทานตะวันข้างตู้
 └── src/
     ├── main.js              จุดเริ่มโปรแกรม
     ├── config.js            ค่าสมดุลเกมทั้งหมด (อัตราหิว ความสกปรก ราคาขาย ฯลฯ)
@@ -87,6 +89,7 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
     │   └── Sound.js         เสียงสังเคราะห์ด้วย Web Audio
     ├── cloud/               เซฟกลาง: เข้าสู่ระบบ, โหลด/ซิงก์ Firestore, ป้ายสถานะ, นำเข้าเซฟเก่า
     ├── shared/              กฎเกม (ราคา/คำสั่ง/ตรวจข้อมูล) ที่รันใน Firestore transaction (และ Cloud Functions ถ้าย้ายไป Blaze)
+    │                        garden.js = ต้นทานตะวัน (น้ำ ปุ๋ย สุขภาพ การโต ตามนาฬิกาจริง)
     ├── data/                ข้อมูลเกม แก้หรือเพิ่มได้โดยไม่ต้องแตะโค้ดระบบ
     │   ├── fish.js          สายพันธุ์ปลา (ราคา พฤติกรรม หน้าตาโมเดลชั่วคราว path โมเดล)
     │   ├── decor.js         ของตกแต่ง
@@ -100,11 +103,12 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
     ├── placeholders/        โมเดลชั่วคราวที่สร้างด้วยโค้ด (ใช้จนกว่าจะมีไฟล์ .glb)
     ├── models/molly/        โมเดลปลา Balloon Molly แบบละเอียดที่สร้างด้วยโค้ด (รูปทรง, texture, shader ว่ายน้ำ, ชุดสี)
     ├── render/              shader ต่อเติม (caustics, ว่ายน้ำ, พืชโยก) และ texture ที่วาดด้วยโค้ด
-    ├── world/               ฉาก: SceneManager (กล้อง/แสง), Aquarium, Substrate, Bubbles, LightRays, Room
+    ├── world/               ฉาก: SceneManager (กล้อง/แสง), Aquarium, Substrate, Bubbles, LightRays, Room, Sunflower (กระถางทานตะวัน)
     ├── entities/            Fish (การว่ายและท่าทาง), Decoration — ฝั่งแสดงผล อ่านค่าสถานะจาก sim
     ├── systems/             FishManager (แสดงผลเหตุการณ์ชีวิตปลา), AlertSystem (แจ้งเตือนอาการ/น้ำ), CareSystem (HUD/ภาพน้ำ),
-    │                        FoodSystem, CoinSystem, DecorManager, MissionSystem, PlacementController (โหมดตกแต่ง), InputController
-    ├── ui/                  HUD, หน้าต่างเมนู (panels/), แถบตกแต่ง, การ์ดปลา, หน้าเริ่มเกม
+    │                        FoodSystem, CoinSystem, DecorManager, MissionSystem, PlacementController (โหมดตกแต่ง), InputController,
+    │                        GardenSystem (ดูแลกระถางทานตะวัน + แจ้งเตือน)
+    ├── ui/                  HUD, หน้าต่างเมนู (panels/), แถบตกแต่ง, การ์ดปลา, การ์ดทานตะวัน, หน้าเริ่มเกม
     └── styles/main.css
 ```
 

@@ -7,6 +7,7 @@ import { seededRandom, smoothstep } from '../utils/math.js';
 /**
  * ฉากรอบตู้: ห้องนั่งเล่น — โต๊ะวางตู้พร้อมตู้ไม้ด้านล่าง ผนัง 3 ด้าน พื้นไม้ ชั้นหนังสือ โคมไฟตั้งพื้น ต้นไม้ในกระถาง
  * ชั้นวางของและกรอบรูปเหนือตู้ หน้าต่างผ้าม่าน (ผนังซ้าย) ตู้เตี้ยกับรูปภาพ (ผนังขวา) พรม
+ * (กระถางทานตะวันบนโต๊ะทางขวาของตู้เป็นต้นไม้มีชีวิต แยกอยู่ที่ world/Sunflower.js)
  *
  * ทำให้เบาที่สุด: ไม่มีไฟล์โมเดล ไม่มีไฟเพิ่ม ไม่ทำเงา และไม่โดนหมอกใต้น้ำ (fog: false)
  * เฟอร์นิเจอร์ทุกชิ้นสร้างจากรูปทรงพื้นฐาน ทาสีด้วย vertex color แล้วรวมเป็น mesh เดียวตามวัสดุ
@@ -278,19 +279,19 @@ function buildRug(b, R) {
   b.box([width - 1.6, 0.1, 14.4], COLORS.rug, [0, FLOOR + 0.06, front + 6]);
 }
 
-/** ของเล็ก ๆ บนโต๊ะข้างตู้: กระปุกอาหารปลา (ขวา) กระบองเพชรจิ๋ว (ซ้าย) */
+/** ของเล็ก ๆ บนโต๊ะข้างตู้ (ซ้าย): กระปุกอาหารปลา กระบองเพชรจิ๋ว — ฝั่งขวาเป็นที่ของกระถางทานตะวัน (world/Sunflower.js) */
 function buildDeskItems(b, R) {
   const y = TABLE_TOP;
-  const fx = R.W + 1.9;
+  const fx = -R.W - 1.9;
   const fz = -R.D * 0.4;
   b.add(new THREE.CylinderGeometry(0.4, 0.4, 1.05, 16), '#f1b13b', [fx, y + 0.53, fz]);
   b.add(new THREE.CylinderGeometry(0.41, 0.41, 0.34, 16), '#2f6fa0', [fx, y + 0.55, fz]);
   b.add(new THREE.CylinderGeometry(0.44, 0.44, 0.24, 16), '#d64532', [fx, y + 1.16, fz]);
-  const cx = -R.W - 2;
-  const cz = -R.D * 0.2;
+  const cx = -R.W - 2.6;
+  const cz = R.D * 0.3;
   b.add(new THREE.CylinderGeometry(0.45, 0.35, 0.62, 14), COLORS.pot, [cx, y + 0.31, cz]);
   b.add(new THREE.SphereGeometry(0.29, 10, 8), '#4f9446', [cx, y + 0.92, cz], { scale: [1, 1.9, 1] });
-  b.add(new THREE.SphereGeometry(0.15, 8, 6), '#5aa250', [cx + 0.31, y + 1.02, cz], { scale: [1, 1.8, 1], rot: [0, 0, -0.5] });
+  b.add(new THREE.SphereGeometry(0.15, 8, 6), '#5aa250', [cx - 0.31, y + 1.02, cz], { scale: [1, 1.8, 1], rot: [0, 0, 0.5] });
 }
 
 /** ชั้นหนังสือชิดผนังหลัง: 5 ช่อง หนังสือสุ่มสี/ขนาด บางช่องมีแจกันหรือหนังสือวางซ้อน */

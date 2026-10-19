@@ -43,7 +43,7 @@ export class InputController {
     if (this.down || now - this.lastHover < 60) return;
     this.lastHover = now;
     const ray = this.#updateRay(e).ray;
-    const hover = this.game.coins.pick(ray) || this.game.decor.pickPearl(ray) || this.game.fish.pick(ray);
+    const hover = this.game.coins.pick(ray) || this.game.decor.pickPearl(ray) || this.game.fish.pick(ray) || this.game.garden.pick(ray);
     this.canvas.style.cursor = hover ? 'pointer' : '';
   }
 
@@ -66,7 +66,10 @@ export class InputController {
       e.preventDefault();
       return;
     }
-    if (e.key === 'Escape') this.game.ui.closeAll();
+    if (e.key === 'Escape') {
+      this.game.ui.closeAll();
+      this.game.ui.gardenCard.hide();
+    }
     else if (e.key === 'f' || e.key === 'F') this.game.feed();
   }
 }

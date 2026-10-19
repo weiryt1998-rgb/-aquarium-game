@@ -199,6 +199,27 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
     })));
   });
 
+  test('กระถางทานตะวัน: บันทึกได้ (แม้มีครบ 7 ตู้เต็มความจุ — งบนิพจน์ของ Rules) และปฏิเสธรูปแบบผิด', async () => {
+    await seed(env);
+    const sunflower = { plantedAt: 1, at: 2, water: 50, food: 20, growth: 0.5, health: 90, seedsAt: 0 };
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.sunflower = sunflower), d))));
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => {
+      const template = d.game.tanks[0];
+      d.game.tanks = TANK_TYPES.map((type) => ({
+        ...template,
+        id: `tank_${type.id}`,
+        typeId: type.id,
+        fish: Array.from({ length: type.capacity }, (_, i) => ({ ...template.fish[0], id: `fish_${type.id}_${i}` })),
+      }));
+      d.game.activeTankId = d.game.tanks[0].id;
+      d.game.sunflower = sunflower;
+      return d;
+    })));
+    for (const bad of [{ ...sunflower, hacked: 1 }, { ...sunflower, water: '50' }, 'sunflower', { ...sunflower, growth: null }]) {
+      await assertFails(setDoc(saveRef(), await nextDoc((d) => ((d.game.sunflower = bad), d))));
+    }
+  });
+
   test('เขียนทับด้วยข้อมูลเก่า (revision ไม่ต่อกัน) ไม่ได้', async () => {
     await seed(env);
     await assertFails(setDoc(saveRef(), await nextDoc((d) => ({ ...d, revision: d.revision - 1 }))));

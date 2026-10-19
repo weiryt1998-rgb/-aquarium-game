@@ -9,6 +9,7 @@ import { clamp } from '../utils/math.js';
 import { FEED_WINDOW_MS, LIMITS } from './constants.js';
 import { breedGroupOf, dueAt, isPregnant, planOffspring, restEndsAt, sanitizeFetus } from './breeding.js';
 import { sanitizeGenes } from '../models/molly/genetics.js';
+import { actionTime, applySunflowerAction, sunflowerAt, sunflowerBlock } from './garden.js';
 import {
   addItem,
   atDecorLimit,
@@ -129,6 +130,24 @@ function trustedGrowth(fish, species, claimed, tank, meta, ctx) {
   if (ctx.predict) return clamp(claimed, 0, 1);
   const max = Math.min(1, fish.growth + maxGrowthIn(species, simSecondsSince(tank, meta, ctx.now)) + 0.01);
   return clamp(claimed, fish.growth, max);
+}
+
+/** เหตุผลที่ทำกับต้นทานตะวันไม่ได้ (shared/garden.js) → รหัสข้อผิดพลาดของคำสั่ง */
+const SUNFLOWER_FAIL = { 'already-planted': 'already-owned', 'not-planted': 'not-found', dead: 'invalid', 'too-wet': 'cooldown', 'too-full': 'cooldown', 'not-ready': 'cooldown' };
+
+/**
+ * ดูแลต้นทานตะวัน: เดินเวลาของต้นไม้ถึงตอนที่ผู้เล่นทำในเครื่อง (c.at) แล้วตรวจและใช้ผล
+ * ราคา/รางวัลคิดฝั่งนี้เสมอ ไม่รับตัวเลขจากเครื่อง
+ */
+function careSunflower(game, action, c, ctx, { price = null, reward = null } = {}) {
+  const t = actionTime(game.sunflower, c.at, ctx.now);
+  const current = sunflowerAt(game.sunflower, t);
+  const block = sunflowerBlock(action, current, t, { strict: false });
+  if (block) fail(SUNFLOWER_FAIL[block] ?? 'invalid', block);
+  if (price) spend(game, price);
+  game.sunflower = applySunflowerAction(action, current, t);
+  if (reward) earn(game, reward);
+  return reward ? { reward } : null;
 }
 
 function needPosition(tank, item, c) {
@@ -269,6 +288,25 @@ const HANDLERS = {
     game.lastCleanAt = ctx.now;
     bumpMissions(game, EV.TANK_CLEANED, 1, ctx.day);
     ctx.simTouched?.add(tank.id);
+  },
+
+  // ── กระถางทานตะวันข้างตู้ (shared/garden.js) ───────────────
+  /** ปลูกเมล็ดใหม่: กระถางว่าง หรือต้นเดิมตายแล้ว */
+  plantSunflower(game, meta, c, ctx) {
+    return careSunflower(game, 'plant', c, ctx, { price: CONFIG.garden.seedPrice });
+  },
+
+  waterSunflower(game, meta, c, ctx) {
+    return careSunflower(game, 'water', c, ctx);
+  },
+
+  fertilizeSunflower(game, meta, c, ctx) {
+    return careSunflower(game, 'fertilize', c, ctx, { price: CONFIG.garden.fertilizerPrice });
+  },
+
+  /** เก็บเมล็ดจากดอกที่บาน (ทุก CONFIG.garden.seedHours ชั่วโมง) */
+  harvestSunflower(game, meta, c, ctx) {
+    return careSunflower(game, 'harvest', c, ctx, { reward: CONFIG.garden.seedReward });
   },
 
   // ── ตู้ ────────────────────────────────────────────────────
@@ -418,6 +456,10 @@ export const URGENT_COMMANDS = new Set([
   'fishBorn',
   'collectPearl',
   'exchangeGems',
+  'plantSunflower',
+  'waterSunflower',
+  'fertilizeSunflower',
+  'harvestSunflower',
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */

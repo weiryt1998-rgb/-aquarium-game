@@ -53,26 +53,33 @@ service cloud.firestore {
         decor is list, decor.size() <= 150].hasOnly([true]);
     }
 
+    // ฟังก์ชันตรวจข้างล่างรวมเงื่อนไขเป็นลิสต์ (แบบ validTank) เพื่อประหยัดงบนิพจน์ — ผิด/ขาด/error = ถูกปฏิเสธเหมือนใช้ &&
     function validInventory(inv) {
-      return inv.keys().hasOnly(['flakes', 'pellets', 'bloodworm', 'medicine'])
-        && isCount(inv.get('flakes', 0), 1000000)
-        && isCount(inv.get('pellets', 0), 1000000)
-        && isCount(inv.get('bloodworm', 0), 1000000)
-        && isCount(inv.get('medicine', 0), 1000000);
+      return [inv.keys().hasOnly(['flakes', 'pellets', 'bloodworm', 'medicine']),
+        isCount(inv.get('flakes', 0), 1000000),
+        isCount(inv.get('pellets', 0), 1000000),
+        isCount(inv.get('bloodworm', 0), 1000000),
+        isCount(inv.get('medicine', 0), 1000000)].hasOnly([true]);
     }
 
     function validMissions(m) {
-      return m.keys().hasOnly(['day', 'progress', 'claimed'])
-        && m.day is string && m.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && m.progress is map && m.claimed is map;
+      return [m.keys().hasOnly(['day', 'progress', 'claimed']),
+        m.day is string, m.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+        m.progress is map, m.claimed is map].hasOnly([true]);
     }
 
     function validStats(s) {
-      return s.keys().hasOnly(['feeds', 'coinsCollected', 'fishBorn', 'fishBought'])
-        && isCount(s.feeds, 1000000000000)
-        && isCount(s.coinsCollected, 1000000000000)
-        && isCount(s.fishBorn, 1000000000000)
-        && isCount(s.fishBought, 1000000000000);
+      return [s.keys().hasOnly(['feeds', 'coinsCollected', 'fishBorn', 'fishBought']),
+        isCount(s.feeds, 1000000000000),
+        isCount(s.coinsCollected, 1000000000000),
+        isCount(s.fishBorn, 1000000000000),
+        isCount(s.fishBought, 1000000000000)].hasOnly([true]);
+    }
+
+    // กระถางทานตะวันข้างตู้ (src/shared/garden.js) — ไม่มีฟิลด์นี้ = ยังไม่ได้ปลูก
+    function validSunflower(s) {
+      return s.keys().hasOnly(['plantedAt', 'at', 'water', 'food', 'growth', 'health', 'seedsAt'])
+        && s.water is number && s.health is number && s.growth is number;
     }
 
     function validGame(g) {
@@ -80,24 +87,27 @@ service cloud.firestore {
       let tankCount = tanks.size();
       let capacities = tankCapacities();
       let tankKeys = ['id', 'typeId', 'name', 'cleanliness', 'fish', 'decor', 'lastUpdate'];
-      return g.keys().hasOnly(['version', 'coins', 'gems', 'inventory', 'selectedFood', 'collection', 'tanks', 'activeTankId',
-          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved'])
-        && g.version == 1
-        && isCount(g.coins, 1000000000)
-        && isCount(g.gems, 10000000)
-        && validInventory(g.inventory)
-        && g.selectedFood in ['flakes', 'pellets', 'bloodworm']
-        && g.collection is map && g.collection.size() <= 30
-        && tanks is list && tankCount >= 1 && tankCount <= 7
-        && validTank(tanks[0], capacities, tankKeys)
-        && (tankCount < 2 || validTank(tanks[1], capacities, tankKeys))
-        && (tankCount < 3 || validTank(tanks[2], capacities, tankKeys))
-        && (tankCount < 4 || validTank(tanks[3], capacities, tankKeys))
-        && (tankCount < 5 || validTank(tanks[4], capacities, tankKeys))
-        && (tankCount < 6 || validTank(tanks[5], capacities, tankKeys))
-        && (tankCount < 7 || validTank(tanks[6], capacities, tankKeys))
-        && g.activeTankId is string
-        && validMissions(g.missions) && validStats(g.stats);
+      // รวมเงื่อนไขเป็นลิสต์ (แบบเดียวกับ validTank) แทน && ยาว ๆ — ประหยัดงบนิพจน์ 1000 ตอนมีครบ 7 ตู้
+      // ค่าใดผิด/ขาด/ผิดชนิด → ได้ false หรือ Rules error → ถูกปฏิเสธเหมือนเดิม
+      return [g.keys().hasOnly(['version', 'coins', 'gems', 'inventory', 'selectedFood', 'collection', 'tanks', 'activeTankId',
+          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved', 'sunflower']),
+        g.version == 1,
+        isCount(g.coins, 1000000000),
+        isCount(g.gems, 10000000),
+        validInventory(g.inventory),
+        g.selectedFood in ['flakes', 'pellets', 'bloodworm'],
+        g.collection is map, g.collection.size() <= 30,
+        tanks is list, tankCount >= 1, tankCount <= 7,
+        validTank(tanks[0], capacities, tankKeys),
+        tankCount < 2 || validTank(tanks[1], capacities, tankKeys),
+        tankCount < 3 || validTank(tanks[2], capacities, tankKeys),
+        tankCount < 4 || validTank(tanks[3], capacities, tankKeys),
+        tankCount < 5 || validTank(tanks[4], capacities, tankKeys),
+        tankCount < 6 || validTank(tanks[5], capacities, tankKeys),
+        tankCount < 7 || validTank(tanks[6], capacities, tankKeys),
+        g.activeTankId is string,
+        validMissions(g.missions), validStats(g.stats),
+        !('sunflower' in g) || validSunflower(g.sunflower)].hasOnly([true]);
     }
 
     function validMeta(m) {
