@@ -10,7 +10,6 @@ import { createFishMotionMod, createFishMotionUniforms, prepareFlexAttribute } f
 import { createMolly } from '../models/molly/MollyModel.js';
 import { genesToVariant } from '../models/molly/genetics.js';
 import { fryAmount } from '../models/molly/fry.js';
-import { createSpaceFish } from '../models/spacefish/SpaceFishModel.js';
 
 /** ความยาวรวม (หัวถึงปลายหาง) ของโมเดล .glb หลังปรับขนาด เทียบกับลำตัวโมเดลชั่วคราวที่ยาว 1 */
 export const FISH_MODEL_LENGTH = 1.35;
@@ -20,7 +19,6 @@ const PROCEDURAL_FISH = {
   // ลูกปลาสอดแรกเกิดยังไม่เห็นสีจริง (fry.js) — สีค่อย ๆ เผยตามการเติบโต
   molly: (species, { animated, detail, genes, mesh, growth, baby }) =>
     createMolly({ variant: genes ? genesToVariant(genes) : species.procedural.variant, detail, animated, mesh, fry: fryAmount(species, growth), baby }),
-  spacefish: (species, { animated, detail, mesh, baby }) => createSpaceFish({ variant: species.procedural.variant, detail, animated, mesh, baby }),
 };
 
 /**
@@ -57,7 +55,7 @@ export class ModelFactory {
    * @returns {{ object: THREE.Object3D, mixer: THREE.AnimationMixer|null, swimUniforms: object|null, trail?: object|null, rig?: object|null, isPlaceholder: boolean }}
    *  rig = ตัวขยับโครงกระดูกด้วยโค้ด (render/boneRig.js) เรียก rig.update ทุกเฟรม
    *  object หันหัวไป +Z จุดศูนย์กลางที่กลางลำตัว ลำตัวยาวประมาณ 1 หน่วย
-   *  trail = อนุภาคแสงที่ปลาปล่อยตามหลังขณะว่าย (ปลาอวกาศ) ดู world/Sparkles.js
+   *  trail = อนุภาคแสงที่ปลาปล่อยตามหลังขณะว่าย (ถ้าโมเดลจากโค้ดส่งมา) ดู world/Sparkles.js
    */
   /**
    * ใช้โมเดลลูกปลาไหม: สายพันธุ์ที่มี procedural.babyMesh และโตไม่ถึง procedural.babyUntil (ต้องโหลดไฟล์ได้ด้วย)

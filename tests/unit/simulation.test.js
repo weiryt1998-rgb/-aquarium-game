@@ -113,7 +113,6 @@ test('ตู้เต็ม: แจ้งว่าคลอดไม่ได้
   const sim = new TankSimulation(makeTank([mom]), { ...ENV, capacity: 1 }, { now: () => 1e13 });
   const { events } = runUntil(sim, () => false, CONFIG.breeding.checkInterval * 5);
   assert.equal(events.filter((e) => e.type === 'birthBlocked').length, 1);
-  assert.equal(events.find((e) => e.type === 'birthBlocked').reason, 'full');
 });
 
 // ── วงจรการขยายพันธุ์แบบปลาสอด (ใช้กับทุกสายพันธุ์) ─────────────────
@@ -235,24 +234,24 @@ test('เกี้ยวอยู่แล้วตัวเมียหิว/�
   assert.equal(mom2.pregnantAt, undefined);
 });
 
-test('จำกัดประชากร: ถึงเพดานแล้วไม่เกี้ยว/คลอดใหม่ และไม่ลบปลาที่มีอยู่', () => {
-  const cap = CONFIG.breeding.maxPopulation;
-  const env = { ...ENV, capacity: 64 };
-  // ปลาเต็มเพดาน: คู่พร้อมผสมพันธุ์ก็ไม่เกี้ยว
-  const crowd = Array.from({ length: cap }, (_, i) => adult('molly_golden', i % 2 ? 'm' : 'f'));
+test('จำกัดประชากร: ขยายพันธุ์ได้ถึงความจุตู้ เต็มแล้วไม่เกี้ยว/คลอดใหม่ และไม่ลบปลาที่มีอยู่', () => {
+  const cap = 64; // ตู้ใหญ่สุด (cosmos)
+  const env = { ...ENV, capacity: cap };
+  const pairs = (n) => Array.from({ length: n }, (_, i) => adult('molly_golden', i % 2 ? 'm' : 'f'));
+  // เกิน 40 ตัวแล้วยังเกี้ยวกันได้ (เคยติดเพดาน 40 ตัวทั้งที่ตู้จุ 64)
+  assert.ok(breedingTank(pairs(50), env).run(300).some((e) => e.type === 'courtStart'));
+
+  // ปลาเต็มตู้: คู่พร้อมผสมพันธุ์ก็ไม่เกี้ยว
+  const crowd = pairs(cap);
   const full = breedingTank(crowd, env);
-  assert.equal(full.sim.breedingCap, cap);
   assert.equal(full.run(300).filter((e) => e.type === 'courtStart').length, 0);
   assert.equal(full.tank.fish.length, cap);
 
-  // แม่ครบกำหนดคลอดแต่ถึงเพดาน → รอคลอด (แจ้งครั้งเดียว เหตุผล population) ไม่มีปลาหาย
+  // แม่ครบกำหนดคลอดแต่ตู้เต็ม → รอคลอด (แจ้งครั้งเดียว) ไม่มีปลาหาย
   crowd[0].pregnantAt = 1;
   crowd[0].fetus = { speciesId: 'molly_golden' };
   const blocked = full.run(CONFIG.breeding.checkInterval * 5);
-  assert.deepEqual(
-    blocked.filter((e) => e.type === 'birthBlocked').map((e) => e.reason),
-    ['population'],
-  );
+  assert.equal(blocked.filter((e) => e.type === 'birthBlocked').length, 1);
   assert.equal(full.tank.fish.length, cap);
   // ขายออก 1 ตัว → คลอดได้
   full.tank.fish.pop();

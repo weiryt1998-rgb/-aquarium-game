@@ -7,6 +7,7 @@ import { getFood } from '../../src/data/food.js';
 import { CONFIG } from '../../src/config.js';
 import { FEED_WINDOW_MS } from '../../src/shared/constants.js';
 import { maxGrowthIn } from '../../src/shared/economy.js';
+import { docFromFirestore } from '../../src/shared/saveDoc.js';
 import { T0, fishRecord, makeDoc, tankId } from '../helpers/fixtures.js';
 
 const commit = (writer, seq, commands, extra = {}) => ({ writer, seq, epoch: 0, commands, snapshot: null, ...extra });
@@ -221,4 +222,18 @@ test('รีเซ็ต/กู้คืน: ต้องยืนยันด�
   const restored = planAdminAction(plan.doc, { action: 'restore', expectedRevision: plan.doc.revision, backup: plan.backup, now: T0 + 1, writer: 'w_a' });
   assert.equal(restored.doc.game.coins, 777);
   assert.equal(restored.backup.reason, 'before-restore');
+});
+
+test('เซฟเก่าที่มีปลาสายพันธุ์ที่ถูกลบจากเกมแล้ว (ปลาอวกาศ): อ่านแล้วปลาหายไป ไม่กินที่ในตู้ และบันทึกเซฟที่ไม่มีปลานั้น', () => {
+  const capacity = 14; // ตู้เริ่มต้น
+  const keep = Array.from({ length: capacity - 1 }, () => fishRecord('molly_golden'));
+  const gone = fishRecord('spacefish_cosmic_gold');
+  const stored = makeDoc({ coins: 1000, fish: [...keep, gone] });
+  const doc = docFromFirestore(JSON.parse(JSON.stringify(stored)));
+  assert.deepEqual(doc.game.tanks[0].fish.map((f) => f.id), keep.map((f) => f.id));
+  // ตู้มีที่ว่าง 1 ที่ (ปลาที่ถูกลบไม่นับ) → ซื้อปลาได้ และเซฟที่บันทึกไม่มีปลาอวกาศ
+  const r = processCommit(doc, commit('w_a', 1, [buy(doc, 'fish_new')]), { now: T0 });
+  assert.deepEqual(r.results, [{ ok: true }]);
+  assert.equal(r.doc.game.tanks[0].fish.length, capacity);
+  assert.ok(!r.doc.game.tanks[0].fish.some((f) => f.speciesId.startsWith('spacefish')));
 });

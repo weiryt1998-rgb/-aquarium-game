@@ -1,3 +1,4 @@
+import { getSpecies } from '../data/fish.js';
 import { todayKey } from '../utils/math.js';
 import { SCHEMA_VERSION } from './constants.js';
 import { summarizeGame } from './economy.js';
@@ -30,7 +31,19 @@ export function normalizeDoc(doc) {
   doc.meta = { ...freshMeta(), ...(doc.meta ?? {}) };
   doc.meta.writers ??= {};
   doc.meta.tanks ??= {};
+  dropRemovedSpecies(doc.game);
   return doc;
+}
+
+/**
+ * ปลาของสายพันธุ์ที่ถูกลบออกจากเกมแล้ว (เช่น ปลาอวกาศ) → เอาออกจากตู้ตอนอ่านเซฟ
+ * ไม่ให้เกมพังเพราะหาข้อมูลสายพันธุ์ไม่เจอ และไม่กินที่ในตู้ — การบันทึกครั้งถัดไปจะเขียนเซฟที่ไม่มีปลาเหล่านี้ทับ
+ * (สายพันธุ์ที่แค่เลิกขาย ใส่ retired: true ไว้ใน data/fish.js จะไม่โดนลบ)
+ */
+function dropRemovedSpecies(game) {
+  for (const tank of Array.isArray(game?.tanks) ? game.tanks : []) {
+    if (Array.isArray(tank?.fish)) tank.fish = tank.fish.filter((f) => getSpecies(f?.speciesId));
+  }
 }
 
 export function createSaveDoc(game, { now, writer = 'setup' }) {

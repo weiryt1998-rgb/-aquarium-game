@@ -32,7 +32,7 @@ void main() {
 }`;
 
 /**
- * อนุภาคแสงระยิบระยับ (Points + additive blending) — ใช้กับปลาอวกาศที่ทิ้งประกายดาวไว้ข้างหลังขณะว่าย
+ * อนุภาคแสงระยิบระยับ (Points + additive blending) — ประกายตอนมีเหตุการณ์ และประกายที่ปลาทิ้งไว้ข้างหลังขณะว่าย (ถ้าโมเดลมี trail)
  * อนุภาคอยู่ในพิกัดโลก (ไม่ติดไปกับตัวปลา) จึงเป็นทางยาวตามเส้นทางที่ว่ายผ่าน
  * ใช้ pool วนรอบ: อนุภาคใหม่ทับอนุภาคที่เก่าที่สุดเมื่อเต็ม
  */
@@ -89,7 +89,7 @@ export class Sparkles {
     this.points.geometry.attributes.aColor.needsUpdate = true;
   }
 
-  /** ประกายระเบิดออกรอบตัว (เช่น ตอนปลาอวกาศลงตู้) */
+  /** ประกายระเบิดออกรอบตัว */
   burst(at, colors, count = 40, { size = 0.12, speed = 0.9 } = {}) {
     for (let n = 0; n < count; n++) this.emit(at, colors[n % colors.length], { spread: 0.15, size, life: 2, speed });
   }
@@ -125,7 +125,7 @@ export class Sparkles {
       // สว่างขึ้นเร็ว จางลงช้า และกระพริบ
       this.alphas[i] = Math.min(1, (1 - k) * 8) * k * (0.65 + 0.35 * Math.sin(time * 14 + p.phase));
     }
-    // ไม่มีอนุภาคเหลือ (ตู้ที่ไม่มีปลาอวกาศ) → ไม่ต้องส่งข้อมูลขึ้น GPU ทุกเฟรม
+    // ไม่มีอนุภาคเหลือ → ไม่ต้องส่งข้อมูลขึ้น GPU ทุกเฟรม
     if (active === 0 && this.active === 0) return;
     this.active = active;
     const attrs = this.points.geometry.attributes;

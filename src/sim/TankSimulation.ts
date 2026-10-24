@@ -179,11 +179,6 @@ export class TankSimulation {
     return null;
   }
 
-  /** จำนวนปลาสูงสุดที่ระบบขยายพันธุ์พาเกิดใหม่ได้ (ความจุตู้ หรือเพดานประชากร แล้วแต่อันไหนน้อยกว่า) */
-  get breedingCap(): number {
-    return Math.min(this.env.capacity, CONFIG.breeding.maxPopulation);
-  }
-
   drainEvents(): SimEvent[] {
     const out = this.events;
     this.events = [];
@@ -279,8 +274,8 @@ export class TankSimulation {
     this.updateCourtships(now);
     const B = CONFIG.breeding;
     const fish = this.tank.fish;
-    // นับลูกที่จะตามมา (ตั้งท้องอยู่ + กำลังเกี้ยว) ด้วย — คลอดครบทุกตัวแล้วประชากรต้องไม่เกินเพดาน
-    let room = this.breedingCap - fish.length - this.courtships.size - fish.filter(isPregnant).length;
+    // นับลูกที่จะตามมา (ตั้งท้องอยู่ + กำลังเกี้ยว) ด้วย — คลอดครบทุกตัวแล้วประชากรต้องไม่เกินความจุตู้
+    let room = this.env.capacity - fish.length - this.courtships.size - fish.filter(isPregnant).length;
     if (room <= 0) return;
     const busy = new Set<string>();
     for (const [momId, c] of this.courtships) busy.add(momId).add(c.dadId);
@@ -328,12 +323,11 @@ export class TankSimulation {
 
   /** ตัวเมียที่ตั้งท้องครบกำหนด (รวมถึงที่ครบระหว่างปิดเกม) คลอดลูกครั้งละ 1 ตัว — ตัวพ่อไม่ต้องอยู่ในตู้แล้วก็ได้ */
   private deliverBabies(now: number): void {
-    const cap = this.breedingCap;
     for (const mom of [...this.tank.fish]) {
       if (!isPregnant(mom) || now < dueAt(mom)) continue;
-      // ตู้เต็ม/ถึงเพดานประชากร → รอคลอดไว้ก่อน (ไม่ลบปลาตัวไหน) จนกว่าจะมีที่ว่าง
-      if (this.tank.fish.length >= cap) {
-        if (!this.blockedBirths.has(mom.id)) this.events.push({ type: 'birthBlocked', momId: mom.id, reason: cap < this.env.capacity ? 'population' : 'full' });
+      // ตู้เต็ม → รอคลอดไว้ก่อน (ไม่ลบปลาตัวไหน) จนกว่าจะมีที่ว่าง
+      if (this.tank.fish.length >= this.env.capacity) {
+        if (!this.blockedBirths.has(mom.id)) this.events.push({ type: 'birthBlocked', momId: mom.id });
         this.blockedBirths.add(mom.id);
         continue;
       }

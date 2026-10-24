@@ -36,7 +36,7 @@ test('ซ่อนชื่อสายพันธุ์/ยีนจนกว�
 test('ปลาที่ซื้อจากร้าน (โต 60%) และปลาชนิดอื่นเห็นสีจริงตั้งแต่แรก', () => {
   assert.equal(isColorHidden(molly, 0.6), false, 'ปลาสอดจากร้านเริ่มที่ growth 0.6');
   assert.equal(fryAmount(molly, 0.6), 0);
-  for (const id of ['crab', 'seahorse', 'spacefish_nebula']) {
+  for (const id of ['crab', 'seahorse']) {
     const s = getSpecies(id);
     if (!s) continue;
     assert.equal(hasFryLook(s), false, id);

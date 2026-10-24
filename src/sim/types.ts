@@ -105,8 +105,8 @@ export type SimEvent =
   | { type: 'courtEnd'; momId: string; dadId: string }
   | { type: 'mated'; momId: string; dadId: string; fetus: Fetus }
   | { type: 'born'; momId: string; baby: FishRecord }
-  /** full = ตู้เต็มตามความจุ, population = ถึงเพดานประชากรของระบบขยายพันธุ์ (CONFIG.breeding.maxPopulation) */
-  | { type: 'birthBlocked'; momId: string; reason: 'full' | 'population' };
+  /** ครบกำหนดคลอดแต่ตู้เต็มตามความจุ */
+  | { type: 'birthBlocked'; momId: string };
 
 /** ค่าเฉลี่ยระดับตู้ (แสดงบน HUD) */
 export interface TankStats {

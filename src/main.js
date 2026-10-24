@@ -3,6 +3,8 @@ import '@fontsource/kanit/400.css';
 import '@fontsource/kanit/500.css';
 import '@fontsource/kanit/600.css';
 import './styles/main.css';
+// 🎃 ธีมฮาโลวีนชั่วคราว (ปิดเองหลัง 3 พ.ย. 2026) — หมดเทศกาลแล้วลบบรรทัดนี้และโฟลเดอร์ src/seasonal/
+import './seasonal/halloween.js';
 
 import WebGL from 'three/addons/capabilities/WebGL.js';
 import { startCloudSession } from './cloud/boot.js';

@@ -66,7 +66,7 @@ export class Fish {
     this.walk = visual.walkUniforms ?? null;
     this.rig = visual.rig ?? null; // ขยับโครงกระดูกด้วยโค้ด (ม้าน้ำ)
     this.fry = visual.fry ?? null; // สีลูกปลาแรกเกิดทับสีจริง (ปลาสอด — models/molly/fry.js)
-    // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ปลาอวกาศ) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
+    // อนุภาคแสงที่ปล่อยตามหลังขณะว่าย (ถ้าโมเดลจากโค้ดส่งมา) — { colors, rate ต่อวินาที, offset = ตำแหน่งปลายหางบนแกน z }
     this.trail = visual.trail ?? null;
     // สัตว์ที่เดินพื้น: ระยะจากจุดศูนย์กลางถึงปลายขา (หน่วยของโมเดล) ใช้วางตัวให้ยืนบนทรายพอดี
     this.footOffset = this.species.behavior.walker ? -_box.setFromObject(this.visual, true).min.y : 0;
@@ -410,7 +410,7 @@ export class Fish {
       this.swim.uSwimAmp.value = 0.05 + 0.07 * Math.min(speedRatio, 1.2);
       // โมเดลที่รองรับการโค้งลำตัวตอนเลี้ยว (เช่น Molly)
       if (this.swim.uTurn) this.swim.uTurn.value = damp(this.swim.uTurn.value, clamp(turnRate * 0.35, -1, 1), 5, dt);
-      // โมเดลที่เรืองแสงแรงขึ้นตอนว่ายเร็ว (เช่น ปลาอวกาศ)
+      // โมเดลที่เรืองแสงแรงขึ้นตอนว่ายเร็ว (shader มี uEnergy)
       if (this.swim.uEnergy) this.swim.uEnergy.value = damp(this.swim.uEnergy.value, clamp((speedRatio - 0.5) * 1.6, 0, 1), 3, dt);
       this.rig?.update(dt, speedRatio, this.swim.uTurn?.value ?? 0);
     } else if (this.mixer) {

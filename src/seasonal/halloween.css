@@ -1,0 +1,472 @@
+/* ───────────────────────── 🎃 ธีมฮาโลวีน (ชั่วคราว) ─────────────────────────
+ * ทำงานเฉพาะเมื่อ <html class="halloween"> (ตั้งโดย halloween.js) — ลบไฟล์นี้ทิ้งได้ทั้งไฟล์หลังเทศกาล */
+
+html.halloween {
+  --panel: rgba(40, 16, 66, 0.8);
+  --panel-strong: rgba(26, 10, 46, 0.95);
+  --panel-light: rgba(130, 70, 190, 0.35);
+  --border: rgba(255, 165, 80, 0.38);
+  --accent: #ff9a2e;
+  --accent-2: #e0661f;
+  --muted: #d6c2ec;
+  --hw-orange: #ff8a1f;
+  --hw-night: #12061f;
+}
+
+html.halloween,
+html.halloween body {
+  background: #1a0b2e;
+}
+
+/* ── หน้าเข้าสู่ระบบ / หน้าเริ่มเกม ── */
+.halloween .start-screen {
+  background: radial-gradient(circle at 50% 38%, rgba(92, 42, 146, 0.62), rgba(14, 5, 30, 0.94));
+}
+
+.halloween .start-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.halloween .start-inner::before {
+  content: '🎃 Happy Halloween 👻';
+  display: block;
+  width: fit-content;
+  margin: 0 auto 2px;
+  padding: 4px 16px;
+  border-radius: 999px;
+  font-family: 'Fredoka', var(--font);
+  font-size: clamp(0.85rem, 2.6vw, 1.05rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #ffdcae;
+  background: rgba(255, 138, 31, 0.16);
+  border: 1px solid rgba(255, 170, 90, 0.45);
+  text-shadow: 0 0 10px rgba(255, 140, 30, 0.8);
+}
+
+.halloween .brand-my {
+  color: #d3b2ff;
+  text-shadow: 0 2px 0 #2a0f4a, 0 0 18px rgba(190, 120, 255, 0.65);
+}
+
+.halloween .brand-aqua {
+  background: linear-gradient(180deg, #fff4dc 8%, #ffc86b 36%, #ff8a1f 64%, #c2470a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 3px 0 #2a0f4a) drop-shadow(0 2px 0 #2a0f4a) drop-shadow(0 0 22px rgba(255, 120, 20, 0.45));
+}
+
+/* เลข 11 กลายเป็นฟักทอง */
+.halloween .brand-num {
+  position: relative;
+  color: #3a1200;
+  background: radial-gradient(ellipse at 34% 30%, #ffd08a 0 12%, transparent 30%),
+    radial-gradient(ellipse at 50% 55%, #ffad42 0 35%, #ff8a1f 62%, #cf540a 100%);
+  border-color: rgba(255, 222, 176, 0.85);
+  box-shadow: 0 4px 0 #8a3a06, 0 0 22px rgba(255, 130, 20, 0.55), inset 0 -4px 8px rgba(140, 50, 0, 0.45);
+}
+
+.halloween .brand-num::before {
+  content: '';
+  position: absolute;
+  top: -0.3em;
+  left: 50%;
+  width: 0.2em;
+  height: 0.38em;
+  border-radius: 3px 3px 1px 1px;
+  background: #4f7d27;
+  transform: translateX(-50%) rotate(14deg);
+}
+
+/* ปลาบนโลโก้ใส่หมวกแม่มด */
+.halloween .brand-fish::before {
+  content: '';
+  position: absolute;
+  top: -0.14em;
+  left: 50%;
+  width: 0.85em;
+  height: 0.7em;
+  transform: translateX(-38%) rotate(-12deg);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 50'%3E%3Cpath d='M36 1 C30 6 24 18 19 38 H43 C41 26 42 14 50 8 Z' fill='%232a1340'/%3E%3Crect x='20' y='30' width='23' height='6' fill='%23ff8a1f'/%3E%3Cellipse cx='31' cy='40' rx='29' ry='7' fill='%233a1a58'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.halloween .brand-wave path {
+  stroke: rgba(255, 160, 70, 0.85);
+}
+
+/* ฟองอากาศเป็นฟองยาวิเศษสีเขียว */
+.halloween .brand-bubbles i {
+  border-color: rgba(170, 255, 140, 0.75);
+  background: radial-gradient(circle at 30% 30%, rgba(240, 255, 230, 0.9) 0 18%, rgba(120, 255, 110, 0.2) 45%);
+  box-shadow: 0 0 8px rgba(120, 255, 110, 0.5);
+}
+
+.halloween .subtitle {
+  background: linear-gradient(180deg, #8a4fd8, #5a2aa6);
+  border-color: rgba(255, 190, 120, 0.7);
+  box-shadow: 0 4px 0 #3a1878;
+}
+
+.halloween .btn-start {
+  color: #2a0e00;
+  background: linear-gradient(180deg, #ffbe6b, var(--hw-orange) 50%, #e0610c);
+  box-shadow: 0 5px 0 #8a3a06, 0 0 26px rgba(255, 140, 30, 0.55);
+}
+
+.halloween .loading .bar i,
+.halloween .bar.indeterminate i {
+  background: linear-gradient(90deg, var(--hw-orange), #b46bff);
+}
+
+.halloween .welcome {
+  color: #ffd9a8;
+}
+
+.halloween .auth-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 154, 46, 0.25);
+}
+
+/* ── ฉากตกแต่ง (halloween.js: SCENE_HTML) ── */
+.hw-scene,
+.hw-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* main.css ตั้ง svg { width/height: 1em } ไว้สำหรับไอคอน — ของตกแต่งให้สูงตาม viewBox */
+.hw-scene svg,
+.hw-ambient svg {
+  height: auto;
+}
+
+.hw-stars {
+  position: absolute;
+  inset: 0 0 40% 0;
+  background-image: radial-gradient(1.5px 1.5px at 12% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 8%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 44% 26%, #ffe9c4 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 12%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 71% 34%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 86% 22%, #ffe9c4 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 6% 40%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 52% 46%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 94% 48%, #fff 50%, transparent 51%);
+  animation: hw-twinkle 3.6s ease-in-out infinite alternate;
+}
+
+.hw-moon {
+  position: absolute;
+  top: 7%;
+  right: 9%;
+  width: clamp(90px, 15vw, 170px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 64% 30%, rgba(214, 184, 120, 0.5) 0 9%, transparent 10%),
+    radial-gradient(circle at 34% 62%, rgba(214, 184, 120, 0.45) 0 12%, transparent 13%),
+    radial-gradient(circle at 70% 70%, rgba(214, 184, 120, 0.35) 0 6%, transparent 7%),
+    radial-gradient(circle at 40% 35%, #fffbe8, #ffe7a6 60%, #f2c86a);
+  box-shadow: 0 0 40px 10px rgba(255, 220, 140, 0.35), 0 0 120px 40px rgba(255, 150, 60, 0.18);
+}
+
+.hw-moon-bat {
+  position: absolute;
+  width: 34%;
+  top: 30%;
+  left: 30%;
+  animation: hw-moon-bat 9s ease-in-out infinite;
+}
+
+.hw-bat {
+  fill: #1b0b28;
+  overflow: visible;
+}
+
+.hw-bat-eye {
+  fill: #ffb347;
+}
+
+.hw-wing {
+  transform-box: fill-box;
+  animation: hw-flap 0.32s ease-in-out infinite alternate;
+}
+
+.hw-wing-l {
+  transform-origin: 100% 60%;
+}
+
+.hw-wing-r {
+  transform-origin: 0% 60%;
+  animation-name: hw-flap-r;
+}
+
+.hw-fly {
+  position: absolute;
+  left: 0;
+  width: 56px;
+  filter: drop-shadow(0 0 6px rgba(190, 120, 255, 0.35));
+  animation: hw-fly 14s linear infinite;
+}
+
+.hw-fly-1 { top: 16%; animation-delay: -2s; }
+.hw-fly-2 { top: 30%; width: 40px; animation-duration: 18s; animation-delay: -9s; }
+.hw-fly-3 { top: 9%; width: 32px; animation-duration: 22s; animation-delay: -15s; }
+.hw-fly-4 { top: 42%; width: 46px; animation-duration: 16s; animation-delay: -5s; animation-direction: reverse; }
+.hw-fly-4 .hw-wing { animation-duration: 0.28s; }
+
+.hw-spider {
+  --len: 110px;
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: hw-dangle 5s ease-in-out infinite;
+}
+
+.hw-thread {
+  width: 1.5px;
+  height: var(--len);
+  background: linear-gradient(rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.55));
+}
+
+.hw-spider svg {
+  width: 34px;
+  margin-top: -4px;
+  fill: #1b0b28;
+  animation: hw-sway 2.6s ease-in-out infinite alternate;
+  transform-origin: 50% 0;
+}
+
+.hw-legs {
+  stroke: #1b0b28;
+}
+
+.hw-spider-eye {
+  fill: #ff5d6c;
+}
+
+.hw-spider-1 { left: 14%; --len: 150px; }
+.hw-spider-2 { right: 24%; --len: 80px; animation-duration: 6.5s; animation-delay: -2s; }
+.hw-spider-2 svg { width: 26px; }
+
+.hw-cobweb {
+  position: absolute;
+  top: 0;
+  width: clamp(90px, 14vw, 160px);
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.32);
+  stroke-width: 1.2;
+}
+
+.hw-web-tl { left: 0; }
+.hw-web-tr { right: 0; transform: scaleX(-1); }
+
+.hw-ghost {
+  position: absolute;
+  width: clamp(48px, 7vw, 74px);
+  opacity: 0.88;
+  filter: drop-shadow(0 0 14px rgba(200, 170, 255, 0.6));
+  animation: hw-float 6s ease-in-out infinite;
+}
+
+.hw-ghost-body { fill: #f7f2ff; }
+.hw-ghost-eye,
+.hw-ghost-mouth { fill: #2a1340; }
+.hw-ghost-blush { fill: #ffb3cf; opacity: 0.7; }
+
+.hw-ghost-1 { left: 9%; top: 38%; }
+.hw-ghost-2 { right: 8%; top: 56%; width: clamp(38px, 5vw, 56px); animation-duration: 7.5s; animation-delay: -3s; }
+
+.hw-fog {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 30%;
+  -webkit-mask-image: linear-gradient(transparent, #000 55%);
+  mask-image: linear-gradient(transparent, #000 55%);
+}
+
+.hw-fog i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
+  background: radial-gradient(ellipse 18% 55% at 10% 70%, rgba(200, 170, 255, 0.28), transparent 70%),
+    radial-gradient(ellipse 22% 50% at 35% 80%, rgba(170, 140, 230, 0.24), transparent 70%),
+    radial-gradient(ellipse 18% 55% at 60% 70%, rgba(200, 170, 255, 0.28), transparent 70%),
+    radial-gradient(ellipse 22% 50% at 85% 80%, rgba(170, 140, 230, 0.24), transparent 70%);
+  animation: hw-fog 30s linear infinite;
+}
+
+.hw-fog i + i {
+  opacity: 0.7;
+  animation-duration: 46s;
+  animation-direction: reverse;
+}
+
+.hw-pumpkin {
+  position: absolute;
+  bottom: 2%;
+  width: clamp(72px, 12vw, 140px);
+  overflow: visible;
+}
+
+.hw-pumpkin-body { fill: var(--hw-orange); }
+.hw-pumpkin-rib { fill: none; stroke: #c2510a; stroke-width: 2; opacity: 0.55; }
+.hw-pumpkin-stem { fill: #4f7d27; }
+.hw-pumpkin-leaf { fill: #6aab3c; }
+
+.hw-pumpkin-face {
+  fill: #ffe066;
+  filter: drop-shadow(0 0 6px #ffb020);
+  animation: hw-candle 2.2s steps(1) infinite;
+}
+
+.hw-pumpkin-1 { left: 3%; }
+.hw-pumpkin-2 { right: 4%; width: clamp(84px, 14vw, 170px); }
+.hw-pumpkin-2 .hw-pumpkin-face { animation-delay: -0.7s; }
+.hw-pumpkin-3 { left: calc(3% + clamp(66px, 11vw, 128px)); width: clamp(46px, 7vw, 84px); }
+.hw-pumpkin-3 .hw-pumpkin-face { animation-delay: -1.4s; }
+
+/* ── ระหว่างเล่น (halloween.js: AMBIENT_HTML) — อยู่ใต้ HUD เบา ๆ ไม่บังตู้ ── */
+.hw-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(70, 22, 100, 0.32) 100%);
+}
+
+.hw-ambient .hw-cobweb {
+  width: clamp(70px, 10vw, 120px);
+  stroke: rgba(255, 255, 255, 0.26);
+}
+
+.hw-spider-game {
+  right: max(14vw, 210px);
+  --len: 70px;
+  animation-duration: 7s;
+}
+
+.hw-spider-game svg {
+  width: 24px;
+}
+
+.hw-fly-game {
+  top: 14%;
+  width: 42px;
+  animation: hw-fly-rare 32s linear infinite;
+}
+
+.halloween .tank-label {
+  background: rgba(40, 14, 60, 0.6);
+}
+
+.halloween .sidebar button:hover {
+  background: rgba(255, 140, 50, 0.22);
+}
+
+/* ── แอนิเมชัน ── */
+@keyframes hw-twinkle {
+  to { opacity: 0.45; }
+}
+
+@keyframes hw-flap {
+  from { transform: rotate(-24deg) scaleY(0.9); }
+  to { transform: rotate(16deg) scaleY(1); }
+}
+
+@keyframes hw-flap-r {
+  from { transform: rotate(24deg) scaleY(0.9); }
+  to { transform: rotate(-16deg) scaleY(1); }
+}
+
+@keyframes hw-fly {
+  0% { transform: translate(-80px, 0); }
+  25% { transform: translate(25vw, -30px); }
+  50% { transform: translate(50vw, 10px); }
+  75% { transform: translate(75vw, -24px); }
+  100% { transform: translate(calc(100vw + 80px), 0); }
+}
+
+/* ค้างคาวระหว่างเล่น: บินผ่านจอสั้น ๆ แล้วหายไปนาน ๆ */
+@keyframes hw-fly-rare {
+  0%, 70% { transform: translate(-80px, 0); }
+  77% { transform: translate(25vw, -26px); }
+  85% { transform: translate(55vw, 8px); }
+  100% { transform: translate(calc(100vw + 80px), -12px); }
+}
+
+@keyframes hw-moon-bat {
+  0%, 100% { transform: translate(-60%, 20%) scale(0.9); }
+  50% { transform: translate(60%, -25%) scale(1); }
+}
+
+@keyframes hw-dangle {
+  0%, 100% { transform: translateY(-34px); }
+  50% { transform: translateY(0); }
+}
+
+@keyframes hw-sway {
+  from { transform: rotate(-7deg); }
+  to { transform: rotate(7deg); }
+}
+
+@keyframes hw-float {
+  0%, 100% { transform: translate(0, 0) rotate(-4deg); }
+  50% { transform: translate(10px, -18px) rotate(4deg); }
+}
+
+@keyframes hw-fog {
+  to { transform: translateX(-50%); }
+}
+
+/* แสงเทียนในฟักทองกระพริบ */
+@keyframes hw-candle {
+  0%, 100% { opacity: 1; }
+  18% { opacity: 0.78; }
+  24% { opacity: 1; }
+  61% { opacity: 0.86; }
+  66% { opacity: 1; }
+}
+
+/* จอแคบ (มือถือ): ลดของให้โลโก้และปุ่มอ่านง่าย */
+@media (max-width: 480px) {
+  .hw-ghost-2,
+  .hw-pumpkin-3,
+  .hw-spider-2,
+  .hw-fly-3,
+  .hw-ambient .hw-cobweb {
+    display: none;
+  }
+
+  .hw-moon {
+    top: 4%;
+    right: 6%;
+  }
+
+  /* ผีลอยกลางจอด้านล่าง ระหว่างฟักทอง (ไม่ซ้อนกับกล่องกรอกรหัส) */
+  .hw-ghost-1 {
+    top: auto;
+    bottom: 8%;
+    left: calc(50% - 24px);
+  }
+
+  .halloween .brand-num::before {
+    width: 0.24em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hw-scene *,
+  .hw-ambient *,
+  .hw-scene,
+  .hw-ambient {
+    animation: none !important;
+  }
+
+  .hw-fly,
+  .hw-moon-bat {
+    display: none;
+  }
+}

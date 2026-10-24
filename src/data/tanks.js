@@ -63,7 +63,7 @@ export const TANK_TYPES = [
     theme: '#7a4fd8',
     style: { name: 'รอยัลอะบิส', frame: 'lacquer', trim: 'gold', led: '#8ff3ff', backdrop: 'abyss', sand: '#b9b4c4' },
     showcase: {
-      fish: ['arowana', 'spacefish_galaxy_purple', 'eagleray', 'rune_guardian', 'seahorse', 'betta_galaxy', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_redhead', 'crab'],
+      fish: ['arowana', 'molly_dalmatian', 'eagleray', 'rune_guardian', 'seahorse', 'betta_galaxy', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_redhead', 'crab'],
       extraDecor: [['temple_ruin', -0.45, -0.45, 0.3], ['coral', 0.45, -0.8, 1.2], ['seashell', -0.15, 0.5, 2]],
     },
   },
@@ -94,7 +94,7 @@ export const TANK_TYPES = [
     // ขอบโลหะเหลือบแสงเหนือ ไฟเปลี่ยนสีเอง นีออนตามขอบ ดวงแสงเรืองลอยขึ้น
     style: { name: 'แสงเหนือ', frame: 'aurora', trim: 'platinum', led: '#5dffc0', ledAnim: 'aurora', neon: true, backdrop: 'aurora', sand: '#e4f2ff', ambient: 'aurora' },
     showcase: {
-      fish: ['arowana', 'seahorse', 'betta_galaxy', 'eagleray', 'rune_guardian', 'molly_golden', 'spacefish_green_aurora', 'molly_calico', 'molly_calico', 'crab'],
+      fish: ['arowana', 'seahorse', 'betta_galaxy', 'eagleray', 'rune_guardian', 'molly_golden', 'molly_golddust', 'molly_calico', 'molly_calico', 'crab'],
       extraDecor: [['rock_crystal', -0.35, -0.6, 0.5], ['rock_crystal', 0.6, 0.45, 2], ['greek_ruin', 0.35, -0.55, -0.3], ['snail_coral', -0.7, 0.5, 0.6], ['plant_stem', 0.85, -0.7, 0]],
     },
   },
@@ -106,7 +106,7 @@ export const TANK_TYPES = [
     capacity: 64,
     price: { gems: 450 },
     theme: '#8a4dff',
-    // ขอบออบซิเดียนมีดาวกระพริบ ขอบทอง ไฟรุ้ง นีออน ขอบกระจกเรืองแสง ดาวระยิบในน้ำ — บ้านของปลาอวกาศ
+    // ขอบออบซิเดียนมีดาวกระพริบ ขอบทอง ไฟรุ้ง นีออน ขอบกระจกเรืองแสง ดาวระยิบในน้ำ
     style: {
       name: 'คอสมิกรอยัล',
       frame: 'cosmic',
@@ -120,7 +120,7 @@ export const TANK_TYPES = [
       ambient: 'stars',
     },
     showcase: {
-      fish: ['spacefish_nebula_blue', 'spacefish_galaxy_purple', 'spacefish_cosmic_gold', 'spacefish_stardust_white', 'spacefish_red_nebula', 'arowana', 'rune_guardian', 'seahorse', 'crab'],
+      fish: ['rune_guardian', 'betta_galaxy', 'eagleray', 'molly_golddust', 'molly_dalmatian', 'arowana', 'betta_galaxy', 'seahorse', 'crab'],
       extraDecor: [['rock_volcano', 0.55, -0.6, 0.3], ['rock_crystal', -0.55, -0.55, 1.2], ['rock_crystal', 0.15, 0.55, 2.4], ['rock_arch', -0.2, -0.3, 0.2], ['snail_coral', 0.8, 0.45, 1]],
     },
   },

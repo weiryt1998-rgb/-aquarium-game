@@ -269,11 +269,7 @@ export class FishManager {
       case 'birthBlocked': {
         const mom = this.getById(e.momId);
         if (!mom) break;
-        const why =
-          e.reason === 'population'
-            ? `ปลาในตู้ถึงเพดานการขยายพันธุ์ (${game.sim.breedingCap} ตัว) เพื่อให้เกมลื่น — ขายหรือย้ายปลาออกแล้วลูกจะคลอดเอง`
-            : 'แต่ตู้เต็ม — ขายหรือย้ายปลาออกเพื่อให้มีที่ว่าง';
-        game.ui.toast(`🤰 "${mom.data.name}" ครบกำหนดคลอดแล้ว ${why}`, 'warn');
+        game.ui.toast(`🤰 "${mom.data.name}" ครบกำหนดคลอดแล้ว แต่ตู้เต็ม — ขายหรือย้ายปลาออกเพื่อให้มีที่ว่าง`, 'warn');
         break;
       }
       case 'born':

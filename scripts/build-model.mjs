@@ -1,7 +1,7 @@
 /**
  * แปลงโมเดลจาก Meshy AI (หรือไฟล์ .glb ทั่วไป) ให้พร้อมใช้ในเกม
  *
- *   node scripts/build-model.mjs <input.glb> <output.glb> [--fish] [--keep-skin] [--flex-open 0] [--triangles 12000] [--texture 1024]
+ *   node scripts/build-model.mjs <input.glb> <output.glb> [--fish] [--keep-skin] [--keep-anim] [--flex-open 0] [--triangles 12000] [--texture 1024]
  *
  *  - ถอดโครงกระดูก (rig อัตโนมัติของ Meshy มักเป็นแบบคน ไม่มีแอนิเมชัน) แล้วฝังตำแหน่งของ node ลงใน geometry
  *    --keep-skin = เก็บโครงกระดูกไว้ เมื่อกระดูกวางตามตัวสัตว์จริง (เช่นม้าน้ำ: กระดูกไล่ตามหางและคอ)
@@ -9,6 +9,8 @@
  *  - ลดจำนวนสามเหลี่ยมให้ไม่เกิน --triangles (ค่าเริ่มต้น 12000) โดยรูปทรงคลาดได้ไม่เกิน --error (สัดส่วนของขนาดโมเดล ค่าเริ่มต้น 0.002)
  *    ถ้าลดได้ไม่ถึงเป้า (เช่นต้นไม้ที่ใบแยกเป็นชิ้นเล็กจำนวนมาก) ลองเพิ่ม --error 0.01
  *  - ย่อเท็กซ์เจอร์เป็น WebP ขนาด --texture px (ค่าเริ่มต้น 1024) และบีบอัด geometry ด้วย Meshopt
+ *    --keep-anim = เก็บทั้งโครงกระดูกและแอนิเมชันในไฟล์ (รวม --keep-skin) สำหรับโมเดลที่ทำ rig + คลิปว่ายน้ำมาเอง
+ *                  เกมเล่นคลิปที่ชื่อมีคำว่า "swim" ด้วย AnimationMixer (ไม่ต้องตั้ง model.motion / model.rig)
  *  - --fish = ย้ายพิกัดให้ตัวยาว 1 หน่วยตามแกน Z (หัว z=+0.5 ปลายหาง z=-0.5) จุดกึ่งกลางอยู่ที่ 0 (ยกเว้น --keep-skin)
  *             และคำนวณความพลิ้วของครีบ (attribute _FLEX ดู scripts/lib/flex.mjs)
  *             --flex-open N = ตัดครีบ/ชายผ้าที่แผ่ออกด้านข้างจนถูกนับเป็นลำตัวออก (ลองค่า 3–5)
@@ -28,13 +30,14 @@ const option = (name, fallback) => {
   return i >= 0 ? Number(args[i + 1]) : fallback;
 };
 const FISH = args.includes('--fish');
-const KEEP_SKIN = args.includes('--keep-skin');
+const KEEP_ANIM = args.includes('--keep-anim');
+const KEEP_SKIN = KEEP_ANIM || args.includes('--keep-skin');
 const TRIANGLES = option('triangles', 12000);
 const TEXTURE_SIZE = option('texture', 1024);
 const ERROR = option('error', 0.002);
 const [INPUT, OUTPUT] = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.match(/^--(triangles|texture|flex-open|error)$/));
 if (!INPUT || !OUTPUT) {
-  console.error('ใช้: node scripts/build-model.mjs <input.glb> <output.glb> [--fish] [--keep-skin] [--flex-open 0] [--triangles 12000] [--texture 1024]');
+  console.error('ใช้: node scripts/build-model.mjs <input.glb> <output.glb> [--fish] [--keep-skin] [--keep-anim] [--flex-open 0] [--triangles 12000] [--texture 1024]');
   process.exit(1);
 }
 
@@ -55,7 +58,7 @@ for (const node of meshNodes) {
   node.setMatrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   scene.addChild(node);
 }
-for (const a of root.listAnimations()) a.dispose();
+if (!KEEP_ANIM) for (const a of root.listAnimations()) a.dispose();
 if (!KEEP_SKIN) {
   for (const s of root.listSkins()) s.dispose();
   for (const n of root.listNodes()) if (!n.getMesh()) n.dispose();
