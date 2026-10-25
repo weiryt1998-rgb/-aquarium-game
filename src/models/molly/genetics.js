@@ -13,6 +13,7 @@ import { MOLLY_VARIANTS } from './variants.js';
  *     spots: [{ ref, color, k }],           ชั้นลายจุด ≤ 3 ชั้น: ref = 'calico:1' (ชั้นลายของสีนั้น), k = ความหนาแน่น
  *     seed,                                 ตำแหน่งจุดของแต่ละตัว (ลายไม่ซ้ำกัน)
  *     special?: 'rainbow',                  สีหายากที่สุด (ชุดสี special ใน variants.js) — ไม่มี = ลูกผสมทั่วไป
+ *     shape?: 'long',                       ทรงตัว (ดู MOLLY_SHAPES) — ไม่มี = ทรงบอลลูน (ลูกผสมรุ่นก่อนมีทรงตัวไม่มีฟิลด์นี้)
  *   }
  *
  * ไฟล์นี้เป็นโค้ดล้วน (ไม่ใช้ DOM/Three.js) ใช้ได้ทั้งในเกมและฝั่งตรวจคำสั่งของเซฟกลาง
@@ -44,6 +45,14 @@ const SPOT_NAMES = {
   'calico:1': 'จุดดำ',
   'golddust:0': 'ลายด่างเข้ม',
   'golddust:1': 'ผงฝุ่น',
+  'darkcalico:0': 'ลายหินอ่อนขาว',
+  'darkcalico:1': 'กระขาว',
+  'sakura:0': 'ด่างเหลืองทอง',
+  'sakura:1': 'จุดเหลือง',
+  'zebra:0': 'ลายม้าลาย',
+  'zebra:1': 'จุดดำละเอียด',
+  'redzebra:0': 'ลายม้าลาย',
+  'redzebra:1': 'จุดดำละเอียด',
   'rainbow:0': 'ด่างส้ม',
   'rainbow:1': 'จุดเขียว',
   'rainbow:2': 'จุดดำละเอียด',
@@ -55,6 +64,13 @@ const RARE_PALETTES = ['black', 'silver'].map((id) => MOLLY_VARIANTS[id]);
 const RARE_COLOR_CHANCE = 0.15;
 /** โอกาสได้สีรุ้ง (หายากที่สุด) ตามจำนวนพ่อแม่ที่เป็นสีรุ้ง [ไม่มี, 1 ตัว, ทั้งคู่] */
 const RAINBOW_CHANCE = [0.05, 0.1, 0.3];
+
+/**
+ * ทรงตัวของปลาสอด → ไฟล์รูปทรงที่ย้อมสีตามยีน (ModelFactory เลือกไฟล์ตาม genes.shape)
+ * ยีนเก็บเฉพาะทรงที่ไม่ใช่ค่าเริ่มต้น (balloon) ยีนเดิมในเซฟจึงไม่เปลี่ยน
+ */
+export const MOLLY_SHAPES = { balloon: 'models/fish/molly.glb', long: 'models/fish/molly_long.glb' };
+const DEFAULT_SHAPE = 'balloon';
 
 const HEAD_COLORS = ['#f0541c', '#ff8a1f', '#d8202e', '#ffb21e'];
 const SPOT_COLORS = ['#0b0c10', '#f2882a', '#2a1608', '#f0541c', '#ffd22c', '#3b5fa8'];
@@ -174,6 +190,18 @@ function rareColor(g, rnd) {
   if (rnd() < 0.5) g.fins = { base: p.fins.base, tip: p.fins.tip, ray: p.fins.ray, opacity: p.fins.opacity };
 }
 
+/** ทรงตัวของยีน (ไม่มี = ทรงบอลลูน) */
+export const shapeOf = (genes) => (genes?.shape && MOLLY_SHAPES[genes.shape] ? genes.shape : DEFAULT_SHAPE);
+
+/** ทรงตัวของลูก: พ่อแม่ทรงเดียวกันได้ทรงนั้น ต่างทรงได้ทรงพ่อหรือแม่อย่างละครึ่ง (สุ่มเฉพาะตอนต่างทรง ลำดับการสุ่มของคู่ทรงเดียวกันจึงเหมือนเดิม) */
+function inheritShape(a, b, rnd) {
+  const sa = shapeOf(a);
+  const sb = shapeOf(b);
+  return sa === sb ? sa : rnd() < 0.5 ? sa : sb;
+}
+
+const withShape = (g, shape) => (shape === DEFAULT_SHAPE ? g : { ...g, shape });
+
 /**
  * ยีนของลูก จากยีนแม่ (a) และพ่อ (b)
  * @param {() => number} rnd ตัวสุ่ม 0..1
@@ -186,12 +214,13 @@ export function crossGenes(a, b, rnd = Math.random) {
     spots: inheritSpots(a.spots, b.spots, rnd),
     seed: 1 + Math.floor(rnd() * (SEED_MAX - 1)),
   };
+  const shape = inheritShape(a, b, rnd);
   // สีรุ้ง: ได้ทั้งชุดสี (ลายจุดตาม seed ของตัวเอง) — พ่อแม่เป็นสีรุ้งยิ่งมีโอกาสมาก
   const rainbowParents = Number(a.special === 'rainbow') + Number(b.special === 'rainbow');
-  if (rnd() < RAINBOW_CHANCE[rainbowParents]) return sanitizeGenes({ ...variantGenes('rainbow'), seed: g.seed, special: 'rainbow' });
+  if (rnd() < RAINBOW_CHANCE[rainbowParents]) return sanitizeGenes(withShape({ ...variantGenes('rainbow'), seed: g.seed, special: 'rainbow' }, shape));
   if (rnd() < 0.15) mutate(g, rnd);
   if (rnd() < RARE_COLOR_CHANCE) rareColor(g, rnd);
-  return sanitizeGenes(g);
+  return sanitizeGenes(withShape(g, shape));
 }
 
 // ── ตรวจข้อมูล ──────────────────────────────────────────────────
@@ -220,6 +249,7 @@ export function sanitizeGenes(raw) {
     spots,
     seed: Math.floor(num(raw.seed, 1, SEED_MAX, 1)),
     ...(MOLLY_VARIANTS[raw.special]?.special ? { special: raw.special } : {}),
+    ...(shapeOf(raw) !== DEFAULT_SHAPE ? { shape: shapeOf(raw) } : {}),
   };
 }
 
@@ -285,6 +315,7 @@ export function describeGenes(genes) {
   let best = BODY_NAMES[0];
   for (const c of BODY_NAMES) if (colorDistance(c[1], g.body.base) < colorDistance(best[1], g.body.base)) best = c;
   const parts = [`ตัวสี${best[0]}`];
+  if (g.shape === 'long') parts.push('ทรงตัวยาว');
   if (g.head) parts.push('หัวแดง');
   for (const s of g.spots) {
     const name = SPOT_NAMES[s.ref];

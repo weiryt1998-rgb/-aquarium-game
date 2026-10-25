@@ -46,7 +46,9 @@ export class ModelFactory {
 
   allModelUrls() {
     return [
-      ...FISH_SPECIES.flatMap((s) => [...this.fishModelUrls(s), s.procedural?.mesh, s.procedural?.babyMesh].filter(Boolean)),
+      ...new Set(
+        FISH_SPECIES.flatMap((s) => [...this.fishModelUrls(s), s.procedural?.mesh, ...Object.values(s.procedural?.shapeMeshes ?? {}), s.procedural?.babyMesh].filter(Boolean)),
+      ),
       ...DECOR_ITEMS.flatMap((d) => this.decorModelUrls(d)),
     ];
   }
@@ -117,10 +119,12 @@ export class ModelFactory {
 
     const procedural = PROCEDURAL_FISH[species.procedural?.type];
     if (procedural) {
-      // procedural.mesh = ไฟล์รูปทรงที่โมเดลจากโค้ดนำไปย้อมสีเอง (เช่น molly.glb ใช้กับปลาสอดทุกสี)
+      // procedural.mesh = ไฟล์รูปทรงที่โมเดลจากโค้ดนำไปย้อมสีเอง (เช่น molly.glb ใช้กับปลาสอดทรงบอลลูนทุกสี)
+      // procedural.shapeMeshes = ไฟล์ของแต่ละทรงตัว — ลูกผสมใช้ทรงตาม genes.shape (เช่น ทรงตัวยาว molly_long.glb)
       // procedural.babyMesh = รูปทรงลูกปลา (ย้อมสีตามสายพันธุ์/ยีนแบบเดียวกัน) ใช้จนโตถึง babyUntil
       const baby = this.isBabyLook(species, growth);
-      const url = baby ? species.procedural.babyMesh : species.procedural.mesh;
+      const p = species.procedural;
+      const url = baby ? p.babyMesh : (genes?.shape && p.shapeMeshes?.[genes.shape]) || p.mesh;
       const mesh = url ? (this.assets.first([url])?.gltf ?? null) : null;
       const { object, swimUniforms, trail = null, fry = null } = procedural(species, { animated, detail: this.detail(), genes, mesh, growth, baby });
       return { object, mixer: null, swimUniforms, trail, baby, fry, isPlaceholder: false };

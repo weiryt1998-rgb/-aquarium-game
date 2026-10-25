@@ -27,14 +27,18 @@
  * legendary = ปลาระดับตำนาน: มีป้าย "ตำนาน" ในร้านค้าและสมุดสะสม (ความหายากเต็ม 5 ดาว)
  */
 
+import { MOLLY_SHAPES } from '../models/molly/genetics.js';
+
 const fishModel = (id, extra = {}) => ({ url: `models/fish/${id}.glb`, rotation: [0, 0, 0], ...extra });
 
 /**
- * ปลาสอดบอลลูน (Balloon Molly) — ทุกสีใช้โมเดล/พฤติกรรม/การดูแลเดียวกัน ต่างกันที่ลาย (src/models/molly/variants.js)
- * แต่ละสีเป็นสายพันธุ์แยก จึงผสมพันธุ์ได้เฉพาะสีเดียวกัน
+ * ปลาสอด (Molly) — ทุกสีใช้พฤติกรรม/การดูแลเดียวกัน ต่างกันที่ลาย (src/models/molly/variants.js) และทรงตัว
+ * shape = 'balloon' (ทรงบอลลูน molly.glb) หรือ 'long' (ทรงตัวยาว molly_long.glb) — ทุกทรงอยู่กลุ่ม 'molly' ผสมข้ามกันได้
+ * สีเดียวกันได้ลูกพันธุ์แท้ ต่างสี/ต่างทรงได้ลูกผสม (ยีน shape กำหนดทรงของลูก — ดู genetics.js)
  */
-function mollySpecies({ variant, name, nameEn, description, rarity, coins, economy, colors, extra = {} }) {
-  const id = `molly_${variant}`;
+function mollySpecies({ variant, shape = 'balloon', name, nameEn, description, rarity, coins, economy, colors, extra = {} }) {
+  const long = shape === 'long';
+  const id = long ? `molly_long_${variant}` : `molly_${variant}`;
   return {
     id,
     breedGroup: 'molly',
@@ -44,18 +48,28 @@ function mollySpecies({ variant, name, nameEn, description, rarity, coins, econo
     description,
     rarity,
     price: { coins },
-    sizeCm: 5,
-    length: 0.7,
+    sizeCm: long ? 6 : 5,
+    // ลำตัว (ปลายจมูก → โคนหาง) ของทรงตัวยาวยาวกว่า ส่วนความสูงใกล้เคียงทรงบอลลูน
+    length: long ? 0.82 : 0.7,
     minTank: 0,
     model: fishModel(id),
-    // ลูกปลาใช้รูปทรงลูกปลาแรกเกิด (ตัวเรียว ตาโต ครีบใส) จนโตได้ 60% แล้วเปลี่ยนเป็นทรงบอลลูน — ย้อมสีตามสายพันธุ์/ยีนเหมือนกัน
-    procedural: { type: 'molly', variant, mesh: 'models/fish/molly.glb', babyMesh: 'models/fish/molly_baby.glb', babyUntil: 0.6 },
+    // ลูกปลาใช้รูปทรงลูกปลาแรกเกิด (ตัวเรียว ตาโต ครีบใส) จนโตได้ 60% แล้วเปลี่ยนเป็นทรงของสายพันธุ์ — ย้อมสีตามสายพันธุ์/ยีนเหมือนกัน
+    // shapeMeshes = ไฟล์ของแต่ละทรง (ลูกผสมใช้ทรงตาม genes.shape)
+    procedural: {
+      type: 'molly',
+      variant,
+      ...(long ? { shape } : {}),
+      mesh: MOLLY_SHAPES[shape],
+      shapeMeshes: MOLLY_SHAPES,
+      babyMesh: 'models/fish/molly_baby.glb',
+      babyUntil: 0.6,
+    },
     behavior: { speed: 0.7, zone: 'middle', schooling: true, agility: 2.2, tailBeat: 1.15 },
     care: { hungerRate: 0.13, growTime: 260, breedChance: 0.3 },
     economy,
     // รูปร่างจริงมาจาก src/models/molly/ — look ใช้เป็นสีเรืองหลังรูปในร้านค้า และเป็นโมเดลสำรองแบบง่ายเท่านั้น
     look: {
-      body: { height: 0.55, width: 0.75, peak: 0.45, nose: 0.5, taper: 1.0, peduncle: 0.3 },
+      body: { height: long ? 0.45 : 0.55, width: 0.75, peak: 0.45, nose: 0.5, taper: 1.0, peduncle: 0.3 },
       pattern: { type: 'patches', colors, belly: '#fbf9f4', scale: 6 },
       fins: { color: colors[0], tip: '#ffffff', opacity: 0.6, tail: 'fan', tailLength: 0.45, tailHeight: 0.6, dorsal: 0.3, anal: 0.12, pectoral: 0.15 },
       eyeSize: 0.09,
@@ -171,6 +185,51 @@ export const FISH_SPECIES = [
     coins: 260,
     economy: { coinValue: 8, coinInterval: 75 },
     colors: ['#e9a33c', '#0b0907'],
+  }),
+  // ── ปลาสอดทรงตัวยาว (โมเดลจาก Blender: Fish/molly_designs.py → molly_long.glb) ผสมข้ามกับทรงบอลลูนได้ ──
+  mollySpecies({
+    variant: 'darkcalico',
+    shape: 'long',
+    name: 'ปลาสอดคาริโกะเข้มตัวยาว',
+    nameEn: 'Dark Calico Long Molly',
+    description: 'ปลาสอดทรงตัวยาว ตัวดำอมน้ำตาลเข้ม ลายหินอ่อนขาวเงินแตกเป็นกระทั่วตัว ครีบดำมีกระขาว ดูลึกลับสง่างาม',
+    rarity: 3,
+    coins: 320,
+    economy: { coinValue: 9, coinInterval: 75 },
+    colors: ['#2a2321', '#e8ebee'],
+  }),
+  mollySpecies({
+    variant: 'sakura',
+    shape: 'long',
+    name: 'ปลาสอดขาวซากุระตัวยาว',
+    nameEn: 'White Sakura Long Molly',
+    description: 'ปลาสอดทรงตัวยาว พื้นขาวมุก ประด้วยด่างเหลืองทองนุ่ม ๆ เหมือนกลีบซากุระต้องแดด ครีบขาวใสมีด่างเหลือง',
+    rarity: 3,
+    coins: 260,
+    economy: { coinValue: 8, coinInterval: 75 },
+    colors: ['#f2b51c', '#f7f5f0'],
+  }),
+  mollySpecies({
+    variant: 'zebra',
+    shape: 'long',
+    name: 'ปลาสอดม้าลายตัวยาว',
+    nameEn: 'Zebra Long Molly',
+    description: 'ปลาสอดทรงตัวยาว พื้นขาวเงิน บั้งดำคดเคี้ยวแบบหินอ่อนเกือบรอบตัวเหมือนม้าลาย ครีบหลังและหางมีริ้วดำ',
+    rarity: 3,
+    coins: 280,
+    economy: { coinValue: 8, coinInterval: 75 },
+    colors: ['#eef0f2', '#0b0c0f'],
+  }),
+  mollySpecies({
+    variant: 'redzebra',
+    shape: 'long',
+    name: 'ปลาสอดเรดเฮดตัวยาว',
+    nameEn: 'Red Head Zebra Long Molly',
+    description: 'ปลาสอดทรงตัวยาว ลายม้าลายดำขาวทั้งตัว แต่หัวและหน้าเป็นสีส้มแดงสะดุดตา',
+    rarity: 3,
+    coins: 300,
+    economy: { coinValue: 9, coinInterval: 75 },
+    colors: ['#f2611c', '#eef0f2'],
   }),
   {
     id: 'neon',

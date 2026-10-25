@@ -36,10 +36,13 @@ export const breedGroupOf = (species) => species?.breedGroup ?? species?.id;
 /** สายพันธุ์ลูกผสมของกลุ่ม (ถ้ามี) */
 export const hybridSpeciesOf = (group) => FISH_SPECIES.find((s) => s.hybrid && s.breedGroup === group) ?? null;
 
-/** ยีนสีที่ใช้จริงของปลาตัวหนึ่ง (พันธุ์แท้ = ยีนของสีนั้น) — null ถ้าสายพันธุ์นี้ไม่มีระบบสี */
+/** ยีนสีที่ใช้จริงของปลาตัวหนึ่ง (พันธุ์แท้ = ยีนของสีนั้น + ทรงตัวของสายพันธุ์) — null ถ้าสายพันธุ์นี้ไม่มีระบบสี */
 export function effectiveGenes(fish, species) {
   if (species?.procedural?.type !== 'molly') return null;
-  return sanitizeGenes(fish.genes) ?? variantGenes(species.procedural.variant);
+  const own = sanitizeGenes(fish.genes);
+  if (own) return own;
+  const shape = species.procedural.shape;
+  return sanitizeGenes({ ...variantGenes(species.procedural.variant), ...(shape ? { shape } : {}) });
 }
 
 /**

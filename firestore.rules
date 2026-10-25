@@ -96,7 +96,8 @@ service cloud.firestore {
         isCount(g.gems, 10000000),
         validInventory(g.inventory),
         g.selectedFood in ['flakes', 'pellets', 'bloodworm'],
-        g.collection is map, g.collection.size() <= 30,
+        // เผื่อสายพันธุ์ที่เลิกขาย/ถอดออกแล้วแต่ยังค้างในสมุดสะสมของเซฟเดิม (เช่น ปลาอวกาศ) + สายพันธุ์ใหม่
+        g.collection is map, g.collection.size() <= 64,
         tanks is list, tankCount >= 1, tankCount <= 7,
         validTank(tanks[0], capacities, tankKeys),
         tankCount < 2 || validTank(tanks[1], capacities, tankKeys),

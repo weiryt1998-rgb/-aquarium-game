@@ -1,6 +1,6 @@
 /**
- * ชุดสีของปลา Balloon Molly
- * ทุกสีใช้รูปทรงและแอนิเมชันเดียวกัน ต่างกันแค่ texture และค่าวัสดุ
+ * ชุดสีของปลาสอด (ทรงบอลลูนและทรงตัวยาว)
+ * ทุกสีใช้แอนิเมชันเดียวกัน ต่างกันแค่ texture และค่าวัสดุ — รูปทรงมาจากสายพันธุ์ (procedural.shape) หรือยีน shape ของลูกผสม
  *
  * body.base/back/belly : สีพื้นลำตัว สีหลัง สีท้อง (ไล่สีแบบ countershading)
  * scales               : ความเข้มของขอบเกล็ดบน texture สี (contrast) และความนูนบน normal map (relief)
@@ -141,6 +141,72 @@ export const MOLLY_VARIANTS = {
     lip: '#c9c4c4',
     iris: '#d6dbe1',
     material: { roughness: 0.26, metalness: 0.5, clearcoat: 0.6, iridescence: 0.45, sheenGlow: 0.02 },
+  },
+  // ── สีของปลาสอดทรงตัวยาว (molly_long.glb) — ใช้ระบบลายเดียวกัน ผสมข้ามกับทรงบอลลูนได้ ──
+  darkcalico: {
+    id: 'darkcalico',
+    name: 'คาริโกะเข้ม',
+    nameEn: 'Dark Calico Molly',
+    // ตัวดำอมน้ำตาลเกือบทั้งตัว ด่างขาวเงินก้อนเล็กแตกเป็นกระ (ข้างตัว/ท้องมากกว่าหลัง) ท้องเทาเงิน ครีบดำปลายเทามีกระขาว
+    body: { base: '#2a2321', back: '#141112', belly: '#9a9ca2', gill: '#3a3030' },
+    scales: { contrast: 0.3, relief: 1.05, rim: '#4a4f5a' },
+    spots: [
+      { color: '#dfe3e8', count: 120, minSize: 0.014, maxSize: 0.06, sizePow: 1.2, back: 0.1, blur: 1.1, matte: 0.25, finCount: 14, finSize: 0.06 },
+      { color: '#f1f3f5', count: 420, minSize: 0.003, maxSize: 0.013, sizePow: 1.6, back: 0.15, clusters: false, finCount: 50, finSize: 0.03 },
+    ],
+    fins: { base: '#1e1b1b', tip: '#55575e', ray: '#0b0a0a', opacity: 0.86 },
+    lip: '#2e2a2a',
+    iris: '#c9ced6',
+    material: { roughness: 0.3, metalness: 0.08, clearcoat: 0.82, iridescence: 0.4, sheenGlow: 0.02 },
+  },
+  sakura: {
+    id: 'sakura',
+    name: 'ขาวซากุระ',
+    nameEn: 'White Sakura Molly',
+    // พื้นขาวมุก ด่างเหลืองทองนุ่ม ๆ ตามหลังและข้างตัว ครีบขาวใสมีด่างเหลือง
+    body: { base: '#f7f5f0', back: '#efece4', belly: '#fcfbf8', gill: '#f3e0d4' },
+    scales: { contrast: 0.12, relief: 0.85, rim: '#ffffff' },
+    spots: [
+      { color: '#f2b51c', count: 40, minSize: 0.03, maxSize: 0.1, sizePow: 1.2, back: 0.45, blur: 1.5, matte: 0.3, finCount: 10, finSize: 0.08 },
+      { color: '#f7cd45', count: 90, minSize: 0.01, maxSize: 0.035, sizePow: 1.4, back: 0.5, blur: 1.2, matte: 0.3, finCount: 16, finSize: 0.05 },
+    ],
+    fins: { base: '#f5f2ea', tip: '#ffffff', ray: '#e6d6a4', opacity: 0.7 },
+    lip: '#f1d9b0',
+    iris: '#d8c08a',
+    material: { roughness: 0.32, metalness: 0.06, clearcoat: 0.75, iridescence: 0.55, sheenGlow: 0.07 },
+  },
+  zebra: {
+    id: 'zebra',
+    name: 'ม้าลาย',
+    nameEn: 'Zebra Molly',
+    // พื้นขาวเงิน บั้งดำแนวตั้งคดเคี้ยวแตกเป็นหินอ่อนเกือบรอบตัว หัวลายหินอ่อนดำ ครีบหลัง/หางมีริ้วดำ
+    body: { base: '#eef0f2', back: '#e3e6e9', belly: '#f8f9fa', gill: '#e6dcd8' },
+    scales: { contrast: 0.14, relief: 0.9, rim: '#ffffff' },
+    spots: [
+      { color: '#0b0c0f', count: 9, bars: { from: 0.1, to: 0.98, width: 0.55, low: [-0.45, -0.95], marble: 1, slant: 0.1 }, finCount: 9, matte: 0.5 },
+      { color: '#0b0c0f', count: 260, minSize: 0.003, maxSize: 0.012, sizePow: 1.7, back: 0.45, clusters: false, finCount: 40, finSize: 0.03 },
+    ],
+    fins: { base: '#e9ecef', tip: '#ffffff', ray: '#9aa1a8', opacity: 0.78 },
+    lip: '#2a2c30',
+    iris: '#d2d6dc',
+    material: { roughness: 0.32, metalness: 0.06, clearcoat: 0.75, iridescence: 0.5, sheenGlow: 0.05 },
+  },
+  redzebra: {
+    id: 'redzebra',
+    name: 'เรดเฮด',
+    nameEn: 'Red Head Zebra Molly',
+    // ลายม้าลายแบบเดียวกัน แต่หัวและหน้าสีส้มแดง (บั้งเริ่มหลังหัว)
+    body: { base: '#eef0f2', back: '#e3e6e9', belly: '#f8f9fa', gill: '#f0d0c0' },
+    head: { color: '#f2611c', start: 0.12, end: 0.3, back: 0.12 },
+    scales: { contrast: 0.14, relief: 0.9, rim: '#ffffff' },
+    spots: [
+      { color: '#0b0c0f', count: 8, bars: { from: 0.26, to: 0.98, width: 0.55, low: [-0.45, -0.95], marble: 0.8, slant: 0.1 }, finCount: 9, matte: 0.5 },
+      { color: '#0b0c0f', count: 180, minSize: 0.003, maxSize: 0.011, sizePow: 1.7, back: 0.45, clusters: false, finCount: 34, finSize: 0.03 },
+    ],
+    fins: { base: '#ecedee', tip: '#ffffff', ray: '#9aa1a8', opacity: 0.76 },
+    lip: '#f07a3a',
+    iris: '#d2d6dc',
+    material: { roughness: 0.32, metalness: 0.06, clearcoat: 0.75, iridescence: 0.5, sheenGlow: 0.06 },
   },
   rainbow: {
     id: 'rainbow',

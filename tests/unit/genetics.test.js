@@ -137,3 +137,26 @@ test('ลูกในท้อง: สีเดียวกันได้พั
   assert.equal(sanitizeFetus({ speciesId: 'molly_calico' }, f('molly_golden'), m('molly_redhead')), null, 'ไม่ใช่สีของพ่อ/แม่');
   assert.ok(sanitizeFetus({ speciesId: 'molly_hybrid' }, f('molly_golden'), m('molly_redhead')).genes, 'ลูกผสมต้องมียีนเสมอ');
 });
+
+test('ทรงตัวยาว: พันธุ์แท้ผสมกันได้ทรงเดิม ผสมกับทรงบอลลูนได้ลูกผสมทั้ง 2 ทรง และยีนเดิมในเซฟยังเป็นทรงบอลลูน', () => {
+  const f = (speciesId, extra = {}) => ({ speciesId, gender: 'f', ...extra });
+  const m = (speciesId, extra = {}) => ({ speciesId, gender: 'm', ...extra });
+  assert.deepEqual(planOffspring(f('molly_long_zebra'), m('molly_long_zebra')), { speciesId: 'molly_long_zebra' });
+  const longCross = planOffspring(f('molly_long_zebra'), m('molly_long_sakura'), seededRandom(0.2));
+  assert.equal(longCross.speciesId, 'molly_hybrid');
+  assert.equal(longCross.genes.shape, 'long', 'พ่อแม่ทรงตัวยาวทั้งคู่ ลูกผสมทรงตัวยาว');
+  assert.match(describeGenes(longCross.genes), /ทรงตัวยาว/);
+  const rnd = seededRandom(0.77);
+  let long = 0;
+  const N = 400;
+  for (let i = 0; i < N; i++) {
+    const g = planOffspring(f('molly_long_redzebra'), m('molly_golden'), rnd).genes;
+    assert.deepEqual(sanitizeGenes(g), g);
+    if (g.shape === 'long') long++;
+  }
+  assert.ok(long > N * 0.35 && long < N * 0.65, `ต่างทรงได้ทรงตัวยาว ${long}/${N}`);
+  // ยีนรุ่นก่อนไม่มี shape = ทรงบอลลูน และไม่เพิ่มฟิลด์ใหม่ให้ (key ของยีนเดิมไม่เปลี่ยน)
+  const old = crossGenes(variantGenes('golden'), variantGenes('calico'), seededRandom(0.42));
+  assert.equal(old.shape, undefined);
+  assert.equal(sanitizeGenes({ ...old, shape: 'giant' }).shape, undefined, 'ทรงที่ไม่รู้จักถูกตัดทิ้ง');
+});

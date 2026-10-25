@@ -26,7 +26,8 @@
 | `fish/rune_guardian.glb` | ปลาผู้พิทักษ์รูน (ท่าว่ายจาก shader — `model.motion`) |
 | `fish/pumpkin_angler.glb` | ปลาตกเบ็ดฟักทอง — ทำใน Blender (`Fish/pumpkin_angler.blend`) มีกระดูก 10 ชิ้น + คลิป `Swim` — แปลงด้วย `node scripts/build-model.mjs Fish/pumpkin_angler_src.glb public/models/fish/pumpkin_angler.glb --keep-anim` |
 | `fish/molly_baby.glb` | ลูกปลาสอดทุกสี (ใช้จนโต 60% แล้วเปลี่ยนเป็น molly.glb) — แปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์>.glb public/models/fish/molly_baby.glb` |
-| `fish/molly.glb` | ปลาสอดทุกสีและลูกผสม (รูปทรงอย่างเดียว เกมย้อมสี/ลายใหม่ตามสายพันธุ์และยีน) — **ห้ามวางไฟล์ทับตรง ๆ** ต้องแปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์จาก Meshy>.glb` |
+| `fish/molly.glb` | ปลาสอดทรงบอลลูนทุกสีและลูกผสม (รูปทรงอย่างเดียว เกมย้อมสี/ลายใหม่ตามสายพันธุ์และยีน) — **ห้ามวางไฟล์ทับตรง ๆ** ต้องแปลงด้วย `node scripts/build-molly-model.mjs <ไฟล์จาก Meshy>.glb` |
+| `fish/molly_long.glb` | ปลาสอดทรงตัวยาว (คาริโกะเข้ม ขาวซากุระ ม้าลาย เรดเฮด และลูกผสมที่ได้ยีน `shape: 'long'`) — ทำใน Blender: รัน `Fish/molly_designs.py` (`FISH = 'balloon_calico'`) แล้ว `Fish/export_molly_long.py` ได้ `Fish/molly_long_src.glb` จากนั้น `node scripts/build-molly-long-model.mjs` · ตรวจที่ `/preview/molly.html?shape=long&variant=zebra` |
 | `fish/fish.glb` | **ไฟล์กลาง** ใช้กับทุกสายพันธุ์ที่ยังไม่มีไฟล์ของตัวเอง (เกมย้อมสีให้ตามสายพันธุ์) |
 
 ข้อกำหนดของโมเดลปลา

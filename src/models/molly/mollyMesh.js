@@ -6,6 +6,7 @@ import { barSpec } from './variants.js';
 
 /**
  * ปลาสอดจากไฟล์โมเดล public/models/fish/molly.glb (แปลงจากโมเดล Meshy ด้วย scripts/build-molly-model.mjs)
+ * และ molly_long.glb (ทรงตัวยาว จาก Blender — Fish/export_molly_long.py แล้ว scripts/build-molly-long-model.mjs)
  *
  * ใช้รูปทรง ลายเกล็ด และก้านครีบจากไฟล์ แต่ "ย้อมสีใหม่" ใน fragment shader ตามชุดสี (variants.js หรือยีนลูกผสม)
  *  - ความสว่างของเท็กซ์เจอร์เดิม = เงาเกล็ด/ก้านครีบ  ส่วนสีส้มในเท็กซ์เจอร์ = ลายด่าง (ใช้กับชั้นลายที่ตั้ง patches: true)
@@ -25,10 +26,14 @@ const MAX_LAYERS = 3;
 const SPOT_BOOST = 1.2;
 /** สัดส่วนของจุดขนาดใหญ่ (ครึ่งบนของช่วงขนาด) */
 const BIG_SPOTS = 0.3;
-/** ก้านครีบหลังของ molly.glb แผ่ออกจากจุดโคน (y, z) — [y, z, มุมกึ่งกลาง, ช่วงมุมทั้งครีบ] และระยะ [โคนครีบ, ปลายครีบ] จากจุดนั้น */
+/**
+ * ก้านครีบหลัง/หางของ molly.glb แผ่ออกจากจุดโคน (y, z) — [y, z, มุมกึ่งกลาง, ช่วงมุมทั้งครีบ] และระยะ [โคนครีบ, ปลายครีบ] จากจุดนั้น
+ * ไฟล์รูปทรงอื่น (เช่น molly_long.glb) ใส่ค่าของตัวเองไว้ใน extras ของวัสดุ: dorsalFan, dorsalLen, tailFan, tailLen
+ */
 const DORSAL_FAN = [0.0, 0.25, 0.64, 0.8];
 const DORSAL_LEN = [0.3, 0.75];
-const vecGlsl = (a) => a.map((x) => x.toFixed(3)).join(', ');
+const TAIL_FAN = [-0.02, -0.5, 0.0, 1.9];
+const TAIL_LEN = [0.0, 0.48];
 
 const PAINT_VERTEX_PARS = /* glsl */ `
 #ifndef MOLLY_AFIN
@@ -90,6 +95,10 @@ uniform vec3 uFryBase;
 uniform vec3 uFryBelly;
 uniform vec3 uFryFin;
 uniform float uFryFinOpacity;
+uniform vec4 uDorsalFan;
+uniform vec2 uDorsalLen;
+uniform vec4 uTailFan;
+uniform vec2 uTailLen;
 varying vec3 vPaintPos;
 varying vec3 vPaintNormal;
 varying vec2 vPaintFin;
@@ -191,11 +200,11 @@ float mollyStreaks(vec3 p, float id, float n, float salt) {
   vec2 len;
   if (n < 0.5 || id < 0.5) return 0.0;
   if (id < 1.5) {
-    fan = vec4(-0.02, -0.5, 0.0, 1.9);
-    len = vec2(0.0, 0.48);
+    fan = uTailFan;
+    len = uTailLen;
   } else if (id < 2.5) {
-    fan = vec4(${vecGlsl(DORSAL_FAN)});
-    len = vec2(${vecGlsl(DORSAL_LEN)});
+    fan = uDorsalFan;
+    len = uDorsalLen;
   } else return 0.0;
   vec2 d = vec2(p.y - fan.x, fan.y - p.z);
   float r = (length(d) - len.x) / (len.y - len.x);
@@ -305,11 +314,22 @@ const FRY_PAINT = {
 
 /**
  * @param {object} paint uniform ของชุดสี (จาก getPaint) ใช้ร่วมกันทุกตัวที่สีเดียวกัน
+ * @param {object} src ค่าของไฟล์รูปทรง (จาก prepare): texRef, texPatches, dorsalFan/dorsalLen/tailFan/tailLen
  * @param {{ value: number }} fry สีลูกปลาแรกเกิดของตัวนี้ 0..1 (แยกต่อตัว — ปรับตามการเติบโต)
  * @param {number} belly ขยายพุงเพิ่ม (สัดส่วน เช่น 0.2 = กว้างขึ้น 20% ตรงกลางพุง) 0 = รูปทรงตามไฟล์
  */
-function createPaintMod(paint, texRef = 0.97, texPatches = true, fry = { value: 0 }, belly = 0) {
-  const own = { uTexRef: { value: texRef }, uTexPatches: { value: texPatches ? 1 : 0 }, uFry: fry, uBelly: { value: belly }, ...FRY_PAINT };
+function createPaintMod(paint, src, fry = { value: 0 }, belly = 0) {
+  const own = {
+    uTexRef: { value: src.texRef },
+    uTexPatches: { value: src.texPatches ? 1 : 0 },
+    uFry: fry,
+    uBelly: { value: belly },
+    uDorsalFan: { value: new THREE.Vector4(...src.dorsalFan) },
+    uDorsalLen: { value: new THREE.Vector2(...src.dorsalLen) },
+    uTailFan: { value: new THREE.Vector4(...src.tailFan) },
+    uTailLen: { value: new THREE.Vector2(...src.tailLen) },
+    ...FRY_PAINT,
+  };
   return {
     key: 'molly-paint',
     apply(shader) {
@@ -425,7 +445,27 @@ function prepare(gltf) {
   const high = { body: geometry('molly_body'), fins: geometry('molly_fins') };
   const low = { body: geometry('molly_body_low') ?? high.body, fins: geometry('molly_fins_low') ?? high.fins };
   const source = meshes.molly_body?.material;
-  const out = high.body && high.fins && source?.map ? { high, low, map: source.map, normalMap: source.normalMap, normalScale: source.normalScale, texRef: source.userData.texRef ?? 0.97, texPatches: source.userData.patches ?? true } : null;
+  const extra = source?.userData ?? {};
+  const vec = (v, n, fallback) => (Array.isArray(v) && v.length === n && v.every(Number.isFinite) ? v : fallback);
+  const out =
+    high.body && high.fins && source?.map
+      ? {
+          high,
+          low,
+          map: source.map,
+          normalMap: source.normalMap,
+          normalScale: source.normalScale,
+          texRef: extra.texRef ?? 0.97,
+          texPatches: extra.patches ?? true,
+          // belly = ขยายพุงของไฟล์นี้ (ไม่ระบุ = ใช้ค่าที่ส่งมา) · thinFins = ครีบเป็นแผ่นหน้าเดียว ต้องวาด 2 ด้าน
+          belly: Number.isFinite(extra.belly) ? extra.belly : null,
+          thinFins: !!extra.thinFins,
+          dorsalFan: vec(extra.dorsalFan, 4, DORSAL_FAN),
+          dorsalLen: vec(extra.dorsalLen, 2, DORSAL_LEN),
+          tailFan: vec(extra.tailFan, 4, TAIL_FAN),
+          tailLen: vec(extra.tailLen, 2, TAIL_LEN),
+        }
+      : null;
   prepared.set(gltf, out);
   return out;
 }
@@ -434,7 +474,7 @@ function prepare(gltf) {
  * @param {object} gltf ไฟล์ molly.glb ที่โหลดแล้ว
  * @param {object} V ชุดสี (variants.js หรือ genesToVariant)
  * @param {{ fry?: number, belly?: number }} options fry = สีลูกปลาแรกเกิดทับสีจริง 0..1 (ดู fry.js)
- *  belly = ขยายพุงให้กลมขึ้น (สัดส่วน) — ตัวเต็มวัยใช้ MOLLY_BELLY, ไฟล์ลูกปลาใช้ 0
+ *  belly = ขยายพุงให้กลมขึ้น (สัดส่วน) — ตัวเต็มวัยใช้ MOLLY_BELLY, ไฟล์ลูกปลาใช้ 0 (ไฟล์ที่ระบุ belly ใน extras ใช้ค่าของไฟล์)
  * @returns {{ object: THREE.Group, swimUniforms: object|null, materials: object, variant: object, fry: { value: number } } | null}
  *  null = ไฟล์ใช้ไม่ได้ · fry = uniform ของตัวนี้ (ตั้ง .value ใหม่เมื่อปลาโตขึ้น)
  */
@@ -477,10 +517,11 @@ export function createMeshMolly(gltf, V, { detail = 'high', animated = true, cau
     emissiveIntensity: 0.22,
   });
   fins.defines = { MOLLY_FINS: '' };
+  if (src.thinFins) fins.side = THREE.DoubleSide;
 
   // texRef = ความสว่างปกติของเท็กซ์เจอร์ในไฟล์ (ลูกปลาสีเทาเข้มกว่าตัวเต็มวัยสีขาว) ให้ย้อมสีออกมาสว่างเท่ากัน
   const fryUniform = { value: fry };
-  const paint = createPaintMod(getPaint(V), src.texRef, src.texPatches, fryUniform, belly);
+  const paint = createPaintMod(getPaint(V), src, fryUniform, src.belly ?? belly);
   let swimUniforms = null;
   let swim = null;
   if (animated) {

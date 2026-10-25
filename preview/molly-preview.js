@@ -10,7 +10,7 @@ import { getSpecies } from '../src/data/fish.js';
 import { QUALITY } from '../src/config.js';
 import { applyShaderMods, causticsMod, sharedUniforms } from '../src/render/shaderMods.js';
 import { MOLLY_VARIANTS, MOLLY_VARIANT_IDS } from '../src/models/molly/variants.js';
-import { crossGenes, describeGenes, variantGenes } from '../src/models/molly/genetics.js';
+import { MOLLY_SHAPES, crossGenes, describeGenes, variantGenes } from '../src/models/molly/genetics.js';
 
 /** สีที่ขายในร้าน (ใช้สุ่มพ่อแม่ของลูกผสม) */
 const SHOP_COLORS = ['dalmatian', 'redhead', 'golden', 'calico', 'golddust'];
@@ -101,15 +101,28 @@ const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 
 // ── สถานะ ──────────────────────────────────────────────────────
-// ?variant=rainbow = เปิดมาที่สีนั้นเลย
-const urlVariant = new URLSearchParams(location.search).get('variant');
-const state = { mode: 'turntable', view: 'side', variant: MOLLY_VARIANTS[urlVariant] ? urlVariant : 'dalmatian', count: 1, detail: 'high', shape: 'file', age: 'adult', wire: false, paused: false };
+// ?variant=rainbow = เปิดมาที่สีนั้นเลย · ?shape=long = ทรงตัวยาว (molly_long.glb) · ?view=hero = มุมกล้อง
+const params = new URLSearchParams(location.search);
+const urlVariant = params.get('variant');
+const urlShape = params.get('shape');
+const state = {
+  mode: 'turntable',
+  view: params.get('view') ?? 'side',
+  variant: MOLLY_VARIANTS[urlVariant] ? urlVariant : 'dalmatian',
+  count: 1,
+  detail: 'high',
+  shape: ['file', 'long', 'code'].includes(urlShape) ? urlShape : 'file',
+  age: 'adult',
+  wire: false,
+  paused: false,
+};
 const baseSpecies = getSpecies('molly_dalmatian');
 // รูปทรงจากไฟล์ molly.glb (เหมือนในเกม) หรือรูปทรงที่สร้างด้วยโค้ด (ตัวสำรองเมื่อไม่มีไฟล์) — สลับได้เพื่อเทียบกัน
 const assets = new AssetLoader();
-await assets.preload([baseSpecies.procedural.mesh, baseSpecies.procedural.babyMesh]);
-const factory = new ModelFactory({ first: (urls) => (state.shape === 'file' ? assets.first(urls) : null) }, { detail: () => state.detail });
-const speciesFor = (variant) => ({ ...baseSpecies, id: `molly_${variant}`, procedural: { ...baseSpecies.procedural, variant } });
+await assets.preload([...Object.values(MOLLY_SHAPES), baseSpecies.procedural.babyMesh]);
+const factory = new ModelFactory({ first: (urls) => (state.shape !== 'code' ? assets.first(urls) : null) }, { detail: () => state.detail });
+const meshShape = () => (state.shape === 'long' ? 'long' : 'balloon');
+const speciesFor = (variant) => ({ ...baseSpecies, id: `molly_${variant}`, procedural: { ...baseSpecies.procedural, variant, mesh: MOLLY_SHAPES[meshShape()] } });
 const game = { models: factory };
 let fishes = [];
 let orbitAngle = 0;
@@ -131,6 +144,7 @@ function makeFish(variant) {
     let b = randomColor();
     while (b === a) b = randomColor(); // พ่อแม่ต่างสี (สีเดียวกันในเกมได้ลูกพันธุ์แท้)
     record.genes = crossGenes(variantGenes(a), variantGenes(b));
+    if (meshShape() === 'long') record.genes.shape = 'long';
     state.crossInfo = `${MOLLY_VARIANTS[a].name} × ${MOLLY_VARIANTS[b].name} → ${describeGenes(record.genes)}`;
   }
   const fish = new Fish(game, record, variant === 'cross' ? getSpecies('molly_hybrid') : speciesFor(variant));
@@ -196,7 +210,7 @@ function applyWire() {
 const MODES = { turntable: 'หมุนดูรอบตัว', circle: 'ว่ายวน (ดูการเลี้ยว)', tank: 'ว่ายในตู้ (AI เกม)' };
 const VIEWS = { hero: 'มุมสวย', front: 'หน้า', side: 'ซ้าย', sideR: 'ขวา', top: 'บน', bottom: 'ล่าง' };
 const DETAILS = { high: 'สูง', medium: 'กลาง', low: 'ต่ำ (มือถือ)' };
-const SHAPES = { file: 'รูปทรงจาก molly.glb', code: 'รูปทรงจากโค้ด (สำรอง)' };
+const SHAPES = { file: 'ทรงบอลลูน (molly.glb)', long: 'ทรงตัวยาว (molly_long.glb)', code: 'รูปทรงจากโค้ด (สำรอง)' };
 const AGES = { adult: 'ตัวเต็มวัย', baby: 'ลูกปลา (molly_baby.glb)' };
 
 function buttons(el, items, current, onClick) {
