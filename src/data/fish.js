@@ -563,6 +563,7 @@ export const FISH_SPECIES = [
     nameEn: 'Arowana',
     description: 'ปลาหายากเกล็ดสีทองแวววาว เชื่อว่านำโชค ต้องใช้ตู้ใหญ่',
     rarity: 5,
+    retired: true,
     price: { gems: 80 },
     sizeCm: 60,
     length: 1.8,

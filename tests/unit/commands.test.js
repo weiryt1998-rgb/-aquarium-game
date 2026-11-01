@@ -34,7 +34,7 @@ test('ซื้อปลา: เงินไม่พอ/ตู้เต็ม/�
   const before = JSON.stringify(game);
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish() }), 'insufficient-funds');
   game.coins = 99999;
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'arowana', fish: newFish() }), 'tank-too-small');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'eagleray', fish: newFish() }), 'tank-too-small');
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: { ...newFish(), gender: 'x' } }), 'invalid');
   rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'molly_golden', fish: newFish() }), 'not-found');
   game.coins = 10;
@@ -49,7 +49,7 @@ test('ซื้อปลา: สายพันธุ์ที่เลิกข
   const old = fishRecord('goldfish');
   const game = makeGame({ coins: 1000, fish: [old] });
   const tank = game.tanks[0];
-  for (const id of ['goldfish', 'neon', 'yellowtang', 'bluetang']) {
+  for (const id of ['goldfish', 'neon', 'yellowtang', 'bluetang', 'arowana']) {
     assert.equal(getSpecies(id).retired, true);
     rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: id, fish: newFish() }), 'invalid');
   }

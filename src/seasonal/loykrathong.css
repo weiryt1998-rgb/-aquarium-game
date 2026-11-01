@@ -1,0 +1,480 @@
+/* ───────────────────────── 🪷 ธีมลอยกระทง (ชั่วคราว) ─────────────────────────
+ * ทำงานเฉพาะเมื่อ <html class="loykrathong"> (ตั้งโดย loykrathong.js) — ลบไฟล์นี้ทิ้งได้ทั้งไฟล์หลังเทศกาล */
+
+html.loykrathong {
+  --panel: rgba(14, 32, 72, 0.8);
+  --panel-strong: rgba(8, 20, 50, 0.95);
+  --panel-light: rgba(80, 120, 200, 0.32);
+  --border: rgba(255, 210, 120, 0.4);
+  --accent: #f5b942;
+  --accent-2: #e08a1e;
+  --muted: #cbd8f2;
+  --lk-gold: #f5c04a;
+  --lk-night: #071230;
+  --lk-lotus: #f27aa8;
+}
+
+html.loykrathong,
+html.loykrathong body {
+  background: #0b1a3a;
+}
+
+/* ── หน้าเข้าสู่ระบบ / หน้าเริ่มเกม ── */
+.loykrathong .start-screen {
+  background: radial-gradient(circle at 50% 30%, rgba(40, 78, 150, 0.6), rgba(6, 14, 38, 0.95));
+}
+
+.loykrathong .start-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.loykrathong .start-inner::before {
+  content: '🪷 สุขสันต์วันลอยกระทง 🌕';
+  display: block;
+  width: fit-content;
+  margin: 0 auto 2px;
+  padding: 4px 16px;
+  border-radius: 999px;
+  font-family: var(--font);
+  font-size: clamp(0.85rem, 2.6vw, 1.05rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #ffe9b8;
+  background: rgba(245, 192, 74, 0.14);
+  border: 1px solid rgba(255, 214, 130, 0.45);
+  text-shadow: 0 0 10px rgba(255, 190, 80, 0.75);
+}
+
+.loykrathong .brand-my {
+  color: #ffe2a8;
+  text-shadow: 0 2px 0 #0f2350, 0 0 18px rgba(255, 200, 110, 0.6);
+}
+
+.loykrathong .brand-aqua {
+  background: linear-gradient(180deg, #fffbe8 8%, #ffe08a 36%, #f5b13a 64%, #b8691a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 3px 0 #0f2350) drop-shadow(0 2px 0 #0f2350) drop-shadow(0 0 22px rgba(255, 190, 70, 0.45));
+}
+
+/* เลข 11 กลายเป็นจันทร์เต็มดวง */
+.loykrathong .brand-num {
+  color: #6b4a12;
+  background: radial-gradient(circle at 66% 30%, rgba(214, 180, 110, 0.45) 0 10%, transparent 12%),
+    radial-gradient(circle at 30% 64%, rgba(214, 180, 110, 0.35) 0 13%, transparent 15%),
+    radial-gradient(circle at 40% 35%, #fffdf0, #ffeeb8 58%, #f3cf78);
+  border-color: rgba(255, 244, 210, 0.9);
+  box-shadow: 0 4px 0 #8a6420, 0 0 26px rgba(255, 220, 140, 0.7), inset 0 -4px 8px rgba(190, 140, 50, 0.4);
+}
+
+/* ปลาบนโลโก้ทัดดอกบัว */
+.loykrathong .brand-fish::before {
+  content: '';
+  position: absolute;
+  top: -0.2em;
+  left: 50%;
+  width: 0.62em;
+  height: 0.5em;
+  transform: translateX(-30%) rotate(-10deg);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 48'%3E%3Cg fill='%23f27aa8' stroke='%23c2427a' stroke-width='1.5'%3E%3Cpath d='M30 44 C14 42 4 32 2 20 C14 22 24 30 30 44 Z'/%3E%3Cpath d='M30 44 C46 42 56 32 58 20 C46 22 36 30 30 44 Z'/%3E%3C/g%3E%3Cpath d='M30 44 C20 34 20 16 30 3 C40 16 40 34 30 44 Z' fill='%23fbd0e1' stroke='%23c2427a' stroke-width='1.5'/%3E%3Cpath d='M30 44 C12 44 8 40 6 36 C18 34 26 38 30 44 C34 38 42 34 54 36 C52 40 48 44 30 44 Z' fill='%234f9a3e'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.loykrathong .brand-wave path {
+  stroke: rgba(255, 210, 120, 0.85);
+}
+
+/* ฟองอากาศเป็นประกายแสงเทียนสีทอง */
+.loykrathong .brand-bubbles i {
+  border-color: rgba(255, 220, 140, 0.75);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 250, 230, 0.9) 0 18%, rgba(255, 200, 90, 0.22) 45%);
+  box-shadow: 0 0 8px rgba(255, 200, 90, 0.5);
+}
+
+.loykrathong .subtitle {
+  background: linear-gradient(180deg, #2e5fae, #1b3f80);
+  border-color: rgba(255, 214, 130, 0.7);
+  box-shadow: 0 4px 0 #0f2654;
+}
+
+.loykrathong .btn-start {
+  color: #3a2200;
+  background: linear-gradient(180deg, #ffe08a, var(--lk-gold) 50%, #e0921c);
+  box-shadow: 0 5px 0 #8a5a12, 0 0 26px rgba(255, 190, 70, 0.55);
+}
+
+.loykrathong .loading .bar i,
+.loykrathong .bar.indeterminate i {
+  background: linear-gradient(90deg, var(--lk-gold), var(--lk-lotus));
+}
+
+.loykrathong .welcome {
+  color: #ffe2a8;
+}
+
+.loykrathong .auth-input:focus {
+  box-shadow: 0 0 0 3px rgba(245, 185, 66, 0.25);
+}
+
+/* ── ฉากตกแต่ง (loykrathong.js: SCENE_HTML) ── */
+.lk-scene,
+.lk-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* main.css ตั้ง svg { width/height: 1em } ไว้สำหรับไอคอน — ของตกแต่งให้สูงตาม viewBox */
+.lk-scene svg,
+.lk-ambient svg {
+  height: auto;
+}
+
+.lk-stars {
+  position: absolute;
+  inset: 0 0 35% 0;
+  background-image: radial-gradient(1.5px 1.5px at 12% 18%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 8%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 44% 26%, #fff4d6 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 12%, #fff 50%, transparent 51%),
+    radial-gradient(2px 2px at 71% 34%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 86% 22%, #fff4d6 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 6% 40%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 52% 46%, #fff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 94% 48%, #fff 50%, transparent 51%);
+  animation: lk-twinkle 3.6s ease-in-out infinite alternate;
+}
+
+/* จันทร์เต็มดวงคืนเพ็ญเดือนสิบสอง */
+.lk-moon {
+  position: absolute;
+  top: 6%;
+  right: 10%;
+  width: clamp(100px, 16vw, 190px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 64% 30%, rgba(214, 190, 140, 0.45) 0 9%, transparent 10%),
+    radial-gradient(circle at 34% 62%, rgba(214, 190, 140, 0.4) 0 12%, transparent 13%),
+    radial-gradient(circle at 70% 70%, rgba(214, 190, 140, 0.3) 0 6%, transparent 7%),
+    radial-gradient(circle at 40% 35%, #fffef6, #fff1c4 60%, #f6d98e);
+  box-shadow: 0 0 50px 14px rgba(255, 236, 180, 0.38), 0 0 140px 50px rgba(255, 200, 110, 0.16);
+}
+
+/* ── แม่น้ำ + เงาจันทร์ ── */
+.lk-river {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 24%;
+  background: linear-gradient(180deg, rgba(30, 64, 128, 0.55), rgba(6, 16, 44, 0.92));
+  border-top: 1px solid rgba(160, 200, 255, 0.25);
+}
+
+.lk-moon-path {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(10% + clamp(100px, 16vw, 190px) / 2 - 50px);
+  width: 100px;
+  background: repeating-linear-gradient(180deg, rgba(255, 236, 170, 0.55) 0 2px, transparent 2px 9px);
+  -webkit-mask-image: radial-gradient(ellipse 50% 100% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 50% 100% at 50% 0%, #000 30%, transparent 75%);
+  animation: lk-shimmer 2.4s ease-in-out infinite alternate;
+}
+
+.lk-waves {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.lk-waves i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
+  background: radial-gradient(ellipse 6% 7% at 10% 30%, rgba(170, 210, 255, 0.28), transparent 70%),
+    radial-gradient(ellipse 8% 6% at 30% 62%, rgba(170, 210, 255, 0.22), transparent 70%),
+    radial-gradient(ellipse 6% 7% at 55% 40%, rgba(170, 210, 255, 0.28), transparent 70%),
+    radial-gradient(ellipse 8% 6% at 78% 75%, rgba(170, 210, 255, 0.22), transparent 70%);
+  animation: lk-waves 26s linear infinite;
+}
+
+.lk-waves i + i {
+  opacity: 0.6;
+  animation-duration: 40s;
+  animation-direction: reverse;
+}
+
+/* ── กระทงลอยน้ำ ── */
+/* ใบไกล (เล็ก) ลอยชิดขอบน้ำ ใบใกล้ (ใหญ่) อยู่ล่าง ๆ และลอยเร็วกว่า */
+.lk-krathong {
+  position: absolute;
+  left: 0;
+  bottom: 9%;
+  width: clamp(70px, 10vw, 116px);
+  animation: lk-drift 52s linear infinite;
+}
+
+.lk-krathong svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  animation: lk-bob 3.2s ease-in-out infinite;
+}
+
+.lk-float-1 { bottom: calc(24% - 22px); width: clamp(42px, 5.5vw, 66px); animation-duration: 80s; animation-delay: -12s; }
+.lk-float-2 { animation-delay: -34s; }
+.lk-float-3 { bottom: 0; width: clamp(90px, 13vw, 150px); animation-duration: 44s; animation-delay: -6s; }
+.lk-float-2 svg { animation-duration: 3.8s; animation-delay: -1s; }
+.lk-float-3 svg { animation-duration: 2.9s; animation-delay: -2s; }
+
+.lk-kt-glow { fill: rgba(255, 190, 90, 0.22); }
+.lk-kt-base { fill: #9db06e; }
+.lk-kt-top { fill: #e6e3bd; }
+.lk-kt-leaf { fill: #3f9442; stroke: #26672b; stroke-width: 1; }
+.lk-kt-leaf-back { fill: #2f7a35; }
+.lk-kt-petal { fill: #f7b3cf; stroke: #d65a8e; stroke-width: 1; }
+.lk-kt-petal-front { fill: #fcd3e3; }
+.lk-kt-marigold { fill: #ff9a1a; stroke: #d66a00; stroke-width: 1; }
+.lk-kt-marigold-2 { fill: #ffc21a; }
+.lk-kt-candle { fill: #f6eed6; }
+.lk-kt-incense { fill: none; stroke: #8a3b1c; stroke-width: 1.4; stroke-linecap: round; }
+.lk-kt-ember { fill: #ff6a2a; filter: drop-shadow(0 0 2px #ff6a2a); }
+.lk-kt-flame-glow { fill: rgba(255, 200, 90, 0.35); filter: blur(4px); animation: lk-candle 2.2s steps(1) infinite; }
+.lk-kt-flame { fill: #ffa52a; transform-box: fill-box; transform-origin: 50% 100%; animation: lk-flame 0.9s ease-in-out infinite alternate; }
+.lk-kt-flame-core { fill: #fff3b8; }
+
+/* ── โคมลอย ── */
+.lk-sky {
+  position: absolute;
+  bottom: 0;
+  width: 28px;
+  overflow: visible;
+  filter: drop-shadow(0 0 10px rgba(255, 170, 60, 0.75));
+  animation: lk-rise 22s linear infinite;
+}
+
+.lk-sky-body { fill: #ff9a3a; }
+.lk-sky-shine { fill: #ffd27a; opacity: 0.75; }
+.lk-sky-mouth { fill: #a54a10; }
+.lk-sky-fire { fill: #fff0a8; animation: lk-candle 1.6s steps(1) infinite; }
+
+.lk-rise-1 { left: 8%; animation-delay: -4s; }
+.lk-rise-2 { left: 26%; width: 20px; animation-duration: 28s; animation-delay: -16s; }
+.lk-rise-3 { left: 58%; width: 24px; animation-duration: 25s; animation-delay: -9s; }
+.lk-rise-4 { left: 72%; width: 16px; animation-duration: 32s; animation-delay: -22s; }
+.lk-rise-5 { left: 40%; width: 18px; animation-duration: 30s; animation-delay: -2s; }
+
+/* ── โคมล้านนาห้อยด้าย ── */
+.lk-hang {
+  --len: 70px;
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 0;
+  animation: lk-sway 4.5s ease-in-out infinite alternate;
+}
+
+.lk-hang-thread {
+  width: 1.5px;
+  height: var(--len);
+  background: linear-gradient(rgba(255, 240, 210, 0.2), rgba(255, 240, 210, 0.6));
+}
+
+.lk-hang svg {
+  width: 36px;
+  margin-top: -1px;
+  overflow: visible;
+  filter: drop-shadow(0 0 12px rgba(255, 130, 60, 0.6));
+}
+
+.lk-hang-body { fill: #e8452c; }
+.lk-hang-rib { fill: none; stroke: rgba(255, 220, 160, 0.55); stroke-width: 1; }
+.lk-hang-cap { fill: #e6b84a; }
+.lk-hang-tassel { fill: none; stroke: #ffcf5a; stroke-width: 1.2; stroke-linecap: round; }
+
+.lk-hang-1 { left: 7%; --len: 60px; }
+.lk-hang-2 { left: 17%; --len: 104px; animation-duration: 5.4s; animation-delay: -2s; }
+.lk-hang-2 .lk-hang-body { fill: #ff9a2e; }
+.lk-hang-2 svg { width: 28px; }
+.lk-hang-3 { left: 27%; --len: 40px; animation-duration: 6s; animation-delay: -1s; }
+.lk-hang-3 .lk-hang-body { fill: #d8336b; }
+.lk-hang-3 svg { width: 24px; }
+
+/* ── ระหว่างเล่น (loykrathong.js: AMBIENT_HTML) — อยู่ใต้ HUD เบา ๆ ไม่บังตู้ ── */
+.lk-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(10, 30, 80, 0.32) 100%);
+}
+
+.lk-hang-game {
+  --len: 34px;
+}
+
+.lk-hang-game svg {
+  width: 24px;
+}
+
+/* ซ้าย: ถัดจากปุ่มเติมเพชร (ไม่ซ่อนหลังแถบเหรียญ) · ขวา: ระหว่างปุ่มกล้องกับป้ายสถานะบันทึก */
+.lk-hang-game-l { left: max(23vw, 300px); }
+.lk-hang-game-r { right: max(14vw, 210px); --len: 52px; animation-duration: 5.6s; animation-delay: -2s; }
+.lk-hang-game-r .lk-hang-body { fill: #ff9a2e; }
+
+.lk-rise-game {
+  left: 82%;
+  width: 22px;
+  animation: lk-rise-rare 40s linear infinite;
+}
+
+.loykrathong .tank-label {
+  background: rgba(10, 26, 64, 0.6);
+}
+
+.loykrathong .sidebar button:hover {
+  background: rgba(245, 185, 66, 0.22);
+}
+
+/* ── ไอคอน (loykrathong.js: SIDEBAR_ICONS, ICONS.jar) ── */
+.lk-icon {
+  overflow: visible;
+}
+
+/* ปุ่มกลมมุมขวาบน: รูปเดิม (สื่อความหมายชัด) แต่เป็นสีทองบนน้ำเงินยามค่ำ */
+.loykrathong .btn-round {
+  color: #ffe2a8;
+  background: radial-gradient(circle at 50% 30%, #24467e, #0b1d44);
+  border-color: rgba(255, 214, 130, 0.65);
+  box-shadow: 0 0 12px rgba(255, 190, 80, 0.25), var(--shadow);
+}
+
+.loykrathong .btn-plus {
+  color: #3a2200;
+  background: linear-gradient(180deg, #ffe08a, #f0a830);
+  border-color: rgba(255, 248, 220, 0.75);
+  box-shadow: 0 3px 0 #8a5a12, var(--shadow);
+}
+
+.loykrathong .feed-btn {
+  background: radial-gradient(circle at 50% 30%, #24467e, #0b1d44 75%);
+  border-color: rgba(255, 214, 130, 0.7);
+  box-shadow: 0 0 0 6px rgba(255, 190, 80, 0.18), 0 0 26px rgba(255, 180, 60, 0.25), var(--shadow);
+}
+
+/* เหรียญ: ดาวกลางเหรียญเป็นดอกไม้ */
+.loykrathong .coin-icon::after {
+  content: '✿';
+  font-size: 0.68em;
+}
+
+/* ── แอนิเมชัน ── */
+@keyframes lk-twinkle {
+  to { opacity: 0.45; }
+}
+
+@keyframes lk-shimmer {
+  from { opacity: 0.6; transform: scaleX(0.92); }
+  to { opacity: 1; transform: scaleX(1.06); }
+}
+
+@keyframes lk-waves {
+  to { transform: translateX(-50%); }
+}
+
+@keyframes lk-drift {
+  from { transform: translateX(-140px); }
+  to { transform: translateX(calc(100vw + 20px)); }
+}
+
+@keyframes lk-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-5px) rotate(2deg); }
+}
+
+@keyframes lk-rise {
+  0% { transform: translate(0, 40px) rotate(-3deg); opacity: 0; }
+  8% { opacity: 1; }
+  50% { transform: translate(24px, -50vh) rotate(3deg); }
+  85% { opacity: 0.9; }
+  100% { transform: translate(-10px, -105vh) rotate(-2deg) scale(0.7); opacity: 0; }
+}
+
+/* โคมลอยระหว่างเล่น: ลอยขึ้นสักครั้งแล้วหายไปนาน ๆ */
+@keyframes lk-rise-rare {
+  0%, 65% { transform: translate(0, 40px); opacity: 0; }
+  68% { opacity: 1; }
+  95% { opacity: 0.8; }
+  100% { transform: translate(-30px, -105vh) scale(0.7); opacity: 0; }
+}
+
+@keyframes lk-sway {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+
+@keyframes lk-flame {
+  from { transform: scaleY(0.9) skewX(-4deg); }
+  to { transform: scaleY(1.08) skewX(4deg); }
+}
+
+/* แสงเทียนกระพริบ */
+@keyframes lk-candle {
+  0%, 100% { opacity: 1; }
+  18% { opacity: 0.78; }
+  24% { opacity: 1; }
+  61% { opacity: 0.86; }
+  66% { opacity: 1; }
+}
+
+/* จอแคบ (มือถือ): ลดของให้โลโก้และปุ่มอ่านง่าย */
+@media (max-width: 480px) {
+  .lk-float-3,
+  .lk-hang-3,
+  .lk-rise-4,
+  .lk-rise-5,
+  .lk-hang-game {
+    display: none;
+  }
+
+  .lk-moon {
+    top: 4%;
+    right: 6%;
+  }
+
+  .lk-moon-path {
+    right: calc(6% + clamp(100px, 16vw, 190px) / 2 - 50px);
+  }
+
+  .lk-river {
+    height: 16%;
+  }
+
+  .lk-float-1 {
+    bottom: calc(16% - 20px);
+  }
+
+  .lk-float-2 {
+    bottom: 2%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-scene *,
+  .lk-ambient *,
+  .lk-scene,
+  .lk-ambient {
+    animation: none !important;
+  }
+
+  .lk-sky {
+    display: none;
+  }
+
+  /* กระทงหยุดนิ่งกลางแม่น้ำแทนที่จะลอยข้ามจอ */
+  .lk-float-1 { transform: translateX(12vw); }
+  .lk-float-2 { transform: translateX(48vw); }
+  .lk-float-3 { transform: translateX(72vw); }
+}
