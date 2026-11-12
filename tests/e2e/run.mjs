@@ -513,6 +513,38 @@ test('15f) กระถางทานตะวัน: ปลูก / รดน�
   }
 });
 
+test('15g) ฟาร์มวัว: ออกนอกบ้าน → ซื้อวัว / ขายวัวผ่านหน้าต่างและการ์ดในเกม → เซฟกลางตรวจผ่าน อีกเครื่องเห็นวัวตัวเดียวกัน', async () => {
+  const before = await cloud();
+  assert.equal(before.game.farm, undefined, 'เริ่มจากคอกว่าง');
+  try {
+    await A.page.click('nav.sidebar button[data-action="goFarm"]');
+    await A.page.waitForFunction(() => window.game.location === 'farm');
+    await A.page.click('nav.sidebar button[data-action="cows"]');
+    await A.page.click('.panel-farm [data-action="buy"][data-id="holstein"]');
+    const bought = await waitCloud((d) => d.game.farm?.cows?.length === 1, 'buy cow');
+    const cow = bought.game.farm.cows[0];
+    assert.equal(cow.breedId, 'holstein');
+    assert.equal(bought.game.coins, before.game.coins - 800);
+    assert.equal(await coinsOf(A), bought.game.coins);
+    await waitFor(async () => (await evalGame(B, () => window.game.state.data.farm?.cows?.[0]?.name)) === cow.name, { message: 'B sees cow' });
+
+    // ขาย: การ์ดวัว → กดขาย → กดยืนยัน (ได้คืนครึ่งราคา สุขภาพเต็ม)
+    await A.page.evaluate((id) => window.game.ui.cowCard.show(id), cow.id);
+    await A.page.click('.cow-card [data-action="sell"]');
+    await A.page.click('.cow-card [data-action="sell"]');
+    const sold = await waitCloud((d) => d.game.farm?.cows?.length === 0, 'sell cow');
+    assert.equal(sold.game.coins, bought.game.coins + 400);
+    await waitFor(async () => (await evalGame(B, () => window.game.state.data.farm?.cows?.length)) === 0, { message: 'B sees sale' });
+  } finally {
+    await A.page.evaluate(() => {
+      window.game.ui.closeAll();
+      window.game.ui.cowCard.hide();
+      window.game.goTo('home');
+    });
+    await A.page.waitForFunction(() => window.game.location === 'home');
+  }
+});
+
 test('15e) Fish AI ในเกมจริง: ปลาว่ายไปกินอาหาร ไม่ออกนอกตู้ ไม่ทะลุของตกแต่ง และแต่ละตัวมีบุคลิกต่างกัน', async () => {
   // ให้ปลาหิวพอจะสนใจอาหาร แล้วโรยอาหารผ่านปุ่มในเกม
   await A.page.evaluate(() => {

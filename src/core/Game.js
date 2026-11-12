@@ -17,6 +17,7 @@ import { WasteSystem } from '../systems/WasteSystem.js';
 import { CoinSystem } from '../systems/CoinSystem.js';
 import { CareSystem } from '../systems/CareSystem.js';
 import { GardenSystem } from '../systems/GardenSystem.js';
+import { FarmSystem } from '../systems/FarmSystem.js';
 import { SUNFLOWER_MODEL } from '../world/Sunflower.js';
 import { AlertSystem } from '../systems/AlertSystem.js';
 import { TankSimulation } from '../sim/TankSimulation.ts';
@@ -77,6 +78,8 @@ export class Game {
     this.care = new CareSystem(this);
     /** กระถางทานตะวันข้างตู้ (ต้นไม้มีชีวิต ต้องรดน้ำ ใส่ปุ๋ย) */
     this.garden = new GardenSystem(this);
+    /** ฟาร์มนอกบ้าน (ฉากแยก สร้างครั้งแรกตอนออกไป) */
+    this.farm = new FarmSystem(this);
     this.alerts = new AlertSystem(this);
     /** Simulation Engine ของตู้ที่แสดงอยู่ (สร้างใหม่ทุกครั้งที่โหลด/ย้ายตู้) */
     this.sim = null;
@@ -86,6 +89,9 @@ export class Game {
     this.input = new InputController(this);
 
     this.mode = 'normal';
+    /** สถานที่ที่แสดงอยู่: 'home' = ในบ้าน (ตู้ปลา) · 'farm' = นอกบ้าน — ไม่บันทึกในเซฟ เข้าเกมใหม่เริ่มในบ้านเสมอ */
+    this.location = 'home';
+    this.travelling = false;
     this.selectedFish = null;
     this.started = false;
     this.resetting = false;
@@ -135,7 +141,7 @@ export class Game {
     this.room.build(this.aquarium.dims);
     this.garden.place(this.aquarium.dims);
     this.sceneMgr.setupLights(this.aquarium.dims);
-    this.sceneMgr.frameTank(this.aquarium.dims);
+    if (this.location === 'home') this.sceneMgr.frameTank(this.aquarium.dims); // อยู่นอกบ้าน: ตั้งกล้องตอนกลับเข้าบ้าน
     this.bubbles.setTank(this.aquarium.dims, (x, z) => this.aquarium.heightAt(x, z));
     this.sparkles.clear();
     this.food.clear();
@@ -184,6 +190,37 @@ export class Game {
     this.ui.toast(`🎉 ปลดล็อก${type.name}แล้ว! ไปซื้อปลามาเลี้ยงกันเลย`, 'success');
     this.switchTank(tank.id);
     return true;
+  }
+
+  // ── สถานที่ (ในบ้าน / นอกบ้าน) ──────────────────────────────
+
+  /**
+   * เดินไปอีกสถานที่ — จอค่อย ๆ มืด สลับฉาก แล้วสว่างขึ้น
+   * ระหว่างอยู่นอกบ้าน Simulation Engine ของตู้ปลายังเดินต่อ (ปลายังหิว/ผลิตเหรียญ แจ้งเตือนยังขึ้น) แค่ไม่ได้เรนเดอร์ห้อง
+   * @param {'home'|'farm'} location
+   */
+  goTo(location) {
+    if (location === this.location || this.travelling || (location !== 'home' && location !== 'farm')) return;
+    if (this.placement.active) this.placement.exit();
+    this.selectFish(null);
+    this.ui.closeAll();
+    this.ui.gardenCard.hide();
+    this.ui.cowCard.hide();
+    this.travelling = true;
+    this.sound.play('click');
+    this.ui.fadeThrough(() => {
+      this.location = location;
+      if (location === 'farm') {
+        this.farm.enter();
+      } else {
+        this.farm.leave();
+        this.sceneMgr.showScene(this.sceneMgr.scene);
+        this.sceneMgr.frameTank(this.aquarium.dims);
+      }
+      this.ui.setLocation(location);
+      this.events.emit(EV.LOCATION, { location });
+      this.travelling = false;
+    });
   }
 
   // ── ปลา ─────────────────────────────────────────────────────
@@ -354,6 +391,10 @@ export class Game {
   /** แตะในฉาก (ไม่ได้ลาก): เก็บเหรียญ → เก็บไข่มุก → เลือกปลา → กระถางทานตะวัน → ยกเลิกการเลือก */
   handleTap(raycaster) {
     const ray = raycaster.ray;
+    if (this.location === 'farm') {
+      this.farm.handleTap(ray);
+      return;
+    }
     const coin = this.coins.pick(ray);
     if (coin) {
       this.coins.collect(coin);
@@ -434,6 +475,7 @@ export class Game {
     this.coins.update(dt, this.time);
     this.decor.update(dt, this.time);
     this.garden.update(dt, this.time);
+    this.farm.update(dt, this.time);
     this.alerts.update(dt);
     this.bubbles.update(dt, this.time);
     this.sparkles.update(dt, this.time);

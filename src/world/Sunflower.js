@@ -240,7 +240,8 @@ function potGeometry() {
   return new THREE.LatheGeometry(p, 28);
 }
 
-function iconTexture(emoji) {
+/** ป้ายไอคอนลอยเหนือของในฉาก (วงกลมขาว + หางชี้ลง + อีโมจิ) — ใช้กับวัวในฟาร์มด้วย */
+export function iconTexture(emoji) {
   const size = 128;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;

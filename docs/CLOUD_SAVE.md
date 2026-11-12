@@ -233,6 +233,7 @@ gameSaves/global              ← เซฟกลางชุดเดียว
     stats                     ← { feeds, coinsCollected, fishBorn, fishBought }
     lastSaved                 ← เวลาบันทึกล่าสุด
     sunflower?                ← กระถางทานตะวันข้างตู้ { plantedAt, at, water, food, growth, health, seedsAt }
+    farm?                     ← ฟาร์มวัวนอกบ้าน { cows: [{ id, breedId, name, boughtAt, at, satiety, health, milk }] } (≤ 8 ตัว — src/shared/farm.js)
                                 ค่า ณ เวลา at — ค่าปัจจุบันคำนวณจากนาฬิกาจริง (src/shared/garden.js) ไม่มี = ยังไม่ได้ปลูก
   meta:                       ← ข้อมูลระบบ (กันส่งซ้ำ/ข้อมูลเก่า)
     writers: { w_…: { seq, at } }

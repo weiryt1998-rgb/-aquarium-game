@@ -570,6 +570,55 @@ svg {
   display: none;
 }
 
+/* ───────────────────────── สถานที่: ในบ้าน / นอกบ้าน ───────────────────────── */
+/* ปุ่มที่มี data-at แสดงเฉพาะสถานที่นั้น · นอกบ้านซ่อน HUD ของตู้ปลา (ตู้ยังทำงานเบื้องหลัง) */
+#ui:not(.at-farm) [data-at='farm'],
+#ui:not(.at-farm) .cow-card,
+.at-farm [data-at='home'],
+.at-farm .status-panel,
+.at-farm .feed-btn,
+.at-farm .fish-card:not(.cow-card) {
+  display: none;
+}
+
+/* การ์ดวัว: ใช้กรอบการ์ดทานตะวัน (ซ้าย ข้างแถบเมนู) */
+.cow-icon {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35), rgba(90, 150, 70, 0.35));
+}
+
+.bar.milk i {
+  background: linear-gradient(90deg, #cfe6ff, #ffffff);
+}
+
+.cow-card .gc-actions > button.danger {
+  border-color: rgba(255, 120, 100, 0.85);
+  background: rgba(200, 60, 40, 0.35);
+}
+
+.panel-farm .effects.warn {
+  color: #ffb27a;
+}
+
+.scene-fade {
+  position: absolute;
+  inset: 0;
+  background: #0b1a2e;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.26s ease;
+}
+
+.scene-fade.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-fade {
+    transition: none;
+  }
+}
+
 /* ───────────────────────── แถบตกแต่ง ───────────────────────── */
 .decor-toolbar > * {
   pointer-events: auto;

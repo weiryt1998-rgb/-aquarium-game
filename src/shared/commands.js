@@ -10,6 +10,8 @@ import { FEED_WINDOW_MS, LIMITS } from './constants.js';
 import { breedGroupOf, dueAt, isPregnant, planOffspring, restEndsAt, sanitizeFetus } from './breeding.js';
 import { sanitizeGenes } from '../models/molly/genetics.js';
 import { actionTime, applySunflowerAction, sunflowerAt, sunflowerBlock } from './garden.js';
+import { applyCowAction, buyCowBlock, cowAt, cowBlock, cowSellValue, farmAt, findCow, newCow } from './farm.js';
+import { getCowBreed } from '../data/animals.js';
 import {
   addItem,
   atDecorLimit,
@@ -146,6 +148,30 @@ function careSunflower(game, action, c, ctx, { price = null, reward = null } = {
   if (block) fail(SUNFLOWER_FAIL[block] ?? 'invalid', block);
   if (price) spend(game, price);
   game.sunflower = applySunflowerAction(action, current, t);
+  if (reward) earn(game, reward);
+  return reward ? { reward } : null;
+}
+
+/** เหตุผลที่ทำกับวัวไม่ได้ (shared/farm.js) → รหัสข้อผิดพลาดของคำสั่ง */
+const COW_FAIL = { 'not-found': 'not-found', dead: 'invalid', 'too-full': 'cooldown', 'not-ready': 'cooldown', limit: 'limit', 'remove-dead': 'limit', invalid: 'invalid' };
+
+function needCow(game, id) {
+  return findCow(game.farm, needId(id, 'cowId')) ?? fail('not-found', 'cow');
+}
+
+/**
+ * ดูแลวัว (ให้ฟาง/รีดนม): เดินเวลาของวัวถึงตอนที่ผู้เล่นทำในเครื่อง (c.at) แล้วตรวจและใช้ผล
+ * ราคาฟาง/เหรียญจากนมคิดฝั่งนี้เสมอ ไม่รับตัวเลขจากเครื่อง
+ */
+function careCow(game, action, c, ctx, { price = null } = {}) {
+  const cow = needCow(game, c.cowId);
+  const t = actionTime(cow, c.at, ctx.now);
+  const current = cowAt(cow, t);
+  const block = cowBlock(action, current, { strict: false });
+  if (block) fail(COW_FAIL[block] ?? 'invalid', block);
+  if (price) spend(game, price);
+  const { cow: next, reward } = applyCowAction(action, current, t);
+  Object.assign(cow, next);
   if (reward) earn(game, reward);
   return reward ? { reward } : null;
 }
@@ -309,6 +335,35 @@ const HANDLERS = {
     return careSunflower(game, 'harvest', c, ctx, { reward: CONFIG.garden.seedReward });
   },
 
+  // ── ฟาร์มวัวนอกบ้าน (shared/farm.js) ────────────────────────
+  buyCow(game, meta, c, ctx) {
+    const breed = getCowBreed(c.breedId) ?? fail('invalid', 'breed');
+    const block = buyCowBlock(farmAt(game.farm, ctx.now), breed.id);
+    if (block) fail(COW_FAIL[block] ?? 'invalid', block);
+    const id = needId(c.cowId, 'cowId');
+    if (findCow(game.farm, id)) fail('invalid', 'duplicate-id');
+    spend(game, breed.price);
+    game.farm ??= { cows: [] };
+    game.farm.cows.push(newCow({ id, breedId: breed.id, name: cleanName(c.name, breed.name) }, ctx.now));
+  },
+
+  feedCow(game, meta, c, ctx) {
+    return careCow(game, 'feed', c, ctx, { price: CONFIG.farm.hayPrice });
+  },
+
+  milkCow(game, meta, c, ctx) {
+    return careCow(game, 'milk', c, ctx);
+  },
+
+  /** ขายวัว (ตัวที่ตายแล้ว = นำออกจากคอก ได้ 0 เหรียญ) */
+  sellCow(game, meta, c, ctx) {
+    const cow = needCow(game, c.cowId);
+    const refund = cowSellValue(cowAt(cow, ctx.now));
+    game.farm.cows = game.farm.cows.filter((x) => x !== cow);
+    earn(game, refund);
+    return { refund };
+  },
+
   // ── ตู้ ────────────────────────────────────────────────────
   buyTank(game, meta, c, ctx) {
     const type = getTankType(c.typeId) ?? fail('invalid', 'tank-type');
@@ -460,6 +515,10 @@ export const URGENT_COMMANDS = new Set([
   'waterSunflower',
   'fertilizeSunflower',
   'harvestSunflower',
+  'buyCow',
+  'feedCow',
+  'milkCow',
+  'sellCow',
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */

@@ -6,7 +6,12 @@ import { clamp } from '../utils/math.js';
 
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-/** renderer, กล้อง, ตัวควบคุมกล้อง, แสง และการปรับขนาดหน้าจอ */
+/**
+ * renderer, กล้อง, ตัวควบคุมกล้อง, แสง และการปรับขนาดหน้าจอ
+ *
+ * มีหลายสถานที่ (ในบ้าน = this.scene, นอกบ้าน = ฉากฟาร์มจาก world/Farm.js) ใช้ renderer และกล้องร่วมกัน
+ * แต่เรนเดอร์เฉพาะฉากที่แสดงอยู่ (this.active) — ฉากอื่นยังอยู่ในหน่วยความจำ สลับไปมาได้ทันที
+ */
 export class SceneManager {
   constructor(canvas, settings) {
     this.canvas = canvas;
@@ -28,6 +33,9 @@ export class SceneManager {
     pmrem.dispose();
     this.scene.environment = this.envMap;
     this.scene.environmentIntensity = 0.45;
+    /** ฉากที่กำลังแสดง · ทุกฉากที่ลงทะเบียน (ปรับคุณภาพกราฟิกพร้อมกัน) · ไฟที่ทำเงาของทุกฉาก */
+    this.active = this.scene;
+    this.scenes = new Set([this.scene]);
 
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 220);
     this.controls = new OrbitControls(this.camera, canvas);
@@ -44,6 +52,8 @@ export class SceneManager {
     this.#createLights();
 
     this.dims = null;
+    /** จัดกล้องใหม่ตามสถานที่ปัจจุบัน (เรียกเมื่อสัดส่วนจอเปลี่ยนมาก) */
+    this.reframe = null;
     this.home = { position: new THREE.Vector3(), target: new THREE.Vector3() };
     this.tween = null;
     this.followTarget = null;
@@ -64,6 +74,33 @@ export class SceneManager {
     // ไฟเติมจากด้านหน้า
     this.fill = new THREE.DirectionalLight(0x9fd6ff, 0.55);
     this.scene.add(this.hemi, this.sun, this.sun.target, this.fill, this.fill.target);
+    this.shadowLights = [this.sun];
+  }
+
+  /** เพิ่มฉากของสถานที่อื่น (เช่น ฟาร์ม) — shadowLight = ไฟที่ทำเงาของฉากนั้น ปรับตามคุณภาพกราฟิกเหมือนไฟในบ้าน */
+  registerScene(scene, { shadowLight = null } = {}) {
+    this.scenes.add(scene);
+    if (shadowLight) {
+      this.shadowLights.push(shadowLight);
+      this.#applyShadow(shadowLight);
+    }
+  }
+
+  /** แสดงฉากนี้แทนฉากเดิม (ผู้เรียกตั้งกล้องเองต่อด้วย frameTank / frameArea) */
+  showScene(scene) {
+    this.active = scene;
+    this.tween = null;
+    this.followTarget = null;
+  }
+
+  #applyShadow(light) {
+    const q = this.quality;
+    light.castShadow = q.shadows;
+    light.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
+    if (light.shadow.map) {
+      light.shadow.map.dispose();
+      light.shadow.map = null;
+    }
   }
 
   /** จัดแสงให้พอดีกับขนาดตู้ */
@@ -89,23 +126,25 @@ export class SceneManager {
     this.quality = q;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     this.renderer.shadowMap.enabled = q.shadows;
-    this.sun.castShadow = q.shadows;
-    this.sun.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
-    if (this.sun.shadow.map) {
-      this.sun.shadow.map.dispose();
-      this.sun.shadow.map = null;
+    this.shadowLights.forEach((light) => this.#applyShadow(light));
+    // การเปิด/ปิดเงาต้องคอมไพล์ shader ใหม่ (ทุกฉาก ไม่ใช่แค่ฉากที่แสดงอยู่)
+    for (const scene of this.scenes) {
+      scene.traverse((obj) => {
+        if (!obj.material) return;
+        (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach((m) => (m.needsUpdate = true));
+      });
     }
-    // การเปิด/ปิดเงาต้องคอมไพล์ shader ใหม่
-    this.scene.traverse((obj) => {
-      if (!obj.material) return;
-      (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach((m) => (m.needsUpdate = true));
-    });
     this.resize(true);
   }
 
   /** ตั้งกล้องให้เห็นตู้ทั้งตู้ (มุมมองหลัก) */
   frameTank(dims, { immediate = true } = {}) {
     this.dims = dims;
+    this.reframe = () => this.frameTank(dims);
+    this.controls.minAzimuthAngle = -1.0;
+    this.controls.maxAzimuthAngle = 1.0;
+    this.controls.minPolarAngle = 0.25;
+    this.controls.maxPolarAngle = Math.PI / 2 + 0.06;
     const { w, h, d } = dims;
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * this.camera.aspect);
@@ -126,6 +165,38 @@ export class SceneManager {
       this.controls.update();
     } else {
       this.flyTo(this.home.position, this.home.target);
+    }
+  }
+
+  /**
+   * ตั้งกล้องสำหรับพื้นที่กลางแจ้ง (ฟาร์ม) — view = {
+   *   position, target: THREE.Vector3   มุมมองหลัก
+   *   bounds: { w, h, d }              ขอบเขตที่จุดหมุนกล้องเลื่อนไปได้ (กึ่งกลางที่จุดกำเนิด)
+   *   minDistance, maxDistance, maxPolar, azimuth: [min, max] (ไม่ระบุ = หมุนรอบได้ 360°)
+   * }
+   */
+  frameArea(view, { immediate = true } = {}) {
+    this.dims = view.bounds;
+    this.reframe = () => this.frameArea(view);
+    this.home.position.copy(view.position);
+    this.home.target.copy(view.target);
+    const c = this.controls;
+    c.minDistance = view.minDistance;
+    c.maxDistance = view.maxDistance;
+    c.minAzimuthAngle = view.azimuth?.[0] ?? -Infinity;
+    c.maxAzimuthAngle = view.azimuth?.[1] ?? Infinity;
+    c.minPolarAngle = 0.15;
+    c.maxPolarAngle = view.maxPolar ?? Math.PI / 2 - 0.08;
+    this.camera.far = view.maxDistance * 4 + 120;
+    this.camera.updateProjectionMatrix();
+    this.followTarget = null;
+    if (immediate) {
+      this.tween = null;
+      this.camera.position.copy(view.position);
+      c.target.copy(view.target);
+      c.update();
+    } else {
+      this.flyTo(view.position, view.target);
     }
   }
 
@@ -194,11 +265,11 @@ export class SceneManager {
     this.camera.updateProjectionMatrix();
     const aspectChanged = Math.abs(this.camera.aspect - this.lastAspect) / Math.max(this.lastAspect, 0.01) > 0.12;
     this.lastAspect = this.camera.aspect;
-    if (this.dims && (aspectChanged || force) && !this.tween) this.frameTank(this.dims);
+    if (this.reframe && (aspectChanged || force) && !this.tween) this.reframe();
     this.onResize?.(width, height);
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.active, this.camera);
   }
 }

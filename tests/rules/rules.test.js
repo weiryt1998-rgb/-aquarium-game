@@ -220,6 +220,32 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
     }
   });
 
+  test('ฟาร์มวัว: บันทึกวัวเต็ม 8 ตัว + 7 ตู้เต็มความจุ + ทานตะวันได้ (งบนิพจน์ของ Rules) และปฏิเสธโครงผิด/เกิน 8 ตัว', async () => {
+    await seed(env);
+    const cow = (i) => ({ id: `cow_${i}`, breedId: i % 2 ? 'jersey' : 'holstein', name: 'มะลิ', boughtAt: 1, at: 2, satiety: 80, health: 100, milk: 10 });
+    const farm = { cows: Array.from({ length: 8 }, (_, i) => cow(i)) };
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = { cows: [cow(0)] }), d))));
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => {
+      const template = d.game.tanks[0];
+      d.game.tanks = TANK_TYPES.map((type) => ({
+        ...template,
+        id: `tank_${type.id}`,
+        typeId: type.id,
+        fish: Array.from({ length: type.capacity }, (_, i) => ({ ...template.fish[0], id: `fish_${type.id}_${i}` })),
+      }));
+      d.game.activeTankId = d.game.tanks[0].id;
+      d.game.sunflower = { plantedAt: 1, at: 2, water: 50, food: 20, growth: 0.5, health: 90, seedsAt: 0 };
+      d.game.farm = farm;
+      return d;
+    })));
+    const bads = [
+      { cows: Array.from({ length: 9 }, (_, i) => cow(i)) },
+      { cows: [cow(0)], extra: true },
+      { cows: 'many' },
+    ];
+    for (const bad of bads) await assertFails(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = bad), d))));
+  });
+
   test('เขียนทับด้วยข้อมูลเก่า (revision ไม่ต่อกัน) ไม่ได้', async () => {
     await seed(env);
     await assertFails(setDoc(saveRef(), await nextDoc((d) => ({ ...d, revision: d.revision - 1 }))));

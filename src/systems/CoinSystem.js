@@ -76,7 +76,8 @@ export class CoinSystem {
     this.group.remove(coin.mesh);
     this.game.state.earn({ coins: coin.value });
     this.game.state.record({ type: 'collectCoins', tankId: this.game.state.activeTank.id, count: 1, value: coin.value });
-    this.game.ui.floatText(coin.mesh.position, `+${coin.value}`, 'coin');
+    // เก็บอัตโนมัติระหว่างอยู่นอกบ้าน: ไม่ลอยตัวเลข (ตำแหน่งเหรียญอยู่ในฉากห้อง จะไปโผล่กลางท้องฟ้าฟาร์ม)
+    if (this.game.location === 'home') this.game.ui.floatText(coin.mesh.position, `+${coin.value}`, 'coin');
     if (!auto) this.game.sound.play('coin');
     this.game.events.emit(EV.COIN_COLLECTED, { amount: 1, value: coin.value, auto });
   }

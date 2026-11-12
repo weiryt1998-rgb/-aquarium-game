@@ -118,3 +118,28 @@
 - หอยชนิดใหม่: เพิ่มรายการใน `src/data/decor.js` หมวด `critter` (ดูคำอธิบายฟิลด์ `critter` / `ecology` ด้านบนไฟล์) แล้ววางไฟล์ `decor/<id>.glb`
 - ไฟล์จาก Meshy AI ให้แปลงก่อน: `node scripts/build-model.mjs <ไฟล์>.glb public/models/decor/<id>.glb --triangles 6000 --texture 512`
   (หอยตัวเล็ก ใช้เหลี่ยมและเท็กซ์เจอร์น้อยกว่าของตกแต่งทั่วไปได้ ไฟล์จะเหลือราว 250–300 KB)
+
+## ฟาร์มนอกบ้าน — `farm/`
+
+สร้างด้วยโค้ดทั้งหมดใน Blender (`Fish/farm/*.py` — ไม่มีไฟล์จากเว็บ ไม่ต้องให้เครดิต) หน่วยเมตร ด้านหน้าหัน **+Z**
+
+| ไฟล์ | ใช้กับ | สามเหลี่ยม |
+| --- | --- | --- |
+| `farm/house.glb` | บ้านไร่ไม้ฝา หลังคาจั่ว ระเบียงหน้า ปล่องไฟหิน (ประตูหน้าบ้านแตะเพื่อกลับเข้าบ้าน) | ~1.5k |
+| `farm/barn.glb` | โรงนาแดงหลังคาจั่วสองชั้นเหล็กลอน ประตูบานเลื่อน ช่องเก็บฟาง หอระบายอากาศ | ~1.2k |
+| `farm/fence.glb` | รั้วคอก 1 ช่วง 2 ม.: `FencePost` + `FenceRails` (เกมวางซ้ำรอบคอกด้วย InstancedMesh) | 184 |
+| `farm/tree_a.glb`, `farm/tree_b.glb` | ต้นไม้ใบกว้าง 2 แบบ (การ์ดใบไม้ alpha MASK + normal ชี้ออกจากพุ่ม) | ~2.5k / 1.9k |
+| `farm/cow.glb` | วัวนมโฮลสไตน์ สัดส่วนวัวจริง — โครงกระดูก 29 ชิ้น + คลิป `Walk` / `Graze` / `Idle` | ~19.8k |
+| `farm/cow_jersey.webp` | ผิววัวเจอร์ซีย์ (ใช้ mesh เดียวกับ `cow.glb` สลับ map ตาม `skin` ใน `src/data/animals.js`) | — |
+
+สร้างใหม่: เปิด Blender แล้วรันตามลำดับ (เปิดไฟล์ `Fish/farm/farm_assets.blend` ดูผลงานเดิมได้)
+
+```python
+R = r'<repo>\Fish\farm'
+for f in ('farm_lib', 'build_textures', 'build_props', 'build_cow', 'build_cow_finish', 'build_cow_rig', 'export_farm'):
+    exec(open(R + '\' + f + '.py', encoding='utf-8').read())
+build_all(); build_cow_mesh(); hide, rigid = finish_cow(); rig_cow(hide, rigid)
+export_props(); export_cow()
+```
+
+แล้ว `node scripts/build-farm-models.mjs` (WebP + Meshopt, ใบไม้ → MASK, วัสดุทึบ → ด้านเดียว)

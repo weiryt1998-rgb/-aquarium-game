@@ -90,12 +90,14 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
     ├── cloud/               เซฟกลาง: เข้าสู่ระบบ, โหลด/ซิงก์ Firestore, ป้ายสถานะ, นำเข้าเซฟเก่า
     ├── shared/              กฎเกม (ราคา/คำสั่ง/ตรวจข้อมูล) ที่รันใน Firestore transaction (และ Cloud Functions ถ้าย้ายไป Blaze)
     │                        garden.js = ต้นทานตะวัน (น้ำ ปุ๋ย สุขภาพ การโต ตามนาฬิกาจริง)
+    │                        farm.js = วัวในฟาร์มนอกบ้าน (ความอิ่ม สุขภาพ นม ตามนาฬิกาจริง) — ดู docs/FARM.md
     ├── data/                ข้อมูลเกม แก้หรือเพิ่มได้โดยไม่ต้องแตะโค้ดระบบ
     │   ├── fish.js          สายพันธุ์ปลา (ราคา พฤติกรรม หน้าตาโมเดลชั่วคราว path โมเดล)
     │   ├── decor.js         ของตกแต่ง
     │   ├── tanks.js         ขนาดตู้
     │   ├── food.js          อาหารและยา
-    │   └── missions.js      ภารกิจ
+    │   ├── missions.js      ภารกิจ
+    │   └── animals.js       สายพันธุ์วัวในฟาร์ม
     ├── assets/
     │   ├── AssetLoader.js   โหลด .glb/.gltf (รองรับ Draco/Meshopt/skinned mesh)
     │   ├── ModelFactory.js  เลือกใช้ไฟล์ .glb หรือโมเดลชั่วคราว
@@ -103,11 +105,12 @@ npm run test:e2e        # เปิดเกมจริงใน Chrome หล�
     ├── placeholders/        โมเดลชั่วคราวที่สร้างด้วยโค้ด (ใช้จนกว่าจะมีไฟล์ .glb)
     ├── models/molly/        โมเดลปลา Balloon Molly แบบละเอียดที่สร้างด้วยโค้ด (รูปทรง, texture, shader ว่ายน้ำ, ชุดสี)
     ├── render/              shader ต่อเติม (caustics, ว่ายน้ำ, พืชโยก) และ texture ที่วาดด้วยโค้ด
-    ├── world/               ฉาก: SceneManager (กล้อง/แสง), Aquarium, Substrate, Bubbles, LightRays, Room, Sunflower (กระถางทานตะวัน)
-    ├── entities/            Fish (การว่ายและท่าทาง), Decoration — ฝั่งแสดงผล อ่านค่าสถานะจาก sim
+    ├── world/               ฉาก: SceneManager (กล้อง/แสง), Aquarium, Substrate, Bubbles, LightRays, Room, Sunflower (กระถางทานตะวัน),
+    │                        Farm (ฉากนอกบ้าน — THREE.Scene แยก สลับด้วยปุ่ม 🚪 นอกบ้าน / 🏠 เข้าบ้าน)
+    ├── entities/            Fish (การว่ายและท่าทาง), Decoration, Cow (วัวเดินเล่น/เล็มหญ้า) — ฝั่งแสดงผล อ่านค่าสถานะจาก sim
     ├── systems/             FishManager (แสดงผลเหตุการณ์ชีวิตปลา), AlertSystem (แจ้งเตือนอาการ/น้ำ), CareSystem (HUD/ภาพน้ำ),
     │                        FoodSystem, CoinSystem, DecorManager, MissionSystem, PlacementController (โหมดตกแต่ง), InputController,
-    │                        GardenSystem (ดูแลกระถางทานตะวัน + แจ้งเตือน)
+    │                        GardenSystem (ดูแลกระถางทานตะวัน + แจ้งเตือน), FarmSystem (ฟาร์มนอกบ้าน)
     ├── ui/                  HUD, หน้าต่างเมนู (panels/), แถบตกแต่ง, การ์ดปลา, การ์ดทานตะวัน, หน้าเริ่มเกม
     └── styles/main.css
 ```

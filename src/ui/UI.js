@@ -1,3 +1,4 @@
+import { CONFIG } from '../config.js';
 import { EV } from '../core/EventBus.js';
 import { getFood } from '../data/food.js';
 import { getTankType } from '../data/tanks.js';
@@ -7,6 +8,7 @@ import { collectRefs } from './helpers.js';
 import { DecorToolbar } from './DecorToolbar.js';
 import { FishCard } from './FishCard.js';
 import { GardenCard } from './GardenCard.js';
+import { CowCard } from './CowCard.js';
 import { StartScreen } from './StartScreen.js';
 import { ShopPanel } from './panels/ShopPanel.js';
 import { FishPanel } from './panels/FishPanel.js';
@@ -15,6 +17,7 @@ import { MissionsPanel } from './panels/MissionsPanel.js';
 import { SettingsPanel } from './panels/SettingsPanel.js';
 import { HelpPanel, MenuPanel } from './panels/MenuPanel.js';
 import { CloudPanel } from './panels/CloudPanel.js';
+import { FarmPanel } from './panels/FarmPanel.js';
 import { SaveStatus } from '../cloud/SaveStatus.js';
 
 const TEMPLATE = /* html */ `
@@ -32,12 +35,16 @@ const TEMPLATE = /* html */ `
     </div>
     <button class="save-status hidden" data-ref="saveStatus" type="button"></button>
 
+    <!-- data-at = แสดงเฉพาะสถานที่นั้น (home = ในบ้าน, farm = นอกบ้าน) · ไม่มี = แสดงทุกที่ -->
     <nav class="sidebar">
-      <button data-action="fish"><span class="ico">🐠</span><span>ปลา</span></button>
-      <button data-action="decor"><span class="ico">🪴</span><span>ตกแต่ง</span></button>
-      <button data-action="food"><span class="ico">🥫</span><span>อาหาร</span></button>
+      <button data-action="fish" data-at="home"><span class="ico">🐠</span><span>ปลา</span></button>
+      <button data-action="decor" data-at="home"><span class="ico">🪴</span><span>ตกแต่ง</span></button>
+      <button data-action="food" data-at="home"><span class="ico">🥫</span><span>อาหาร</span></button>
+      <button data-action="cows" data-at="farm" title="ซื้อและดูแลวัว"><span class="ico">🐄</span><span>วัว</span><i class="badge" data-ref="cowsBadge"></i></button>
       <button data-action="shop"><span class="ico">🏪</span><span>ร้านค้า</span></button>
-      <button data-action="garden" title="กระถางทานตะวันข้างตู้"><span class="ico">🌻</span><span>ต้นไม้</span><i class="badge" data-ref="gardenBadge"></i></button>
+      <button data-action="garden" data-at="home" title="กระถางทานตะวันข้างตู้"><span class="ico">🌻</span><span>ต้นไม้</span><i class="badge" data-ref="gardenBadge"></i></button>
+      <button data-action="goFarm" data-at="home" title="ออกไปฟาร์มนอกบ้าน"><span class="ico">🚪</span><span>นอกบ้าน</span><i class="badge" data-ref="farmBadge"></i></button>
+      <button data-action="goHome" data-at="farm" title="กลับเข้าบ้าน (ตู้ปลา)"><span class="ico">🏠</span><span>เข้าบ้าน</span></button>
     </nav>
 
     <div class="tank-label" data-ref="tankLabel"></div>
@@ -69,10 +76,12 @@ const TEMPLATE = /* html */ `
   <div class="decor-toolbar hidden"></div>
   <div class="fish-card hidden"></div>
   <div class="fish-card garden-card hidden"></div>
+  <div class="fish-card garden-card cow-card hidden"></div>
   <div class="modal-root"></div>
   <div class="toasts" data-ref="toasts"></div>
   <div class="floaters" data-ref="floaters"></div>
   <div class="flash" data-ref="flash"></div>
+  <div class="scene-fade" data-ref="fade"></div>
   <div class="start-screen"></div>
 `;
 
@@ -92,12 +101,14 @@ export class UI {
       settings: new SettingsPanel(this),
       menu: new MenuPanel(this),
       help: new HelpPanel(this),
+      farm: new FarmPanel(this),
       ...(game.cloud ? { cloud: new CloudPanel(this) } : {}),
     };
     this.activePanel = null;
     this.decorToolbar = new DecorToolbar(this, root.querySelector('.decor-toolbar'));
     this.fishCard = new FishCard(this, root.querySelector('.fish-card:not(.garden-card)'));
-    this.gardenCard = new GardenCard(this, root.querySelector('.garden-card'));
+    this.gardenCard = new GardenCard(this, root.querySelector('.garden-card:not(.cow-card)'));
+    this.cowCard = new CowCard(this, root.querySelector('.cow-card'));
     this.start = new StartScreen(this, root.querySelector('.start-screen'));
     if (game.cloud) {
       this.refs.saveStatus.classList.remove('hidden');
@@ -139,6 +150,16 @@ export class UI {
         game.selectFish(null);
         this.gardenCard.toggle();
         break;
+      case 'goFarm':
+        game.goTo('farm');
+        break;
+      case 'goHome':
+        game.goTo('home');
+        break;
+      case 'cows':
+        this.cowCard.hide();
+        this.open('farm');
+        break;
       case 'screenshot':
         game.takeScreenshot();
         break;
@@ -179,7 +200,28 @@ export class UI {
     }
   }
 
+  /** สลับ HUD ตามสถานที่ (ซ่อนปุ่ม/แถบสถานะของตู้ปลาตอนอยู่นอกบ้าน — ดู .at-farm ใน main.css) */
+  setLocation(location) {
+    this.root.classList.toggle('at-farm', location === 'farm');
+    this.refreshTank();
+  }
+
+  /** จอมืดลง → swap() → สว่างขึ้น (ใช้ตอนสลับฉาก ไม่ให้เห็นกล้องกระโดด) */
+  fadeThrough(swap, ms = 260) {
+    const fade = this.refs.fade;
+    fade.classList.add('on');
+    setTimeout(() => {
+      swap();
+      requestAnimationFrame(() => fade.classList.remove('on'));
+    }, ms);
+  }
+
   refreshTank() {
+    if (this.game.location === 'farm') {
+      const farm = this.game.farm;
+      this.refs.tankLabel.textContent = `ฟาร์มหลังบ้าน · วัว ${farm.cowCount}/${CONFIG.farm.maxCows} ตัว`;
+      return;
+    }
     const type = getTankType(this.game.state.activeTank.typeId);
     this.refs.tankLabel.textContent = `${type.name} ${type.label} · ปลา ${this.game.fish.count}/${type.capacity} ตัว`;
   }
@@ -236,9 +278,14 @@ export class UI {
     this.refs.plusBadge.classList.toggle('show', claimable);
     this.refs.menuBadge.classList.toggle('show', claimable);
     this.refs.gardenBadge.classList.toggle('show', this.game.garden.needsCare);
+    const farmCare = this.game.farm.needsCare;
+    this.refs.farmBadge.classList.toggle('show', farmCare);
+    this.refs.cowsBadge.classList.toggle('show', farmCare);
+    if (this.game.location === 'farm') this.refreshTank(); // จำนวนวัวเปลี่ยนตามเวลา (ตาย/ซื้อ/ขาย)
     this.activePanel?.tick(step);
     this.fishCard.update();
     this.gardenCard.update();
+    this.cowCard.update();
     this.decorToolbar.tick();
   }
 

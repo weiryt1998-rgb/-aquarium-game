@@ -46,9 +46,10 @@ service cloud.firestore {
       let fish = t.fish;
       let decor = t.decor;
       // รวมผลเป็นลิสต์เพื่อลดนิพจน์ซ้ำ; key ที่ขาด/ชนิดตู้ที่ไม่มีใน capacities จะถูกปฏิเสธ
+      // (เปรียบเทียบ cleanliness กับตัวเลข: ถ้าไม่ใช่ตัวเลขจะ error = ถูกปฏิเสธเอง ไม่ต้องตรวจ is number ซ้ำ — ประหยัดงบให้ฟาร์มวัว)
       return [t.keys().hasOnly(allowedKeys),
         id is string, id.size() <= 64,
-        cleanliness is number, cleanliness >= 0, cleanliness <= 100,
+        cleanliness >= 0, cleanliness <= 100,
         fish is list, fish.size() <= capacities[t.typeId],
         decor is list, decor.size() <= 150].hasOnly([true]);
     }
@@ -82,6 +83,13 @@ service cloud.firestore {
         && s.water is number && s.health is number && s.growth is number;
     }
 
+    // วัวในฟาร์มนอกบ้าน (src/shared/farm.js — MAX_COW_RECORDS = 8)
+    // ตรวจเฉพาะโครง (ลิสต์ไม่เกิน 8 ตัว) — ตู้ปลาครบ 7 ตู้เต็มความจุใช้งบนิพจน์ 1000 ไปเกือบหมดแล้ว ตรวจรายตัวไม่พอ
+    // คีย์/ชนิดค่า/สายพันธุ์ของวัวแต่ละตัวถูกจัดการด้วย sanitizeFarm ทุกครั้งที่อ่านเซฟ และเขียนได้เฉพาะบัญชีผู้เล่นหลัก
+    function validFarm(f) {
+      return f.keys().hasOnly(['cows']) && f.cows is list && f.cows.size() <= 8;
+    }
+
     function validGame(g) {
       let tanks = g.tanks;
       let tankCount = tanks.size();
@@ -90,7 +98,7 @@ service cloud.firestore {
       // รวมเงื่อนไขเป็นลิสต์ (แบบเดียวกับ validTank) แทน && ยาว ๆ — ประหยัดงบนิพจน์ 1000 ตอนมีครบ 7 ตู้
       // ค่าใดผิด/ขาด/ผิดชนิด → ได้ false หรือ Rules error → ถูกปฏิเสธเหมือนเดิม
       return [g.keys().hasOnly(['version', 'coins', 'gems', 'inventory', 'selectedFood', 'collection', 'tanks', 'activeTankId',
-          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved', 'sunflower']),
+          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved', 'sunflower', 'farm']),
         g.version == 1,
         isCount(g.coins, 1000000000),
         isCount(g.gems, 10000000),
@@ -108,7 +116,8 @@ service cloud.firestore {
         tankCount < 7 || validTank(tanks[6], capacities, tankKeys),
         g.activeTankId is string,
         validMissions(g.missions), validStats(g.stats),
-        !('sunflower' in g) || validSunflower(g.sunflower)].hasOnly([true]);
+        !('sunflower' in g) || validSunflower(g.sunflower),
+        !('farm' in g) || validFarm(g.farm)].hasOnly([true]);
     }
 
     function validMeta(m) {

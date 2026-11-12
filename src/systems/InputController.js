@@ -43,6 +43,10 @@ export class InputController {
     if (this.down || now - this.lastHover < 60) return;
     this.lastHover = now;
     const ray = this.#updateRay(e).ray;
+    if (this.game.location === 'farm') {
+      this.canvas.style.cursor = this.game.farm.pick(ray) ? 'pointer' : '';
+      return;
+    }
     const hover = this.game.coins.pick(ray) || this.game.decor.pickPearl(ray) || this.game.fish.pick(ray) || this.game.garden.pick(ray);
     this.canvas.style.cursor = hover ? 'pointer' : '';
   }
@@ -69,7 +73,8 @@ export class InputController {
     if (e.key === 'Escape') {
       this.game.ui.closeAll();
       this.game.ui.gardenCard.hide();
+      this.game.ui.cowCard.hide();
     }
-    else if (e.key === 'f' || e.key === 'F') this.game.feed();
+    else if ((e.key === 'f' || e.key === 'F') && this.game.location === 'home') this.game.feed();
   }
 }

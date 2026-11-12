@@ -44,5 +44,7 @@ export const EV = {
   MISSION_DONE: 'mission:completed',
   MISSION_CLAIMED: 'mission:claimed',
   MODE: 'mode:changed',
+  /** ย้ายสถานที่ ในบ้าน ↔ นอกบ้าน { location } */
+  LOCATION: 'location:changed',
   SCREENSHOT: 'screenshot',
 };
