@@ -222,9 +222,11 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
 
   test('ฟาร์มวัว: บันทึกวัวเต็ม 8 ตัว + 7 ตู้เต็มความจุ + ทานตะวันได้ (งบนิพจน์ของ Rules) และปฏิเสธโครงผิด/เกิน 8 ตัว', async () => {
     await seed(env);
-    const cow = (i) => ({ id: `cow_${i}`, breedId: i % 2 ? 'jersey' : 'holstein', name: 'มะลิ', boughtAt: 1, at: 2, satiety: 80, health: 100, milk: 10 });
-    const farm = { cows: Array.from({ length: 8 }, (_, i) => cow(i)) };
+    const cow = (i) => ({ id: `cow_${i}`, breedId: i % 2 ? 'brahman_calf' : 'brahman', name: 'มะลิ', sex: i % 2 ? 'm' : 'f', boughtAt: 1, at: 2, satiety: 80, health: 100, milk: 10, preg: 0, bredAt: 0, born: 0 });
+    const grass = { at: 2, g: Array(24).fill(100), w: Array(24).fill(40) };
+    const farm = { cows: Array.from({ length: 8 }, (_, i) => cow(i)), grass };
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = { cows: [cow(0)] }), d))));
+    await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = { cows: [], grass }), d))));
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => {
       const template = d.game.tanks[0];
       d.game.tanks = TANK_TYPES.map((type) => ({
@@ -242,6 +244,7 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
       { cows: Array.from({ length: 9 }, (_, i) => cow(i)) },
       { cows: [cow(0)], extra: true },
       { cows: 'many' },
+      { cows: [cow(0)], grass, extra: true },
     ];
     for (const bad of bads) await assertFails(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = bad), d))));
   });

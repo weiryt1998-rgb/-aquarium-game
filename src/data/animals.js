@@ -5,7 +5,12 @@
  *
  * milkPerHour = เต้านมเต็มขึ้น %/ชม. ตอนอิ่มและแข็งแรง · milkReward = เหรียญเมื่อรีดนมตอนเต็ม 100%
  * look = สีของโมเดลชั่วคราว (entities/Cow.js) · model.scale = ขนาดเทียบวัวโฮลสไตน์
- * skin = ภาพผิวแทนลายในไฟล์โมเดล (ทุกสายพันธุ์ใช้ mesh/ท่าทางเดียวกัน: models/farm/cow.glb)
+ * skin = ภาพผิวแทนลายในไฟล์โมเดล (ใช้ mesh/ท่าทางของ models/farm/cow.glb)
+ * model.file = ไฟล์โมเดลของสายพันธุ์นั้นเอง (มีโครงกระดูก/ท่าทางของตัวเอง เช่นบราห์มัน: Walk Graze Drink LieDown Lie StandUp Idle)
+ * young = หน้าตาตอนเป็นลูกวัวของสายพันธุ์ตัวเต็มวัย (ใช้กับลูกวัวที่เกิดในฟาร์ม และสายพันธุ์ลูกวัวที่ซื้อซึ่งโตเป็นสายพันธุ์นี้ — ดู shared/farm.js adultBreedOf):
+ *   { file?, scale, drinkReach, walkClipSpeed } — ไม่มี file = ใช้โมเดลตัวเต็มวัยย่อขนาดตาม scale · มี file = โมเดลลูกวัวโดยเฉพาะ (ขนาดลูกวัวในไฟล์อยู่แล้ว)
+ * calf = สายพันธุ์ลูกวัวที่ขายในร้าน: { growsInto, growHours } — โตตามเวลาจริงนับจากวันซื้อ (shared/farm.js isCalf) · หน้าตาใช้ young ของ growsInto
+ * canBreed = มีเพศผู้/เมียและผสมพันธุ์ได้ (ตอนนี้เฉพาะบราห์มัน — โฮลสไตน์/เจอร์ซีย์ยังเป็นโมเดลชั่วคราว ซื้อได้แต่ตัวเมีย)
  */
 export const COW_BREEDS = [
   {
@@ -17,6 +22,8 @@ export const COW_BREEDS = [
     milkReward: { coins: 90 },
     look: { base: '#f2efe8', patch: '#1f1f22', nose: '#e8a9a0', horn: '#e9e1cf' },
     model: { scale: 1 },
+    retired: true, // โมเดลชั่วคราว — เลิกขาย (ตัวที่มีในเซฟยังอยู่)
+    young: { scale: 0.55, drinkReach: 0.7, walkClipSpeed: 0.32 },
   },
   {
     id: 'jersey',
@@ -28,6 +35,33 @@ export const COW_BREEDS = [
     look: { base: '#b9804c', patch: null, nose: '#2d2420', horn: '#e9e1cf' },
     model: { scale: 0.9 },
     skin: 'models/farm/cow_jersey.webp',
+    retired: true, // โมเดลชั่วคราว — เลิกขาย (ตัวที่มีในเซฟยังอยู่)
+    young: { scale: 0.5, drinkReach: 0.66, walkClipSpeed: 0.3 },
+  },
+  {
+    id: 'brahman',
+    name: 'วัวบราห์มัน',
+    description: 'บราห์มันเลือด 100% ตัวโต มีโหนก ทนร้อน นมน้อยแต่ราคาดี ชอบเดินไปกินน้ำที่รางและลงนอนพัก',
+    price: { coins: 2500 },
+    milkPerHour: 9,
+    milkReward: { coins: 300 },
+    look: { base: '#c9c6c0', patch: null, nose: '#1b1a1a', horn: '#3a3734' },
+    model: { scale: 1, file: 'models/farm/brahman.glb' },
+    young: { file: 'models/farm/brahman_calf.glb', scale: 1, drinkReach: 0.72, walkClipSpeed: 0.4 },
+    canBreed: true,
+  },
+  {
+    id: 'brahman_calf',
+    name: 'ลูกวัวบราห์มัน',
+    description: 'ราคาถูกกว่าตัวโต เลี้ยงไว้ 2 วันจะโตเป็นวัวบราห์มันเต็มวัย (ระหว่างเป็นลูกวัวยังไม่ให้นม)',
+    price: { coins: 1200 },
+    milkPerHour: 9,
+    milkReward: { coins: 300 },
+    look: { base: '#ddd7cb', patch: null, nose: '#262222', horn: '#3a3734' },
+    model: { scale: 1, file: 'models/farm/brahman.glb' },
+    /** โตเป็น growsInto เมื่ออยู่ฟาร์มครบ growHours ชม. · ระหว่างนั้นใช้หน้าตา young ของ growsInto (brahman.young) */
+    calf: { growsInto: 'brahman', growHours: 48 },
+    canBreed: true,
   },
 ];
 

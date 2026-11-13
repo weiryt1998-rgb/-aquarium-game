@@ -599,6 +599,31 @@ svg {
   color: #ffb27a;
 }
 
+/* ตั้งท้อง / ครบกำหนดคลอด */
+.panel-farm .effects.due {
+  color: #ffd76a;
+}
+
+/* ตัวผู้: แทนแถบนมด้วยข้อความ */
+.fc-stats > .fc-note {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.gc-actions > button[hidden] {
+  display: none;
+}
+
+.gc-actions > button > b {
+  font-weight: normal;
+}
+
+/* ปุ่มซื้อตัวเมีย/ตัวผู้ในหน้าต่างฟาร์ม */
+.panel-farm .btn-buy .gender {
+  margin: 0;
+}
+
 .scene-fade {
   position: absolute;
   inset: 0;

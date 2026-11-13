@@ -10,7 +10,26 @@ import { FEED_WINDOW_MS, LIMITS } from './constants.js';
 import { breedGroupOf, dueAt, isPregnant, planOffspring, restEndsAt, sanitizeFetus } from './breeding.js';
 import { sanitizeGenes } from '../models/molly/genetics.js';
 import { actionTime, applySunflowerAction, sunflowerAt, sunflowerBlock } from './garden.js';
-import { applyCowAction, buyCowBlock, cowAt, cowBlock, cowSellValue, farmAt, findCow, newCow } from './farm.js';
+import {
+  GRASS_PATCHES,
+  adultBreedOf,
+  applyBirth,
+  applyBreed,
+  applyCowAction,
+  birthBlock,
+  breedBlock,
+  buyCowBlock,
+  cowBlock,
+  cowSellValue,
+  farmAt,
+  farmClock,
+  findCow,
+  grassBlock,
+  newCalf,
+  newCow,
+  newGrass,
+  waterPatch,
+} from './farm.js';
 import { getCowBreed } from '../data/animals.js';
 import {
   addItem,
@@ -153,24 +172,50 @@ function careSunflower(game, action, c, ctx, { price = null, reward = null } = {
 }
 
 /** เหตุผลที่ทำกับวัวไม่ได้ (shared/farm.js) → รหัสข้อผิดพลาดของคำสั่ง */
-const COW_FAIL = { 'not-found': 'not-found', dead: 'invalid', 'too-full': 'cooldown', 'not-ready': 'cooldown', limit: 'limit', 'remove-dead': 'limit', invalid: 'invalid' };
+const COW_FAIL = { 'not-found': 'not-found', dead: 'invalid', 'too-full': 'cooldown', 'not-ready': 'cooldown', male: 'invalid', limit: 'limit', 'remove-dead': 'limit', invalid: 'invalid' };
 
-function needCow(game, id) {
-  return findCow(game.farm, needId(id, 'cowId')) ?? fail('not-found', 'cow');
+/** เหตุผลที่ผสมพันธุ์/คลอดไม่ได้ (breedBlock / birthBlock) → รหัสข้อผิดพลาดของคำสั่ง · สถานะที่รอเวลาแล้วหายเอง = cooldown */
+const BREED_FAIL = {
+  'not-found': 'not-found',
+  dead: 'invalid',
+  breed: 'invalid',
+  'not-female': 'invalid',
+  'not-male': 'invalid',
+  'not-pregnant': 'invalid',
+  young: 'cooldown',
+  pregnant: 'cooldown',
+  cooldown: 'cooldown',
+  weak: 'cooldown',
+  'not-ready': 'cooldown',
+  limit: 'limit',
+  'remove-dead': 'limit',
+};
+
+function needCow(game, id, field = 'cowId') {
+  return findCow(game.farm, needId(id, field)) ?? fail('not-found', 'cow');
+}
+
+const needCowSex = (v) => (v === 'f' || v === 'm' ? v : fail('invalid', 'sex'));
+
+/** เดินเวลาทั้งฟาร์ม (วัวทุกตัว + หญ้า) ถึงตอนที่ผู้เล่นทำในเครื่อง (c.at) แล้วแทนที่ค่าในเซฟ → เวลาที่ใช้ */
+function settleFarm(game, c, ctx) {
+  const t = actionTime({ at: farmClock(game.farm) }, c.at, ctx.now);
+  game.farm = farmAt(game.farm, t);
+  return t;
 }
 
 /**
- * ดูแลวัว (ให้ฟาง/รีดนม): เดินเวลาของวัวถึงตอนที่ผู้เล่นทำในเครื่อง (c.at) แล้วตรวจและใช้ผล
+ * ดูแลวัว (ให้ฟาง/รีดนม): เดินเวลาทั้งฟาร์มถึงตอนที่ทำ แล้วตรวจและใช้ผล
  * ราคาฟาง/เหรียญจากนมคิดฝั่งนี้เสมอ ไม่รับตัวเลขจากเครื่อง
  */
 function careCow(game, action, c, ctx, { price = null } = {}) {
-  const cow = needCow(game, c.cowId);
-  const t = actionTime(cow, c.at, ctx.now);
-  const current = cowAt(cow, t);
-  const block = cowBlock(action, current, { strict: false });
+  needCow(game, c.cowId);
+  const t = settleFarm(game, c, ctx);
+  const cow = findCow(game.farm, c.cowId);
+  const block = cowBlock(action, cow, { strict: false });
   if (block) fail(COW_FAIL[block] ?? 'invalid', block);
   if (price) spend(game, price);
-  const { cow: next, reward } = applyCowAction(action, current, t);
+  const { cow: next, reward } = applyCowAction(action, cow, t);
   Object.assign(cow, next);
   if (reward) earn(game, reward);
   return reward ? { reward } : null;
@@ -338,13 +383,54 @@ const HANDLERS = {
   // ── ฟาร์มวัวนอกบ้าน (shared/farm.js) ────────────────────────
   buyCow(game, meta, c, ctx) {
     const breed = getCowBreed(c.breedId) ?? fail('invalid', 'breed');
+    const sex = needCowSex(c.sex ?? 'f');
+    if (sex === 'm' && !breed.canBreed) fail('invalid', 'sex'); // ตัวผู้มีเฉพาะสายพันธุ์ที่ผสมพันธุ์ได้ (บราห์มัน)
     const block = buyCowBlock(farmAt(game.farm, ctx.now), breed.id);
     if (block) fail(COW_FAIL[block] ?? 'invalid', block);
     const id = needId(c.cowId, 'cowId');
     if (findCow(game.farm, id)) fail('invalid', 'duplicate-id');
     spend(game, breed.price);
-    game.farm ??= { cows: [] };
-    game.farm.cows.push(newCow({ id, breedId: breed.id, name: cleanName(c.name, breed.name) }, ctx.now));
+    game.farm ??= { cows: [], grass: newGrass(ctx.now) };
+    game.farm.cows.push(newCow({ id, breedId: breed.id, name: cleanName(c.name, breed.name), sex }, ctx.now));
+  },
+
+  /** ผสมพันธุ์แม่วัว cowId กับพ่อพันธุ์ bullId (ฟรี) → แม่ตั้งท้อง · ทั้งคู่เริ่มช่วงพัก */
+  breedCow(game, meta, c, ctx) {
+    needCow(game, c.cowId);
+    needCow(game, c.bullId, 'bullId');
+    const t = settleFarm(game, c, ctx);
+    const cow = findCow(game.farm, c.cowId);
+    const bull = findCow(game.farm, c.bullId);
+    const block = breedBlock(cow, bull, t, { strict: false });
+    if (block) fail(BREED_FAIL[block] ?? 'invalid', block);
+    const next = applyBreed(cow, bull, t);
+    Object.assign(cow, next.cow);
+    Object.assign(bull, next.bull);
+  },
+
+  /** แม่วัวที่ท้องครบกำหนดคลอดลูก: id/ชื่อ/เพศสุ่มในเครื่อง ส่วนสายพันธุ์และค่าเริ่มต้นกำหนดฝั่งนี้ */
+  birthCalf(game, meta, c, ctx) {
+    needCow(game, c.cowId);
+    const id = needId(c.calfId, 'calfId');
+    if (findCow(game.farm, id)) fail('invalid', 'duplicate-id');
+    const sex = needCowSex(c.sex);
+    const t = settleFarm(game, c, ctx);
+    const mother = findCow(game.farm, c.cowId);
+    const block = birthBlock(game.farm, mother, t, { strict: false });
+    if (block) fail(BREED_FAIL[block] ?? 'invalid', block);
+    const name = cleanName(c.name, adultBreedOf(mother).name);
+    game.farm.cows.push(newCalf({ id, name, sex }, mother, t));
+    Object.assign(mother, applyBirth(mother, t));
+  },
+
+  /** รดน้ำแปลงหญ้าในคอก (ฟรี · ได้เมื่อดินยังชื้นไม่ถึง CONFIG.farm.grass.wetAbove) */
+  waterGrass(game, meta, c, ctx) {
+    const patch = needInt(c.patch, 0, GRASS_PATCHES - 1, 'patch');
+    game.farm ??= { cows: [], grass: newGrass(ctx.now) };
+    const t = settleFarm(game, c, ctx);
+    const block = grassBlock(game.farm.grass, patch, { strict: false });
+    if (block) fail('cooldown', block);
+    game.farm.grass = waterPatch(game.farm.grass, patch, t);
   },
 
   feedCow(game, meta, c, ctx) {
@@ -357,8 +443,10 @@ const HANDLERS = {
 
   /** ขายวัว (ตัวที่ตายแล้ว = นำออกจากคอก ได้ 0 เหรียญ) */
   sellCow(game, meta, c, ctx) {
-    const cow = needCow(game, c.cowId);
-    const refund = cowSellValue(cowAt(cow, ctx.now));
+    needCow(game, c.cowId);
+    settleFarm(game, c, ctx);
+    const cow = findCow(game.farm, c.cowId);
+    const refund = cowSellValue(cow);
     game.farm.cows = game.farm.cows.filter((x) => x !== cow);
     earn(game, refund);
     return { refund };
@@ -519,6 +607,8 @@ export const URGENT_COMMANDS = new Set([
   'feedCow',
   'milkCow',
   'sellCow',
+  'breedCow',
+  'birthCalf',
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */

@@ -24,6 +24,12 @@ const ASSETS = [
   { name: 'tree_a', texture: 512 },
   { name: 'tree_b', texture: 512 },
   { name: 'cow', texture: 2048, normal: 1024, anim: true },
+  // วัวบราห์มัน (Fish/farm/build_brahman.py จากโมเดล Meshy): คลิป Walk Graze Drink LieDown Lie StandUp Idle
+  { name: 'brahman', texture: 2048, normal: 1024, anim: true },
+  // ลูกวัวบราห์มัน (Fish/farm/build_brahman_calf.py ดัดจากตัวพ่อ) — คลิปชุดเดียวกัน
+  { name: 'brahman_calf', texture: 2048, normal: 1024, anim: true },
+  // ของตกแต่งรอบบ้าน/โรงนา (Fish/farm/build_decor.py) — วัตถุแยกชื่อ เกมวางซ้ำด้วย InstancedMesh (world/FarmDecor.js)
+  { name: 'decor', texture: 512 },
 ];
 
 await MeshoptEncoder.ready;

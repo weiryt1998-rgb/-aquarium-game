@@ -86,8 +86,10 @@ service cloud.firestore {
     // วัวในฟาร์มนอกบ้าน (src/shared/farm.js — MAX_COW_RECORDS = 8)
     // ตรวจเฉพาะโครง (ลิสต์ไม่เกิน 8 ตัว) — ตู้ปลาครบ 7 ตู้เต็มความจุใช้งบนิพจน์ 1000 ไปเกือบหมดแล้ว ตรวจรายตัวไม่พอ
     // คีย์/ชนิดค่า/สายพันธุ์ของวัวแต่ละตัวถูกจัดการด้วย sanitizeFarm ทุกครั้งที่อ่านเซฟ และเขียนได้เฉพาะบัญชีผู้เล่นหลัก
+    // grass = หญ้าในคอก { at, g: [24], w: [24] } (GRASS_KEYS / GRASS_PATCHES) — อนุญาตแค่ชื่อคีย์ ไม่ตรวจข้างใน
+    // (ตรวจรูปแบบเพิ่มแล้วเกินงบนิพจน์ตอนมีตู้ครบ + วัว 8 ตัว) · sanitizeFarm ตัดหญ้าที่รูปแบบผิดทิ้ง = หญ้าเต็มใหม่
     function validFarm(f) {
-      return f.keys().hasOnly(['cows']) && f.cows is list && f.cows.size() <= 8;
+      return f.keys().hasOnly(['cows', 'grass']) && f.cows is list && f.cows.size() <= 8;
     }
 
     function validGame(g) {

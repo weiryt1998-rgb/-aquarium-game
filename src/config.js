@@ -165,6 +165,29 @@ export const CONFIG = {
     milkFullAbove: 90,
     /** ขายวัวคืนได้ sellRate × ราคา (ลดตามสุขภาพ) */
     sellRate: 0.5,
+    /**
+     * ผสมพันธุ์ (shared/farm.js breedBlock / birthBlock): แม่วัว + พ่อพันธุ์ที่โตแล้ว สุขภาพ ≥ minHealth% และอิ่ม ≥ minSatiety% ทั้งคู่
+     * ผสมแล้วพักทั้งสองตัว cooldownHours ชม. · แม่ตั้งท้อง gestationHours ชม. แล้วคลอดได้ · ลูกวัวโตเต็มวัยใน growHours ชม.
+     */
+    breeding: { gestationHours: 24, growHours: 48, cooldownHours: 12, minHealth: 60, minSatiety: 40 },
+    /**
+     * หญ้าในคอก (shared/farm.js): แปลงหญ้า 6×4 แปลง แต่ละแปลงมีหญ้า 0..100 และความชื้นดิน 0..100
+     * วัวที่อิ่มไม่ถึง grazeBelow% เล็มหญ้าแปลงละ eatPerHour หน่วย/ชม. ได้ความอิ่ม food ต่อหน่วย
+     * หญ้างอกใหม่ growPerHour หน่วย/ชม. เฉพาะตอนดินชื้น · ความชื้นลด waterUse/ชม. · รดน้ำ +waterAmount ได้เมื่อชื้นไม่ถึง wetAbove%
+     */
+    grass: {
+      eatPerHour: 25,
+      food: 0.4,
+      grazeBelow: 90,
+      growPerHour: 20,
+      waterUse: 12,
+      waterAmount: 100,
+      wetAbove: 60,
+      /** หญ้าเหลือน้อยกว่านี้ = แปลงโล่ง วัวไม่มาเล็ม */
+      minBite: 3,
+      /** แปลงใหม่ (ซื้อวัวตัวแรก/เซฟเก่า): หญ้าเต็ม ดินชื้นปานกลาง */
+      startWater: 40,
+    },
   },
 
   dailyReward: { coins: 200, gems: 5 },

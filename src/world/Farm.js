@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { fbm2 } from '../utils/noise.js';
 import { seededRandom, smoothstep } from '../utils/math.js';
+import { GrassField } from './Grass.js';
+import { FarmDecor } from './FarmDecor.js';
 
 /** โมเดลจริงจาก Blender (Fish/farm/ → scripts/build-farm-models.mjs) — ไม่มีไฟล์ = ใช้โมเดลชั่วคราวจากรูปทรงพื้นฐาน */
 export const FARM_MODELS = {
@@ -9,6 +11,7 @@ export const FARM_MODELS = {
   fence: 'models/farm/fence.glb',
   treeA: 'models/farm/tree_a.glb',
   treeB: 'models/farm/tree_b.glb',
+  decor: 'models/farm/decor.glb',
 };
 /** บ้าน: หันหน้า (ระเบียง/ประตู) ไปทางคอก · ประตูอยู่บนแนวทางเดินดิน z = 10.5 */
 const HOUSE_AT = { x: -23.2, z: 10.5, rotY: Math.PI / 2 };
@@ -29,13 +32,15 @@ const BARN_AT = { x: 0, z: -16 };
 export const PASTURE = { minX: -11, maxX: 11, minZ: -8, maxZ: 8 };
 /** พื้นที่ที่วัวเดินได้ (เว้นจากรั้ว) */
 export const COW_AREA = { minX: PASTURE.minX + 1.5, maxX: PASTURE.maxX - 1.5, minZ: PASTURE.minZ + 1.5, maxZ: PASTURE.maxZ - 1.5 };
+/** รางน้ำในคอก (กลางราง x, z · กว้างตามแกน X · ลึกตามแกน Z) — วัวที่มีท่ากินน้ำเดินมายืนฝั่ง +Z แล้วก้มดื่ม */
+export const TROUGH = { x: 6, z: -5, width: 2.6, depth: 0.8 };
 
 const COLORS = {
   sky: '#a9d8f5',
   fog: '#cfe7f3',
-  grass: '#6f9e45',
-  grassDry: '#9cab55',
-  path: '#a78b62',
+  grass: '#62a03f',
+  grassDry: '#93ad4f',
+  grassLush: '#4b8a37',
   fence: '#8a6a48',
   barn: '#a3402e',
   barnTrim: '#f1ece2',
@@ -71,10 +76,14 @@ export class Farm {
     sceneMgr.registerScene(scene, { shadowLight: this.sun });
 
     this.#ground();
+    /** หญ้าในคอก 24 แปลง (world/Grass.js) — FarmSystem ส่งสถานะจาก shared/farm.js มาให้แสดง */
+    this.grass = new GrassField(scene);
     this.#fence();
     this.#barn();
     this.#house();
     this.#props();
+    /** ทางเดิน บ่อน้ำ หญ้าทั่วลาน + ของตกแต่งจาก decor.glb (world/FarmDecor.js) */
+    this.decor = new FarmDecor(scene);
     this.#trees();
     this.#hills();
     this.#clouds();
@@ -119,7 +128,7 @@ export class Farm {
     const colors = new Float32Array(pos.count * 3);
     const grass = new THREE.Color(COLORS.grass);
     const dry = new THREE.Color(COLORS.grassDry);
-    const path = new THREE.Color(COLORS.path);
+    const lush = new THREE.Color(COLORS.grassLush);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
@@ -127,10 +136,9 @@ export class Farm {
       // พื้นราบในบริเวณฟาร์ม แล้วค่อย ๆ เป็นเนินออกไปไกล ๆ
       const far = smoothstep(30, 70, Math.hypot(x, z));
       pos.setY(i, fbm2(x * 0.025, z * 0.025, 3) * 6 * far);
-      c.copy(grass).lerp(dry, smoothstep(-0.2, 0.5, fbm2(x * 0.08 + 7, z * 0.08, 2)));
-      // ทางเดินดินจากประตูบ้านไปหน้าคอก
-      const onPath = Math.abs(z - 10.5) < 1.1 && x > -16 && x < 2;
-      if (onPath) c.lerp(path, 0.85);
+      // หญ้าเขียวสด + หย่อมหญ้าแห้งอ่อน ๆ + โทนเขียวเข้มเป็นแอ่ง (ทางเดินเป็น mesh แยกใน FarmDecor)
+      c.copy(grass).lerp(dry, smoothstep(-0.1, 0.6, fbm2(x * 0.08 + 7, z * 0.08, 2)) * 0.8);
+      c.lerp(lush, smoothstep(0.15, 0.6, fbm2(x * 0.03 + 21, z * 0.03 + 4, 2)) * 0.45);
       c.toArray(colors, i * 3);
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -284,8 +292,8 @@ export class Farm {
     const wood = std(COLORS.wood);
     // รางน้ำ/รางอาหารในคอก
     const trough = new THREE.Group();
-    trough.position.set(6, 0, -5);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.55, 0.8), wood);
+    trough.position.set(TROUGH.x, 0, TROUGH.z);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(TROUGH.width, 0.55, TROUGH.depth), wood);
     box.position.y = 0.45;
     trough.add(box);
     const water = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.05, 0.62), std(COLORS.water, { roughness: 0.15 }));
@@ -311,6 +319,8 @@ export class Farm {
     }
     props.traverse((o) => o.isMesh && ((o.castShadow = true), (o.receiveShadow = true)));
     this.scene.add(props);
+    // ฟาง/รางน้ำรูปทรงพื้นฐาน — ถูกแทนด้วยโมเดลใน decor.glb
+    this.placeholders.props = props;
   }
 
   #trees() {
@@ -410,6 +420,10 @@ export class Farm {
       barn.position.set(BARN_AT.x, 0, BARN_AT.z);
       swap('barn', barn);
     }
+    if (gltfs.decor) {
+      swap('props', null);
+      this.decor.useModel(gltfs.decor);
+    }
     if (gltfs.fence) swap('fence', this.#instancedFence(gltfs.fence));
     if (gltfs.treeA || gltfs.treeB) swap('trees', this.#instancedTrees([gltfs.treeA, gltfs.treeB].filter(Boolean)));
   }
@@ -488,7 +502,9 @@ export class Farm {
     return ray.intersectsSphere(this.doorHit);
   }
 
-  update(dt) {
+  update(dt, time = 0) {
+    this.grass.update(dt, time);
+    this.decor.update(dt, time);
     for (const c of this.clouds.children) {
       c.position.x += dt * 1.2;
       if (c.position.x > 130) c.position.x = -130;

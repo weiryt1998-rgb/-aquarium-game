@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { build, preview } from 'vite';
+import { getCowBreed } from '../../src/data/animals.js';
 import { allowPlayer, clearFirestore, createUser, deleteDoc, listDocs, readDoc, resetEmulators, setSparkPlayer } from '../../scripts/emulator-api.mjs';
 
 const MODE = process.argv.includes('functions') ? 'functions' : 'rules';
@@ -516,15 +517,18 @@ test('15f) กระถางทานตะวัน: ปลูก / รดน�
 test('15g) ฟาร์มวัว: ออกนอกบ้าน → ซื้อวัว / ขายวัวผ่านหน้าต่างและการ์ดในเกม → เซฟกลางตรวจผ่าน อีกเครื่องเห็นวัวตัวเดียวกัน', async () => {
   const before = await cloud();
   assert.equal(before.game.farm, undefined, 'เริ่มจากคอกว่าง');
+  const price = getCowBreed('brahman').price.coins; // โฮลสไตน์/เจอร์ซีย์เลิกขายแล้ว
+  assert.ok(before.game.coins >= price, `เงินพอซื้อวัวบราห์มัน (${before.game.coins} / ${price})`);
   try {
     await A.page.click('nav.sidebar button[data-action="goFarm"]');
     await A.page.waitForFunction(() => window.game.location === 'farm');
     await A.page.click('nav.sidebar button[data-action="cows"]');
-    await A.page.click('.panel-farm [data-action="buy"][data-id="holstein"]');
+    await A.page.click('.panel-farm [data-action="buy"][data-id="brahman"][data-sex="f"]');
     const bought = await waitCloud((d) => d.game.farm?.cows?.length === 1, 'buy cow');
     const cow = bought.game.farm.cows[0];
-    assert.equal(cow.breedId, 'holstein');
-    assert.equal(bought.game.coins, before.game.coins - 800);
+    assert.equal(cow.breedId, 'brahman');
+    assert.equal(cow.sex, 'f');
+    assert.equal(bought.game.coins, before.game.coins - price);
     assert.equal(await coinsOf(A), bought.game.coins);
     await waitFor(async () => (await evalGame(B, () => window.game.state.data.farm?.cows?.[0]?.name)) === cow.name, { message: 'B sees cow' });
 
@@ -533,7 +537,7 @@ test('15g) ฟาร์มวัว: ออกนอกบ้าน → ซื�
     await A.page.click('.cow-card [data-action="sell"]');
     await A.page.click('.cow-card [data-action="sell"]');
     const sold = await waitCloud((d) => d.game.farm?.cows?.length === 0, 'sell cow');
-    assert.equal(sold.game.coins, bought.game.coins + 400);
+    assert.equal(sold.game.coins, bought.game.coins + Math.floor(price * 0.5));
     await waitFor(async () => (await evalGame(B, () => window.game.state.data.farm?.cows?.length)) === 0, { message: 'B sees sale' });
   } finally {
     await A.page.evaluate(() => {
