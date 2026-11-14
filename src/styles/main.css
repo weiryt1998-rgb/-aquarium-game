@@ -573,6 +573,8 @@ svg {
 /* ───────────────────────── สถานที่: ในบ้าน / นอกบ้าน ───────────────────────── */
 /* ปุ่มที่มี data-at แสดงเฉพาะสถานที่นั้น · นอกบ้านซ่อน HUD ของตู้ปลา (ตู้ยังทำงานเบื้องหลัง) */
 #ui:not(.at-farm) [data-at='farm'],
+#ui:not(.in-barn) [data-at='barn'],
+.in-barn .barn-enter,
 #ui:not(.at-farm) .cow-card,
 .at-farm [data-at='home'],
 .at-farm .status-panel,

@@ -20,7 +20,7 @@ const OUT = 'public/models/farm';
 const ASSETS = [
   { name: 'house', texture: 512 },
   { name: 'barn', texture: 512 },
-  { name: 'fence', texture: 512 },
+  { name: 'fence', texture: 512 }, // รั้วไม้ไผ่ (Fish/farm/build_fence_bamboo.py)
   { name: 'tree_a', texture: 512 },
   { name: 'tree_b', texture: 512 },
   { name: 'cow', texture: 2048, normal: 1024, anim: true },
@@ -28,6 +28,13 @@ const ASSETS = [
   { name: 'brahman', texture: 2048, normal: 1024, anim: true },
   // ลูกวัวบราห์มัน (Fish/farm/build_brahman_calf.py ดัดจากตัวพ่อ) — คลิปชุดเดียวกัน
   { name: 'brahman_calf', texture: 2048, normal: 1024, anim: true },
+  // วัวเซบูจาก Meshy (Fish/farm/fit_zebu.py) — ยืมโครงกระดูก + คลิปทั้งหมดของวัวบราห์มัน
+  { name: 'cow_brown', texture: 2048, normal: 1024, anim: true },
+  { name: 'cow_white', texture: 2048, normal: 1024, anim: true },
+  // ตาเหม คนเลี้ยงวัว (Fish/farm/build_tahem.py) — คลิป HemIdle / HemWalk / HemTend
+  { name: 'tahem', texture: 2048, anim: true },
+  // ต้นไม้ใหญ่ให้ร่มเงา (Meshy ลดเหลือ ~14k สามเหลี่ยม) — ใบเป็นเรขาคณิต ไม่ใช่ภาพตัดขอบ
+  { name: 'tree_c', texture: 1024 },
   // ของตกแต่งรอบบ้าน/โรงนา (Fish/farm/build_decor.py) — วัตถุแยกชื่อ เกมวางซ้ำด้วย InstancedMesh (world/FarmDecor.js)
   { name: 'decor', texture: 512 },
 ];

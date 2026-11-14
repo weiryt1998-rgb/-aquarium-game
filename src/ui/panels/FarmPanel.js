@@ -1,7 +1,7 @@
 import { Panel } from '../Panel.js';
 import { CONFIG } from '../../config.js';
 import { COW_BREEDS, getCowBreed } from '../../data/animals.js';
-import { breedNow, canBreed, dueAt, grownAt, isBull, isCalf, isCowDead, isPregnant, milkValue } from '../../shared/farm.js';
+import { breedNow, canBreed, dueAt, grownAt, inBarn, isBull, isCalf, isCowDead, isPregnant, milkValue } from '../../shared/farm.js';
 import { escapeHtml, formatDuration } from '../../utils/math.js';
 import { priceHtml } from '../helpers.js';
 
@@ -89,6 +89,7 @@ export class FarmPanel extends Panel {
             ${dead ? '' : `<button class="btn ${feedBlock ? '' : 'btn-active'}" data-action="feed" data-id="${c.id}" ${feedBlock ? 'disabled' : ''}>🌾 ให้ฟาง ${priceHtml(f.hayPrice)}</button>`}
             ${dead || bull ? '' : `<button class="btn" data-action="milk" data-id="${c.id}" ${milkBlock ? 'disabled' : ''}>🥛 รีด +${milkValue(c)}</button>`}
             ${breedBtn}${birthBtn}
+            ${dead ? '' : `<button class="btn" data-action="barn" data-id="${c.id}" title="${inBarn(c) ? 'ปล่อยออกไปเล็มหญ้าในคอก' : 'พาเข้าไปพักในโรงนา'}">${inBarn(c) ? '🌿 ออกคอก' : '🏚️ เข้าโรงนา'}</button>`}
           </div>
         </div>`;
       })
@@ -137,6 +138,9 @@ export class FarmPanel extends Panel {
         break;
       case 'milk':
         farm.act('milk', id);
+        break;
+      case 'barn':
+        farm.toggleBarn(id);
         break;
       case 'view':
         this.game.sound.play('click');

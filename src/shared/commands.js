@@ -16,6 +16,8 @@ import {
   applyBirth,
   applyBreed,
   applyCowAction,
+  applyBarn,
+  barnBlock,
   birthBlock,
   breedBlock,
   buyCowBlock,
@@ -421,6 +423,17 @@ const HANDLERS = {
     const name = cleanName(c.name, adultBreedOf(mother).name);
     game.farm.cows.push(newCalf({ id, name, sex }, mother, t));
     Object.assign(mother, applyBirth(mother, t));
+  },
+
+  /** พาวัวเข้าโรงนา (in = true) / ปล่อยออกคอกหญ้า (ฟรี) — ในโรงนาไม่เล็มหญ้า และผสมพันธุ์ไม่ได้ */
+  barnCow(game, meta, c, ctx) {
+    needCow(game, c.cowId);
+    if (typeof c.in !== 'boolean') fail('invalid', 'in');
+    const t = settleFarm(game, c, ctx);
+    const cow = findCow(game.farm, c.cowId);
+    const block = barnBlock(game.farm, cow, c.in);
+    if (block) fail(block === 'barn-full' ? 'limit' : 'invalid', block);
+    Object.assign(cow, applyBarn(cow, c.in, t));
   },
 
   /** รดน้ำแปลงหญ้าในคอก (ฟรี · ได้เมื่อดินยังชื้นไม่ถึง CONFIG.farm.grass.wetAbove) */

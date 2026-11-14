@@ -11,7 +11,13 @@ import { TROUGH } from './Farm.js';
  *  - รดน้ำ: หยดน้ำตกลงบนแปลง (splash)
  */
 
-const TUFTS_PER_PATCH = 110;
+/** หญ้าในคอกเป็นทุ่งเลี้ยงสัตว์ที่ถูกเล็มอยู่เสมอ: กอเตี้ยแต่ถี่ (หญ้าเต็ม ≈ 15–20 ซม.) ไม่ใช่หญ้ารกสูงถึงเข่าวัว */
+const TUFTS_PER_PATCH = 170;
+/** ความสูงกอเมื่อหญ้าเต็ม (เท่าของ geometry สูง ~1 หน่วย) · ตอนหญ้าเหลือน้อยเตี้ยลงเหลือ MIN */
+const TUFT_MAX = 0.2;
+const TUFT_MIN = 0.06;
+/** ความกว้างกอ (ใบเอนออกรอบทิศ) — แคบกว่าหญ้าป่านอกคอก ดูเรียบร้อย */
+const TUFT_SPREAD = 0.75;
 const BLADES = 7;
 const COLORS = {
   dirt: new THREE.Color('#a8915c'),
@@ -129,7 +135,7 @@ export class GrassField {
         const x = c.x + (rnd() - 0.5) * PATCH_W;
         const z = c.z + (rnd() - 0.5) * PATCH_D;
         const underTrough = Math.abs(x - TROUGH.x) < TROUGH.width / 2 + 0.1 && Math.abs(z - TROUGH.z) < TROUGH.depth / 2 + 0.1;
-        this.slots.push({ patch: i, x, z, rot: rnd() * Math.PI * 2, size: 0.75 + rnd() * 0.5, rank: underTrough ? 2 : rnd() });
+        this.slots.push({ patch: i, x, z, rot: rnd() * Math.PI * 2, size: 0.85 + rnd() * 0.3, rank: underTrough ? 2 : rnd() });
       }
     }
     this.group.add(this.tufts);
@@ -181,9 +187,9 @@ export class GrassField {
       const g = grass.g[t.patch] / 100;
       const w = grass.w[t.patch] / 100;
       const keep = t.rank < g;
-      const h = keep ? (0.12 + 0.3 * Math.min(1, g * 1.4)) * t.size : 0;
+      const h = keep ? (TUFT_MIN + (TUFT_MAX - TUFT_MIN) * Math.min(1, g * 1.4)) * t.size : 0;
       q.setFromAxisAngle(up, t.rot);
-      s.set(keep ? t.size * 1.1 : 0, h, keep ? t.size * 1.1 : 0);
+      s.set(keep ? t.size * TUFT_SPREAD : 0, h, keep ? t.size * TUFT_SPREAD : 0);
       p.set(t.x, 0, t.z);
       this.tufts.setMatrixAt(k, m.compose(p, q, s));
       // ดินแห้งนาน หญ้าซีดลง

@@ -13,8 +13,11 @@ import {
   grassBlock,
   grazePatch,
   adultBreedOf,
+  applyBarn,
   applyBirth,
   applyBreed,
+  barnBlock,
+  inBarn,
   birthBlock,
   breedBlock,
   canBreed,
@@ -111,7 +114,7 @@ test('ฟาร์ม: sanitize ตัดค่าเสีย / id ซ้ำ / 
     T0,
   );
   assert.equal(out.cows.length, 1);
-  assert.deepEqual(out.cows[0], { id: 'a', breedId: 'holstein', name: 'วัวนมขาวดำ', boughtAt: T0, at: T0, satiety: 100, health: 0, milk: 0, sex: 'f', preg: 0, bredAt: 0, born: 0 });
+  assert.deepEqual(out.cows[0], { id: 'a', breedId: 'holstein', name: 'วัวนมขาวดำ', boughtAt: T0, at: T0, satiety: 100, health: 0, milk: 0, sex: 'f', preg: 0, bredAt: 0, born: 0, barn: 0 });
 });
 
 test('ข้อมูลสายพันธุ์วัวครบทุกฟิลด์ที่กฎใช้', () => {
@@ -454,4 +457,42 @@ test('สายพันธุ์: ตัวเต็มวัยมี young (�
   const c = findCow(game.farm, 'cow_c');
   assert.equal(c.born, 0);
   assert.ok(isCalf(c, T0 + H) && !isCalf(c, T0 + 48 * H));
+});
+
+test('โรงนา: พาเข้า/ปล่อยออก · ในโรงนาไม่เล็มหญ้า · ผสมพันธุ์ไม่ได้ · ลูกเกิดในโรงนาอยู่โรงนา · คอกในโรงนามีจำกัด', () => {
+  const game = makeGame({ coins: 20_000 });
+  run(game, { type: 'buyCow', breedId: 'brahman', cowId: 'cow_f' }, T0);
+  run(game, { type: 'buyCow', breedId: 'brahman', cowId: 'cow_m', sex: 'm' }, T0);
+  assert.equal(findCow(game.farm, 'cow_f').barn, 0);
+  rejects(() => run(game, { type: 'barnCow', cowId: 'cow_f', in: 'yes', at: T0 }, T0), 'invalid');
+  rejects(() => run(game, { type: 'barnCow', cowId: 'nope', in: true, at: T0 }, T0), 'not-found');
+  rejects(() => run(game, { type: 'barnCow', cowId: 'cow_f', in: false, at: T0 }, T0), 'invalid'); // อยู่ข้างนอกแล้ว
+  run(game, { type: 'barnCow', cowId: 'cow_f', in: true, at: T0 + H }, T0 + H);
+  assert.ok(inBarn(findCow(game.farm, 'cow_f')));
+  rejects(() => run(game, { type: 'barnCow', cowId: 'cow_f', in: true, at: T0 + H }, T0 + H), 'invalid'); // อยู่ในโรงนาแล้ว
+  const t = T0 + 2 * H;
+  rejects(() => run(game, { type: 'breedCow', cowId: 'cow_f', bullId: 'cow_m', at: t }, t), 'invalid');
+  run(game, { type: 'barnCow', cowId: 'cow_f', in: false, at: t }, t);
+  assert.equal(findCow(game.farm, 'cow_f').barn, 0);
+
+  // ในโรงนาไม่เล็มหญ้า: วัวหิวในโรงนาความอิ่มไม่เพิ่ม หญ้าไม่ลด
+  const hungry = { ...cow({ id: 'h', satiety: 10 }), barn: 1 };
+  const farm = lushFarm([hungry]);
+  const later = farmAt(farm, T0 + H);
+  assert.ok(findCow(later, 'h').satiety < 10);
+  assert.deepEqual(later.grass.g, farmAt(lushFarm([]), T0 + H).grass.g);
+  assert.equal(grazePatch(farm, 'h'), -1);
+
+  // ลูกที่เกิดในโรงนาอยู่ในโรงนา
+  assert.equal(newCalf({ id: 'k', name: 'ก', sex: 'f' }, { ...dam(), barn: 1 }, T0).barn, 1);
+  assert.equal(applyBarn(dam(), true, T0 + H).at, T0 + H);
+
+  // คอกในโรงนาเต็ม
+  const many = lushFarm(Array.from({ length: F.barnStalls }, (_, i) => ({ ...cow({ id: `b_${i}` }), barn: 1 })).concat([cow({ id: 'out' })]));
+  assert.equal(barnBlock(many, findCow(many, 'out'), true), 'barn-full');
+  assert.equal(barnBlock(many, findCow(many, 'b_0'), false), null);
+
+  // เซฟเสีย: barn แปลก ๆ = ข้างนอก
+  const clean = sanitizeFarm({ cows: [{ ...cow({ id: 'z' }), barn: 'x' }, { ...cow({ id: 'y' }), barn: 1 }] }, T0);
+  assert.deepEqual(clean.cows.map((c) => c.barn), [0, 1]);
 });

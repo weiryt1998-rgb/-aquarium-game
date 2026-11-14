@@ -52,6 +52,7 @@ export class SceneManager {
     this.#createLights();
 
     this.dims = null;
+    this.dimsCenter = null;
     /** จัดกล้องใหม่ตามสถานที่ปัจจุบัน (เรียกเมื่อสัดส่วนจอเปลี่ยนมาก) */
     this.reframe = null;
     this.home = { position: new THREE.Vector3(), target: new THREE.Vector3() };
@@ -140,6 +141,7 @@ export class SceneManager {
   /** ตั้งกล้องให้เห็นตู้ทั้งตู้ (มุมมองหลัก) */
   frameTank(dims, { immediate = true } = {}) {
     this.dims = dims;
+    this.dimsCenter = null;
     this.reframe = () => this.frameTank(dims);
     this.controls.minAzimuthAngle = -1.0;
     this.controls.maxAzimuthAngle = 1.0;
@@ -171,12 +173,14 @@ export class SceneManager {
   /**
    * ตั้งกล้องสำหรับพื้นที่กลางแจ้ง (ฟาร์ม) — view = {
    *   position, target: THREE.Vector3   มุมมองหลัก
-   *   bounds: { w, h, d }              ขอบเขตที่จุดหมุนกล้องเลื่อนไปได้ (กึ่งกลางที่จุดกำเนิด)
+   *   bounds: { w, h, d }              ขอบเขตที่จุดหมุนกล้องเลื่อนไปได้ (กึ่งกลางที่ center หรือจุดกำเนิด)
+   *   center?: THREE.Vector3           กึ่งกลางของ bounds (เช่น ในโรงนา)
    *   minDistance, maxDistance, maxPolar, azimuth: [min, max] (ไม่ระบุ = หมุนรอบได้ 360°)
    * }
    */
   frameArea(view, { immediate = true } = {}) {
     this.dims = view.bounds;
+    this.dimsCenter = view.center ?? null;
     this.reframe = () => this.frameArea(view);
     this.home.position.copy(view.position);
     this.home.target.copy(view.target);
@@ -249,9 +253,11 @@ export class SceneManager {
     }
     if (this.dims) {
       const t = this.controls.target;
-      t.x = clamp(t.x, -this.dims.w / 2, this.dims.w / 2);
+      const cx = this.dimsCenter?.x ?? 0;
+      const cz = this.dimsCenter?.z ?? 0;
+      t.x = clamp(t.x, cx - this.dims.w / 2, cx + this.dims.w / 2);
       t.y = clamp(t.y, 0, this.dims.h);
-      t.z = clamp(t.z, -this.dims.d / 2, this.dims.d / 2);
+      t.z = clamp(t.z, cz - this.dims.d / 2, cz + this.dims.d / 2);
     }
     this.controls.enabled = !this.tween;
     this.controls.update();

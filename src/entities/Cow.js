@@ -217,7 +217,61 @@ export class Cow {
      *          onDone: ((ok: boolean) => void) | null, side?: number, hasClip?: boolean, actLeft?: number, dist?: number } | null}
      */
     this.mating = null;
+    /** เดินตามเส้นทาง (เข้า/ออกโรงนา) { points, i, onDone } · null = เดินเล่นตามปกติ */
+    this.route = null;
+    /** คอกในโรงนาที่ยืนประจำ { x, z, heading } · null = อยู่ในคอกหญ้าข้างนอก */
+    this.stall = null;
     if (this.mixer) this.#playClip(STATE.graze, 0);
+  }
+
+  /**
+   * เดินตามจุด points ไปเรื่อย ๆ (ไม่ชนอะไร — จุดต้องเลี่ยงรั้ว/ผนังเอง) แล้วเรียก onDone()
+   * นอนอยู่ = ลุกก่อน · ยกเลิกฉากผสมพันธุ์ · ระหว่างทางไม่เล็มหญ้า/ไม่ดื่มน้ำ
+   * @param {THREE.Vector3[]} points
+   * @param {(() => void) | null} [onDone]
+   */
+  travel(points, onDone = null) {
+    if (this.dead || !points.length) return;
+    if (this.mating) this.#endMate(false);
+    this.route = { points, i: 0, onDone };
+    if (this.state === STATE.lie) this.#getUp();
+    else this.#nextLeg();
+  }
+
+  get traveling() {
+    return !!this.route;
+  }
+
+  /** ยืนประจำคอกในโรงนา (null = กลับไปเดินเล่นในคอกหญ้า area) */
+  setStall(stall) {
+    this.stall = stall;
+  }
+
+  /** วางที่คอกในโรงนาทันที หันหน้าเข้ารางหญ้า (ตอนเริ่มฉาก) */
+  placeInStall(stall) {
+    this.stall = stall;
+    this.route = null;
+    this.group.position.set(stall.x, 0, stall.z);
+    this.group.rotation.y = stall.heading;
+    this.#decide(STATE.idle);
+  }
+
+  #nextLeg() {
+    const r = this.route;
+    this.state = STATE.walk;
+    this.goal = 'route';
+    this.stateTime = Infinity;
+    this.target.copy(r.points[r.i]);
+  }
+
+  /** ถึงจุดหนึ่งในเส้นทาง → ไปจุดต่อไป / จบเส้นทาง */
+  #legDone() {
+    const r = this.route;
+    if (++r.i < r.points.length) return this.#nextLeg();
+    this.route = null;
+    this.goal = null;
+    this.#decide(this.stall ? STATE.idle : STATE.graze);
+    r.onDone?.();
   }
 
   get canDrink() {
@@ -335,7 +389,7 @@ export class Cow {
 
   /** เพิ่งได้ฟาง → ก้มกินหญ้าสักพัก (นอนอยู่ = ลุกขึ้นมากินก่อน) */
   eat() {
-    if (this.mating) return; // ฉากผสมพันธุ์จบแล้วค่อยกิน (ค่าในเซฟอิ่มแล้วอยู่ดี)
+    if (this.mating || this.route) return; // ฉากผสมพันธุ์จบแล้วค่อยกิน (ค่าในเซฟอิ่มแล้วอยู่ดี)
     if (this.state === STATE.lie) return this.#getUp({ state: STATE.graze, time: 10 });
     this.#decide(STATE.graze);
     this.stateTime = 10;
@@ -343,7 +397,7 @@ export class Cow {
 
   /** ระหว่างรีดนม → ยืนนิ่ง (นอนอยู่ = นอนต่อ อยู่นิ่งอยู่แล้ว) */
   stand() {
-    if (this.state === STATE.lie || this.mating) return;
+    if (this.state === STATE.lie || this.mating || this.route) return;
     this.#decide(STATE.idle);
     this.stateTime = 5;
     this.speed = 0;
@@ -618,13 +672,24 @@ export class Cow {
       const dx = this.target.x - g.position.x;
       const dz = this.target.z - g.position.z;
       const dist = Math.hypot(dx, dz);
-      if (dist < 0.3) this.goal === 'trough' ? this.#startDrink() : this.#decide(STATE.graze);
-      else {
+      const onRoute = this.goal === 'route';
+      if (dist < (onRoute && this.route.i < this.route.points.length - 1 ? 0.6 : 0.3)) {
+        if (onRoute) this.#legDone();
+        else if (this.goal === 'trough') this.#startDrink();
+        else this.#decide(STATE.graze);
+      } else {
         const heading = Math.atan2(dx, dz);
-        g.rotation.y += clamp(angleDelta(g.rotation.y, heading), -1.2 * dt, 1.2 * dt);
+        const off = angleDelta(g.rotation.y, heading);
+        g.rotation.y += clamp(off, -1.2 * dt, 1.2 * dt);
         const hungry = (this.status?.satiety ?? 100) < 20;
-        wantSpeed = (hungry ? 0.35 : 0.6) * clamp(dist, 0, 1);
+        // ตามเส้นทาง: เดินเร็วขึ้นหน่อย แต่ชะลอตอนต้องเลี้ยวมาก (ไม่ให้วนรอบจุดหรือเฉียดผนัง)
+        wantSpeed = onRoute ? 0.9 * clamp(dist, 0.4, 1) * clamp(1 - Math.abs(off) / 1.6, 0.2, 1) : (hungry ? 0.35 : 0.6) * clamp(dist, 0, 1);
       }
+    } else if (this.stall) {
+      // ในคอกโรงนา: หันหน้าเข้ารางหญ้าชิดผนัง
+      const off = angleDelta(g.rotation.y, this.stall.heading);
+      g.rotation.y += clamp(off, -1.2 * dt, 1.2 * dt);
+      facing = Math.abs(off) < 0.3;
     }
     this.speed = damp(this.speed, wantSpeed, 3, dt);
     g.position.x += Math.sin(g.rotation.y) * this.speed * dt;
@@ -651,6 +716,15 @@ export class Cow {
 
   #decide(force) {
     this.goal = null;
+    if (this.route) return this.#nextLeg();
+    if (this.stall) {
+      // ในโรงนา: ไม่เดินไปไหน — กินฟางในราง / ยืนพัก / นอน
+      const r = this.rnd();
+      if (!force && this.canLie && r < 0.15) return this.#lieDown();
+      this.state = force && force !== STATE.walk ? force : r < 0.6 ? STATE.graze : STATE.idle;
+      this.stateTime = 5 + this.rnd() * 9;
+      return;
+    }
     if (!force && this.mixer) {
       const r = this.rnd();
       if (this.canLie && r < 0.1) return this.#lieDown();
@@ -720,6 +794,7 @@ export class Cow {
       const next = this.after;
       this.liePhase = null;
       this.after = null;
+      if (this.route) return this.#nextLeg();
       this.#decide(next?.state ?? STATE.idle);
       if (next?.time) this.stateTime = next.time;
     }

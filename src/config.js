@@ -149,6 +149,8 @@ export const CONFIG = {
    */
   farm: {
     maxCows: 6,
+    /** คอกในโรงนา (shared/farm.js barnBlock) — ต้องตรงกับจำนวนคอกในโมเดล (Fish/farm/build_barn.py STALLS / world/Farm.js BARN_STALLS) */
+    barnStalls: 6,
     /** ฟางให้วัว: ซื้อแล้วให้ทันที เพิ่มความอิ่ม hayAmount% · ให้ได้เมื่ออิ่มไม่ถึง fullAbove% */
     hayPrice: { coins: 15 },
     hayAmount: 60,

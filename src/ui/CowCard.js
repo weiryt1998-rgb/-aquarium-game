@@ -2,13 +2,13 @@ import { ICONS } from './icons.js';
 import { collectRefs, priceHtml } from './helpers.js';
 import { CONFIG } from '../config.js';
 import { getCowBreed } from '../data/animals.js';
-import { breedNow, canBreed, dueAt, grownAt, isBull, isCalf, isCowDead, isPregnant, milkValue } from '../shared/farm.js';
+import { breedNow, canBreed, dueAt, grownAt, inBarn, isBull, isCalf, isCowDead, isPregnant, milkValue } from '../shared/farm.js';
 import { escapeHtml, formatDuration } from '../utils/math.js';
 
 /**
  * การ์ดวัว 1 ตัว (แตะวัวในคอก หรือปุ่ม "ดู" ในหน้าต่างฟาร์ม) — กรอบเดียวกับการ์ดทานตะวัน ไม่บังคอกตรงกลาง
  * แสดงเพศ ♀/♂ ความอิ่ม สุขภาพ นมในเต้า (ตัวผู้ไม่มี) + เวลาที่เหลือ · ตั้งท้อง/ครบกำหนดคลอด
- * เพศ/ผสมพันธุ์มีเฉพาะสายพันธุ์ canBreed (บราห์มัน) · ปุ่มให้ฟาง / รีดนม (ตัวเมีย) / ผสมพันธุ์ (แม่วัวโตแล้วไม่ได้ท้อง — FarmSystem เลือกพ่อพันธุ์ให้) หรือคลอดลูก (ท้องอยู่) / ขาย (กดยืนยันอีกครั้ง)
+ * ปุ่มเข้าโรงนา/ปล่อยออกคอก (FarmSystem.toggleBarn) · เพศ/ผสมพันธุ์มีเฉพาะสายพันธุ์ canBreed (บราห์มัน) · ปุ่มให้ฟาง / รีดนม (ตัวเมีย) / ผสมพันธุ์ (แม่วัวโตแล้วไม่ได้ท้อง — FarmSystem เลือกพ่อพันธุ์ให้) หรือคลอดลูก (ท้องอยู่) / ขาย (กดยืนยันอีกครั้ง)
  */
 export class CowCard {
   constructor(ui, root) {
@@ -34,6 +34,8 @@ export class CowCard {
           return;
         }
         farm.sell(this.cowId);
+      } else if (action === 'barn') {
+        if (farm.toggleBarn(this.cowId)) this.update();
       } else if (action === 'breed' || action === 'birth') {
         if (farm[action](this.cowId)) this.update();
       } else if (farm.act(action, this.cowId)) this.update();
@@ -75,6 +77,7 @@ export class CowCard {
         <button class="btn" data-action="feed" data-ref="feedBtn">🌾<span>ให้ฟาง</span>${priceHtml(f.hayPrice)}</button>
         ${bull ? '' : '<button class="btn" data-action="milk" data-ref="milkBtn">🥛<span>รีดนม</span><span class="price reward" data-ref="milkValue"></span></button>'}
         ${bull ? '' : '<button class="btn" data-action="breed" data-ref="mateBtn"><b data-ref="mateIcon">💕</b><span data-ref="mateLabel">ผสมพันธุ์</span></button>'}
+        <button class="btn" data-action="barn" data-ref="barnBtn"><b data-ref="barnIcon">🏚️</b><span data-ref="barnLabel">เข้าโรงนา</span></button>
         <button class="btn" data-action="sell" data-ref="sellBtn">💰<span data-ref="sellLabel">ขาย</span><span class="price" data-ref="sellValue"></span></button>
       </div>
       <div class="gc-hint" data-ref="hint"></div>`
@@ -151,6 +154,7 @@ export class CowCard {
       notes.push(`🥛 นมเต็มเต้าในอีก ${formatDuration(((100 - s.milk) / rate) * 3600)}`);
     } else if (s.milk >= 100) notes.push('🥛 นมเต็มเต้าแล้ว');
     if (s.health < 40) notes.push('🤒 ป่วย ผลิตนมได้น้อยลง');
+    if (inBarn(s)) notes.push('🏚️ พักในโรงนา — ไม่ได้เล็มหญ้า ต้องให้ฟางเอง');
     r.meta.textContent = notes.join(' · ');
 
     if (!bull) r.milkValue.textContent = `+${milkValue(s)}`;
@@ -185,6 +189,12 @@ export class CowCard {
       btn.title = block && block !== 'not-ready' ? farm.blockText(block, action) : '';
       if (block && !young && sexed && block !== 'not-ready') hints.push(farm.blockText(block, action));
     }
+    const housed = inBarn(s);
+    r.barnIcon.textContent = housed ? '🌿' : '🏚️';
+    r.barnLabel.textContent = housed ? 'ปล่อยออกคอก' : 'เข้าโรงนา';
+    const barnBlock = farm.barnBlockOf(this.cowId, !housed);
+    r.barnBtn.disabled = !!barnBlock;
+    r.barnBtn.title = barnBlock ? farm.blockText(barnBlock) : housed ? 'ปล่อยออกไปเล็มหญ้าในคอก' : 'พาเข้าไปพักในคอกในโรงนา';
     r.hint.textContent = this.confirmSell ? `กดอีกครั้งเพื่อขาย "${s.name}" ได้ ${refund} เหรียญ` : (hints[0] ?? '');
   }
 }

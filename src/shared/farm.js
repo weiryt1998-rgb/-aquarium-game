@@ -33,7 +33,9 @@ import { cleanName, isId, isNum } from './economy.js';
  * ครบ gestationHours ชม. ผู้เล่นกดให้คลอด (birthCalf) → ลูกวัวสายพันธุ์ตัวเต็มวัยของแม่ (born) โตครบใน growHours ชม.
  * การตั้งท้องไม่มีผลอื่นกับการจำลอง (ยังให้นมตามปกติ)
  *
- * คำสั่งเซฟกลาง (shared/commands.js): buyCow · feedCow · milkCow · sellCow · waterGrass · breedCow · birthCalf — ตรวจด้วยฟังก์ชันชุดนี้ทั้งในเครื่องและฝั่งตรวจ
+ * โรงนา (barn = 1): วัวพักในคอกของโรงนา ไม่เล็มหญ้าในคอกนอก (ต้องให้ฟางเอง) · ผสมพันธุ์ไม่ได้จนกว่าจะปล่อยออก · ลูกที่เกิดในโรงนาอยู่โรงนาด้วย
+ *
+ * คำสั่งเซฟกลาง (shared/commands.js): buyCow · feedCow · milkCow · sellCow · waterGrass · breedCow · birthCalf · barnCow — ตรวจด้วยฟังก์ชันชุดนี้ทั้งในเครื่องและฝั่งตรวจ
  * firestore.rules ตรวจรูปแบบ game.farm (validFarm) ให้ตรงกับ COW_KEYS / MAX_COW_RECORDS / GRASS_KEYS
  */
 
@@ -47,7 +49,7 @@ const SLACK = 2;
 /** เผื่อเวลา (ms) ของฝั่งตรวจสำหรับเงื่อนไขที่ขึ้นกับเวลา (ครบกำหนดคลอด / พ้นช่วงพัก) — แบบเดียวกับเก็บเมล็ดทานตะวัน */
 const TIME_SLACK_MS = 3000;
 
-export const COW_KEYS = ['id', 'breedId', 'name', 'boughtAt', 'at', 'satiety', 'health', 'milk', 'sex', 'preg', 'bredAt', 'born'];
+export const COW_KEYS = ['id', 'breedId', 'name', 'boughtAt', 'at', 'satiety', 'health', 'milk', 'sex', 'preg', 'bredAt', 'born', 'barn'];
 /** จำนวนวัวในเซฟสูงสุด (รวมตัวที่ตายแล้วแต่ยังไม่ได้นำออก) — ต้องตรงกับ validFarm ใน firestore.rules */
 export const MAX_COW_RECORDS = 8;
 
@@ -58,12 +60,14 @@ export const findCow = (farm, id) => farm?.cows?.find((c) => c.id === id) ?? nul
 
 /** วัวตัวใหม่ (ซื้อ: born = 0 · เกิดในฟาร์ม: born = เวลาเกิด) */
 export function newCow({ id, breedId, name, sex = 'f' }, now, { born = 0 } = {}) {
-  return { id, breedId, name, sex, boughtAt: now, at: now, satiety: 80, health: 100, milk: 0, preg: 0, bredAt: 0, born };
+  return { id, breedId, name, sex, boughtAt: now, at: now, satiety: 80, health: 100, milk: 0, preg: 0, bredAt: 0, born, barn: 0 };
 }
 
 export const isCowDead = (c) => !!c && c.health <= 0;
 /** พ่อพันธุ์ (record ที่ไม่มี sex = แม่วัว) */
 export const isBull = (c) => c?.sex === 'm';
+/** อยู่ในโรงนา (ไม่ใช่คอกหญ้าข้างนอก) */
+export const inBarn = (c) => c?.barn === 1;
 
 /**
  * ลูกวัว: โตเต็มวัยตามเวลาจริง (ไม่ต้องเก็บค่าเพิ่มในเซฟ)
@@ -183,7 +187,7 @@ export function pickPatch(g, cowId) {
 /** แปลงที่วัว (สถานะจาก farmAt) กำลังเล็มอยู่ — -1 = อิ่มแล้ว/ตาย/หญ้าหมด (ฉาก 3 มิติให้เดินเล่นตามปกติ) */
 export function grazePatch(farm, cowId) {
   const c = findCow(farm, cowId);
-  if (!c || isCowDead(c) || c.satiety >= CONFIG.farm.grass.grazeBelow || !farm.grass) return -1;
+  if (!c || isCowDead(c) || inBarn(c) || c.satiety >= CONFIG.farm.grass.grazeBelow || !farm.grass) return -1;
   return pickPatch(farm.grass.g, c.id);
 }
 
@@ -243,7 +247,7 @@ export function farmAt(farm, now) {
     const field = t >= grass.at ? grass : null; // เซฟเก่า: ก่อนมีหญ้าเล็มไม่ได้
     for (const c of alive) {
       if (t1 <= c.at || c.health <= 0) continue;
-      stepCow(c, breeds.get(c.id), (t1 - Math.max(t, c.at)) / HOUR, field, noMilk(c, t));
+      stepCow(c, breeds.get(c.id), (t1 - Math.max(t, c.at)) / HOUR, inBarn(c) ? null : field, noMilk(c, t));
     }
     t = t1;
   }
@@ -331,6 +335,7 @@ export function breedBlock(cow, bull, now, { strict = true } = {}) {
   if (isBull(cow)) return 'not-female';
   if (!isBull(bull)) return 'not-male';
   if (isCalf(cow, now) || isCalf(bull, now)) return 'young';
+  if (inBarn(cow) || inBarn(bull)) return 'in-barn';
   if (isPregnant(cow)) return 'pregnant';
   const rested = (c) => !(c.bredAt > 0) || now - c.bredAt >= b.cooldownHours * HOUR - (strict ? 0 : TIME_SLACK_MS);
   if (!rested(cow) || !rested(bull)) return 'cooldown';
@@ -360,7 +365,24 @@ export function birthBlock(farm, cow, now, { strict = true } = {}) {
 
 /** ลูกวัวที่เกิดจากแม่ mother ที่เวลา t: สายพันธุ์ตัวเต็มวัยของแม่ · born = t */
 export function newCalf({ id, name, sex }, mother, t) {
-  return { ...newCow({ id, breedId: adultBreedOf(mother).id, name, sex }, t, { born: t }), satiety: 80 };
+  return { ...newCow({ id, breedId: adultBreedOf(mother).id, name, sex }, t, { born: t }), satiety: 80, barn: inBarn(mother) ? 1 : 0 };
+}
+
+/**
+ * พาวัวเข้าโรงนา (into = true) / ปล่อยออกคอกหญ้า → null = ได้ / รหัสเหตุผล
+ * not-found · dead · already (อยู่ที่นั่นแล้ว) · barn-full (คอกในโรงนาเต็ม — CONFIG.farm.barnStalls)
+ */
+export function barnBlock(farm, cow, into) {
+  if (!cow) return 'not-found';
+  if (isCowDead(cow)) return 'dead';
+  if (inBarn(cow) === !!into) return 'already';
+  if (into && (farm?.cows ?? []).filter((c) => inBarn(c) && !isCowDead(c)).length >= CONFIG.farm.barnStalls) return 'barn-full';
+  return null;
+}
+
+/** ผลของการย้ายวัวเข้า/ออกโรงนาที่เวลา t (ผ่าน barnBlock แล้ว) */
+export function applyBarn(cow, into, t) {
+  return { ...cow, at: t, barn: into ? 1 : 0 };
 }
 
 /** แม่วัวหลังคลอดที่เวลา t (หายท้อง · ช่วงพักนับจาก bredAt ตามเดิม) */
@@ -400,6 +422,7 @@ export function sanitizeFarm(raw, now) {
       preg: c.sex === 'm' ? 0 : time(c.preg),
       bredAt: time(c.bredAt),
       born: time(c.born),
+      barn: c.barn === 1 ? 1 : 0,
     });
     if (cows.length >= MAX_COW_RECORDS) break;
   }

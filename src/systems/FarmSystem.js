@@ -1,16 +1,19 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
-import { Farm, COW_AREA, FARM_MODELS, TROUGH } from '../world/Farm.js';
+import { Farm, BARN_ROUTE, BARN_STALLS, COW_AREA, FARM_MODELS, TROUGH } from '../world/Farm.js';
 import { Cow, COW_MODEL } from '../entities/Cow.js';
+import { Farmer, FARMER_MODEL, FARMER_NAME } from '../entities/Farmer.js';
 import { COW_BREEDS, getCowBreed } from '../data/animals.js';
 import {
   COW_NAMES,
   PATCH_D,
   PATCH_W,
   adultBreedOf,
+  applyBarn,
   applyBirth,
   applyBreed,
   applyCowAction,
+  barnBlock,
   birthBlock,
   breedBlock,
   buyCowBlock,
@@ -23,6 +26,7 @@ import {
   grassBlock,
   grassOf,
   grazePatch,
+  inBarn,
   isBull,
   isCalf,
   isCowDead,
@@ -60,6 +64,9 @@ const BLOCK_TEXT = {
   cooldown: `เพิ่งผสมพันธุ์ไป ต้องพักให้ครบ ${BREEDING.cooldownHours} ชม. ก่อน`,
   weak: `ต้องสุขภาพอย่างน้อย ${BREEDING.minHealth}% และอิ่มอย่างน้อย ${BREEDING.minSatiety}% ทั้งแม่วัวและพ่อพันธุ์`,
   'not-pregnant': 'วัวตัวนี้ไม่ได้ตั้งท้อง',
+  'in-barn': 'แม่วัวหรือพ่อพันธุ์พักอยู่ในโรงนา — ปล่อยออกคอกก่อนจึงผสมพันธุ์ได้',
+  'barn-full': `คอกในโรงนาเต็มแล้ว (${CONFIG.farm.barnStalls} คอก)`,
+  already: 'วัวอยู่ที่นั่นแล้ว',
   invalid: 'ทำไม่ได้ตอนนี้',
 };
 /** ข้อความเฉพาะการกระทำ (รหัสเดียวกันแต่ความหมายต่างกัน) */
@@ -71,6 +78,14 @@ const ACTION_TEXT = {
     'remove-dead': 'นำวัวที่ตายแล้วออกจากคอกก่อน จึงจะคลอดลูกได้',
   },
 };
+/** ตาเหมพูดเมื่อทุกอย่างเรียบร้อย */
+const FARMER_CHAT = [
+  'วัวอิ่มกันทุกตัว ลุงชื่นใจจริง ๆ',
+  'อากาศดีนะวันนี้ หญ้าในคอกเขียวดี',
+  'วัวพื้นเมืองเลี้ยงง่าย ทนแดดทนฝน ลุงเลี้ยงมาตั้งแต่หนุ่ม ๆ',
+  'ถ้าจะให้วัวพักในโรงนา อย่าลืมให้ฟางด้วยนะ ในนั้นไม่มีหญ้า',
+  'รีดนมตอนเต้าเต็ม ๆ จะได้เหรียญเยอะกว่านะหลาน',
+];
 /** ขนาดตัวตามเพศ (ตัวผู้ตัวโตกว่าเล็กน้อย) — เฉพาะสายพันธุ์ที่มีเพศ (canBreed) ที่เหลือขนาดเดิม */
 const SEX_SCALE = { m: 1.06, f: 0.97 };
 /** ลูกวัวที่มีไฟล์ของตัวเองแต่ไฟล์ยังโหลดไม่ได้ → ย่อโมเดลตัวโตเท่านี้แทน */
@@ -85,6 +100,10 @@ const CALF_FALLBACK_SCALE = 0.55;
  *   (ตัวเมียยืนนิ่ง ตัวผู้เดินมาด้านหลังแล้วเล่นคลิป Mount มีหัวใจลอย — entities/Cow.js holdStill / mate)
  * - คลอดลูก (birth): ครบกำหนดแล้วผู้เล่นกดเอง → ลูกวัวเพศสุ่มเกิดข้างแม่ โตเต็มวัยตามเวลาจริง
  * - หน้าตา: ตัวผู้ใหญ่กว่าตัวเมียเล็กน้อย · ลูกวัวใช้ adultBreedOf(c).young (ไฟล์ของตัวเอง หรือย่อโมเดลตัวโต)
+ * - โรงนา (barnCow): วัวเดินจากคอกหญ้าผ่านช่องรั้วหลังเข้าคอกในโรงนา (จองคอกให้ตัวละคอก) · แตะประตูโรงนา = กล้องเข้าไปข้างใน
+ *   ประตูบานเลื่อนเปิดเองตอนกล้องอยู่ข้างในหรือมีวัวกำลังเดินเข้า/ออก
+ * - ตาเหม (entities/Farmer.js) คนเลี้ยงวัว: เดินเล่นในคอก · ผู้เล่นให้ฟาง/รีดนม/ทำคลอดตัวไหน ตาเหมเดินไปข้างวัวตัวนั้นแล้วก้มลูบ
+ *   (วัวในโรงนา = เดินผ่านช่องรั้วหลังเข้าโรงนา แล้วเดินกลับออกมา) · แตะตาเหม = บอกว่าวัวตัวไหนต้องการอะไร
  * - เตือนผู้เล่นเมื่อวัวหิว นมเต็ม ป่วย ตาย หรือครบกำหนดคลอด (ครั้งเดียวต่อการเปลี่ยนสถานะ)
  */
 export class FarmSystem {
@@ -102,6 +121,12 @@ export class FarmSystem {
     this.modelsRequested = false;
     /** สถานะที่แจ้งไปแล้วของวัวแต่ละตัว (null = ยังไม่เคยดู → ครั้งแรกไม่แจ้งการเปลี่ยนแปลง) */
     this.flags = null;
+    /** วัว id → ลำดับคอกในโรงนา (BARN_STALLS) ที่จองไว้ระหว่างเล่น */
+    this.stalls = new Map();
+    /** กล้องอยู่ในโรงนา */
+    this.inBarnView = false;
+    /** @type {Farmer | null} ตาเหม (สร้างเมื่อโหลดโมเดลเสร็จ) */
+    this.farmer = null;
     this.greeted = false;
     this.welcomed = false;
     this.status = this.current();
@@ -149,6 +174,7 @@ export class FarmSystem {
     this.active = true;
     this.#refresh();
     sceneMgr.showScene(this.world.scene);
+    this.#setBarnView(false);
     sceneMgr.frameArea(this.world.view);
     this.#loadModels();
     if (!this.herd.length && !this.welcomed) {
@@ -159,6 +185,170 @@ export class FarmSystem {
 
   leave() {
     this.active = false;
+    this.#setBarnView(false);
+  }
+
+  // ── โรงนา ───────────────────────────────────────────────────
+
+  /** กล้องเข้าไปในโรงนา (แตะประตูโรงนา / ปุ่ม "โรงนา") — ประตูเลื่อนเปิดเอง */
+  enterBarn() {
+    if (!this.world || !this.active || this.inBarnView) return;
+    this.game.ui.cowCard.hide();
+    this.game.sound.play('click');
+    this.#setBarnView(true);
+    this.game.sceneMgr.frameArea(this.world.barnView, { immediate: false });
+    const inside = this.herd.filter((c) => inBarn(c)).length;
+    this.game.ui.toast(inside ? `🏚️ ในโรงนามีวัว ${inside} ตัว — แตะวัวเพื่อดูแล` : '🏚️ โรงนายังว่าง — เปิดการ์ดวัวแล้วกด "เข้าโรงนา" เพื่อพาวัวมาพัก');
+  }
+
+  /** ออกจากโรงนา: กล้องกลับมุมคอกหญ้า */
+  leaveBarn() {
+    if (!this.world || !this.inBarnView) return;
+    this.game.sound.play('click');
+    this.game.ui.cowCard.hide();
+    this.#setBarnView(false);
+    this.game.sceneMgr.frameArea(this.world.view, { immediate: false });
+  }
+
+  #setBarnView(on) {
+    this.inBarnView = on;
+    if (this.world) this.world.barnInside = on ? 1 : 0;
+    this.game.ui.root.classList.toggle('in-barn', on);
+  }
+
+  /** เหตุผลที่พาวัวเข้า (into = true) / ออกโรงนาไม่ได้ (null = ได้) */
+  barnBlockOf(cowId, into) {
+    return barnBlock(this.status, this.cowStatus(cowId), into);
+  }
+
+  /** สลับ: อยู่ข้างนอก → พาเข้าโรงนา · อยู่ในโรงนา → ปล่อยออกคอกหญ้า (ฟรี) */
+  toggleBarn(cowId) {
+    const game = this.game;
+    const now = Date.now();
+    const settled = farmAt(this.record, now);
+    const rec = findCow(settled, cowId);
+    const into = !inBarn(rec);
+    const block = barnBlock(settled, rec, into);
+    if (block) return this.#denied(this.blockText(block));
+    Object.assign(rec, applyBarn(rec, into, now));
+    game.state.data.farm = settled;
+    game.state.record({ type: 'barnCow', cowId, in: into });
+    game.sound.play('click');
+    game.ui.toast(
+      into ? `🏚️ พา "${rec.name}" เข้าโรงนาแล้ว — ในโรงนาไม่มีหญ้าให้เล็ม อย่าลืมให้ฟางนะ` : `🌿 ปล่อย "${rec.name}" ออกไปเล็มหญ้าในคอกแล้ว`,
+      'success',
+    );
+    this.#refresh();
+    game.state.save();
+    return true;
+  }
+
+  /** ตำแหน่งนี้อยู่ในโรงนา (เลยประตูเข้าไปแล้ว) */
+  #insideBarn(p) {
+    return p.z < BARN_ROUTE[2].z - 0.4;
+  }
+
+  /**
+   * ตาเหมเดินไปข้างวัว cowId แล้วก้มลูบ: วัวในคอกหญ้า = ยืนข้างลำตัวฝั่งที่ใกล้ (ตามวัวที่ยังเดินอยู่)
+   * วัวในโรงนา = เดินผ่านช่องรั้วหลัง/ประตูโรงนาไปยืนในทางเดินหน้าคอกนั้น ลูบเสร็จเดินกลับออกมาที่คอกหญ้า
+   */
+  #sendFarmer(cowId) {
+    const f = this.farmer;
+    const cow = this.cows.get(cowId);
+    if (!f || !cow || !this.active || cow.dead) return;
+    const V = (x, z) => new THREE.Vector3(x, 0, z);
+    const p = f.position;
+    const inBarnNow = this.#insideBarn(p);
+    const inPen = p.z > BARN_ROUTE[0].z - 0.3;
+    const out = () => [...BARN_ROUTE].reverse().map((q) => q.clone());
+    const pts = [];
+    if (cow.stall) {
+      const st = cow.stall;
+      if (inBarnNow) pts.push(V(0, Math.min(p.z, BARN_ROUTE[3].z)));
+      else pts.push(...BARN_ROUTE.filter((q) => inPen || q.z < p.z - 0.3).map((q) => q.clone()));
+      pts.push(V(0, st.z), V(Math.sign(st.x) * 1.45, st.z));
+      // ลูบเสร็จ: เดินกลับออกไปที่คอกหญ้า (ถ้ายังไม่มีงานใหม่)
+      f.visit(pts, () => cow.group.position, () => {
+        if (!f.traveling && this.#insideBarn(f.position)) f.walk([V(0, Math.min(f.position.z, BARN_ROUTE[3].z)), ...out(), V(1.5, -3)]);
+      });
+      return;
+    }
+    if (inBarnNow) pts.push(V(0, Math.min(p.z, BARN_ROUTE[3].z)), ...out());
+    else if (!inPen) pts.push(...out().filter((q) => q.z > p.z + 0.3));
+    // ยืนข้างลำตัวฝั่งที่ใกล้ตาเหม (เลือกครั้งเดียว) ห่างกลางตัววัว ~1.1 ม. × ขนาดวัว · ไม่ออกนอกรั้ว
+    const g = cow.group;
+    const right = () => new THREE.Vector3(Math.cos(g.rotation.y), 0, -Math.sin(g.rotation.y));
+    const side = Math.sign(right().dot(p.clone().sub(g.position))) || 1;
+    const lim = { x: COW_AREA.maxX + 0.9, z: COW_AREA.maxZ + 0.9 };
+    pts.push(() => {
+      const q = g.position.clone().addScaledVector(right(), side * 1.1 * g.scale.x);
+      q.x = THREE.MathUtils.clamp(q.x, -lim.x, lim.x);
+      q.z = THREE.MathUtils.clamp(q.z, -lim.z, lim.z);
+      return q;
+    });
+    f.visit(pts, () => g.position);
+  }
+
+  /** แตะตาเหม: บอกเรื่องที่ควรทำตอนนี้ (เรียงตามความด่วน) */
+  #talk() {
+    const f = CONFIG.farm;
+    this.game.sound.play('click');
+    const alive = this.herd.filter((c) => !isCowDead(c));
+    const dead = this.herd.filter((c) => isCowDead(c));
+    const names = (list) => list.slice(0, 2).map((c) => `"${c.name}"`).join(' กับ ') + (list.length > 2 ? ` และอีก ${list.length - 2} ตัว` : '');
+    const due = alive.filter((c) => this.isDue(c));
+    const hungry = alive.filter((c) => c.satiety < f.hungryBelow);
+    const full = alive.filter((c) => !isBull(c) && c.milk >= f.milkFullAbove);
+    const grass = this.grass.g.reduce((a, b) => a + b, 0) / this.grass.g.length;
+    let msg;
+    if (!this.herd.length) msg = 'คอกยังว่างอยู่เลยหลาน ไปซื้อวัวมาสักตัวสิ เดี๋ยวลุงช่วยดูแลให้';
+    else if (dead.length) msg = `${names(dead)} ไม่ไหวแล้ว… นำออกจากคอกเถอะ แล้วหมั่นให้ฟางตัวอื่นด้วยนะ`;
+    else if (due.length) msg = `${names(due)} ครบกำหนดคลอดแล้ว! แตะที่แม่วัวแล้วกดคลอดลูกได้เลย`;
+    else if (hungry.length) msg = `${names(hungry)} หิวแล้ว${hungry.some(inBarn) ? ' (ตัวที่อยู่ในโรงนาไม่มีหญ้ากินนะ)' : ''} ให้ฟางหน่อยเถอะ`;
+    else if (full.length) msg = `นมของ${names(full)} เต็มเต้าแล้ว มารีดได้เลย`;
+    else if (grass < 30) msg = 'หญ้าในคอกเหลือน้อยแล้ว แตะพื้นในคอกรดน้ำหน่อย หญ้าจะได้งอกขึ้นมาใหม่';
+    else msg = pick(FARMER_CHAT);
+    this.game.ui.toast(`👴 ${FARMER_NAME}: ${msg}`);
+  }
+
+  /** คอกในโรงนาของวัวตัวนี้ (จองไว้ตลอดที่อยู่ในโรงนา) · null = เต็ม */
+  #stallFor(id) {
+    if (!this.stalls.has(id)) {
+      const used = new Set(this.stalls.values());
+      const free = BARN_STALLS.findIndex((_, i) => !used.has(i));
+      if (free < 0) return null;
+      this.stalls.set(id, free);
+    }
+    return BARN_STALLS[this.stalls.get(id)];
+  }
+
+  /**
+   * ให้วัวในฉากเดินไปอยู่ที่ใหม่ตามเซฟ: เข้า = คอกหญ้า → ช่องรั้วหลัง → ประตูโรงนา → ทางเดินกลาง → คอกของตัวเอง
+   * ออก = ย้อนทางเดิม แล้วเดินเข้ากลางคอกหญ้า · กำลังเดินอยู่กลางทาง = เริ่มจากจุดที่ยังไม่ผ่าน
+   */
+  #walkCow(cow, id, into) {
+    const p = cow.group.position;
+    const V = (x, z) => new THREE.Vector3(x, 0, z);
+    const insideBarn = p.z < BARN_ROUTE[2].z - 0.4;
+    const inPen = p.z > BARN_ROUTE[0].z - 0.3;
+    if (into) {
+      const stall = this.#stallFor(id);
+      if (!stall) return;
+      cow.setStall(stall);
+      // จุดบนเส้นทางที่ยังอยู่ข้างหน้า (เส้นทางเรียง z จากมากไปน้อย)
+      const ahead = insideBarn ? [V(0, Math.min(p.z, BARN_ROUTE[3].z))] : BARN_ROUTE.filter((q) => inPen || q.z < p.z - 0.3).map((q) => q.clone());
+      cow.travel([...ahead, V(0, stall.z), V(stall.x, stall.z)]);
+      return;
+    }
+    this.stalls.delete(id);
+    cow.setStall(null);
+    if (inPen) return;
+    const back = [...BARN_ROUTE].reverse().map((q) => q.clone());
+    const ahead = insideBarn ? [V(0, Math.min(p.z, back[0].z)), ...back] : back.filter((q) => q.z > p.z + 0.3);
+    const a = COW_AREA;
+    const r = cow.rnd;
+    ahead.push(V(THREE.MathUtils.lerp(a.minX * 0.5, a.maxX * 0.5, r()), THREE.MathUtils.lerp(a.minZ + 1, 0, r())));
+    cow.travel(ahead);
   }
 
   /** โหลดโมเดลจริงของฟาร์มเบื้องหลัง — ระหว่างรอเห็นโมเดลชั่วคราว แล้วสลับเมื่อเสร็จ */
@@ -167,9 +357,13 @@ export class FarmSystem {
     this.modelsRequested = true;
     const assets = this.game.assets;
     const cowFiles = [...new Set([COW_MODEL, ...COW_BREEDS.flatMap((b) => [b.model?.file, b.young?.file]).filter(Boolean)])];
-    await assets.preload([...Object.values(FARM_MODELS), ...cowFiles]);
+    await assets.preload([...Object.values(FARM_MODELS), ...cowFiles, FARMER_MODEL]);
     const got = (url) => assets.models.get(url) ?? null;
     this.world.useModels(Object.fromEntries(Object.entries(FARM_MODELS).map(([k, url]) => [k, got(url)])));
+    if (got(FARMER_MODEL) && !this.farmer) {
+      this.farmer = new Farmer(assets.instantiate(got(FARMER_MODEL)), COW_AREA);
+      this.world.animals.add(this.farmer.group);
+    }
     for (const url of cowFiles) if (got(url)) this.cowGltfs.set(url, got(url));
     if (!this.cowGltfs.size) return;
     const loader = new THREE.TextureLoader();
@@ -221,7 +415,9 @@ export class FarmSystem {
     let best = null;
     let bestD = Infinity;
     for (const cow of this.cows.values()) {
-      if (!cow.pick(ray)) continue;
+      // ในโรงนาแตะได้เฉพาะวัวในโรงนา · ข้างนอกแตะได้เฉพาะวัวที่มองเห็น (ไม่ทะลุผนังโรงนา)
+      const housed = !!cow.stall && !cow.traveling;
+      if (housed !== this.inBarnView || !cow.pick(ray)) continue;
       const d = ray.origin.distanceTo(cow.group.position);
       if (d < bestD) {
         bestD = d;
@@ -229,7 +425,10 @@ export class FarmSystem {
       }
     }
     if (best) return best;
-    return this.world.pickDoor(ray) ? 'door' : null;
+    const f = this.farmer;
+    if (f && this.#insideBarn(f.position) === this.inBarnView && f.pick(ray)) return 'farmer';
+    if (this.inBarnView) return null;
+    return this.world.pickDoor(ray) ? 'door' : this.world.pickBarnDoor(ray) ? 'barn' : null;
   }
 
   handleTap(ray) {
@@ -237,6 +436,15 @@ export class FarmSystem {
     const game = this.game;
     if (hit === 'door') {
       game.goTo('home');
+      return;
+    }
+    if (hit === 'barn') {
+      this.enterBarn();
+      return;
+    }
+    if (hit === 'farmer') {
+      game.ui.cowCard.hide();
+      this.#talk();
       return;
     }
     if (!hit) {
@@ -257,6 +465,22 @@ export class FarmSystem {
     const cow = this.cows.get(cowId);
     if (!cow) return;
     const p = cow.group.position;
+    if (cow.stall && !cow.traveling) {
+      // วัวในโรงนา: กล้องเข้าไปยืนในทางเดินกลางหน้าคอกนั้น
+      if (!this.inBarnView) {
+        this.#setBarnView(true);
+        this.game.sceneMgr.frameArea(this.world.barnView, { immediate: false });
+      }
+      // จุดหมุนต้องอยู่ในทางเดินกลาง (barnView.bounds) → เล็งไปขอบทางเดินฝั่งคอกนั้น กล้องยืนเฉียงอีกฝั่ง วัวอยู่ในแนวสายตาพอดี
+      const side = Math.sign(p.x - this.world.barnView.center.x) || 1;
+      const cx = this.world.barnView.center.x;
+      this.game.sceneMgr.flyTo(new THREE.Vector3(cx - side * 1.2, 2.6, p.z + 2.1), new THREE.Vector3(cx + side * 1.0, 1, p.z));
+      return;
+    }
+    if (this.inBarnView) {
+      this.#setBarnView(false);
+      this.game.sceneMgr.frameArea(this.world.view, { immediate: false });
+    }
     const view = this.world.view;
     const offset = view.position.clone().sub(view.target).setLength(7);
     this.game.sceneMgr.flyTo(new THREE.Vector3(p.x, 1, p.z).add(offset), new THREE.Vector3(p.x, 0.9, p.z));
@@ -286,7 +510,7 @@ export class FarmSystem {
     const cow = findCow(farm, cowId);
     if (!cow) return { bull: null, block: 'not-found' };
     // ตรวจฝั่งแม่วัวก่อน (เทียบกับพ่อพันธุ์สมมุติที่พร้อมทุกอย่าง) — ข้อความจะได้บอกปัญหาของแม่วัวเอง
-    const ideal = { ...cow, id: '', sex: 'm', breedId: adultBreedOf(cow)?.id ?? cow.breedId, born: 0, boughtAt: 0, health: 100, satiety: 100, bredAt: 0, preg: 0 };
+    const ideal = { ...cow, id: '', barn: 0, sex: 'm', breedId: adultBreedOf(cow)?.id ?? cow.breedId, born: 0, boughtAt: 0, health: 100, satiety: 100, bredAt: 0, preg: 0 };
     const own = breedBlock(cow, ideal, now);
     if (own) return { bull: null, block: own };
     const at = this.cows.get(cowId)?.group.position;
@@ -369,7 +593,7 @@ export class FarmSystem {
     // ลูกวัวเกิดข้างแม่ หันทางเดียวกัน
     const mom3d = this.cows.get(cowId);
     const calf3d = this.cows.get(calfId);
-    if (mom3d && calf3d) {
+    if (mom3d && calf3d && !inBarn(mother)) {
       const g = mom3d.group;
       const side = Math.random() < 0.5 ? -1 : 1;
       calf3d.group.position.set(
@@ -383,6 +607,7 @@ export class FarmSystem {
     }
     game.state.save();
     if (this.active) this.focus(cowId);
+    this.#sendFarmer(cowId);
     return true;
   }
 
@@ -437,6 +662,7 @@ export class FarmSystem {
       game.ui.toast(`🥛 รีดนม "${rec.name}" ได้ ${reward.coins} เหรียญ`, 'success');
     }
     this.#refresh();
+    this.#sendFarmer(cowId);
     game.state.save();
     return true;
   }
@@ -514,7 +740,12 @@ export class FarmSystem {
 
   update(dt, time) {
     if (this.active) {
+      // ประตูโรงนาเปิดเมื่อกล้องอยู่ข้างใน หรือมีวัวกำลังเดินเข้า/ออก
+      const f = this.farmer;
+      const farmerAtDoor = !!f?.traveling && Math.abs(f.position.z - BARN_ROUTE[2].z) < 4;
+      this.world.setBarnDoors(this.inBarnView || farmerAtDoor || [...this.cows.values()].some((c) => c.traveling));
       this.world.update(dt, time);
+      f?.update(dt, time);
       for (const cow of this.cows.values()) cow.update(dt, time, this.game.sceneMgr.camera);
     }
     this.timer -= dt;
@@ -542,11 +773,21 @@ export class FarmSystem {
       if (cow && cow.young !== young && this.cowGltfs.size) {
         this.world.animals.remove(cow.group);
         const { position, rotation } = cow.group;
+        const { stall, route, housed } = cow;
         cow = this.#spawnCow(s, breed, young);
         cow.group.position.copy(position);
         cow.group.rotation.y = rotation.y;
+        cow.housed = housed;
+        cow.setStall(stall);
+        if (route) cow.travel(route.points.slice(route.i), route.onDone);
       }
-      if (!cow) cow = this.#spawnCow(s, breed, young);
+      const housed = inBarn(s);
+      if (!cow) {
+        cow = this.#spawnCow(s, breed, young);
+        const stall = housed ? this.#stallFor(s.id) : null;
+        if (stall) cow.placeInStall(stall);
+      } else if (cow.housed !== housed && !isCowDead(s)) this.#walkCow(cow, s.id, housed);
+      cow.housed = housed;
       cow.show(s);
       cow.setBadge(
         isCowDead(s)
@@ -566,6 +807,7 @@ export class FarmSystem {
       if (alive.has(id)) continue;
       this.world.animals.remove(cow.group);
       this.cows.delete(id);
+      this.stalls.delete(id);
     }
   }
 

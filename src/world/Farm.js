@@ -11,11 +11,22 @@ export const FARM_MODELS = {
   fence: 'models/farm/fence.glb',
   treeA: 'models/farm/tree_a.glb',
   treeB: 'models/farm/tree_b.glb',
+  /** ต้นไม้ใหญ่ให้ร่มเงา (จาก Meshy · Fish/farm/meshy_import.blend) ปลูกไม่กี่ต้นรอบคอก — ดู SHADE_TREES */
+  treeC: 'models/farm/tree_c.glb',
   decor: 'models/farm/decor.glb',
 };
 /** บ้าน: หันหน้า (ระเบียง/ประตู) ไปทางคอก · ประตูอยู่บนแนวทางเดินดิน z = 10.5 */
 const HOUSE_AT = { x: -23.2, z: 10.5, rotY: Math.PI / 2 };
-const BARN_AT = { x: 0, z: -16 };
+/** โรงนา (Fish/farm/build_barn.py): กว้าง 11 × ลึก 12 ม. ประตูหน้ากว้าง 3.6 ม. หันเข้าคอกที่ z = −10 */
+export const BARN_AT = { x: 0, z: -16 };
+const BARN_FRONT = BARN_AT.z + 6;
+/** ช่องประตูรั้วด้านหลังคอก (ครึ่งความกว้าง) — ทางวัวเดินไปโรงนา */
+const GATE_HALF = 1.6;
+/**
+ * คอกในโรงนา 6 คอก (ตำแหน่งยืนของวัวในฉาก + มุมหันหน้าเข้ารางหญ้าชิดผนัง)
+ * ต้องตรงกับ STALLS ใน Fish/farm/build_barn.py (Blender x, y → ฉาก x, BARN_AT.z − y) และ CONFIG.farm.barnStalls
+ */
+export const BARN_STALLS = [-3.1, -0.1, 2.9].flatMap((y) => [-1, 1].map((s) => ({ x: BARN_AT.x + s * 3.4, z: BARN_AT.z - y, heading: (s * Math.PI) / 2 })));
 
 /**
  * ฉากนอกบ้าน: ทุ่งหญ้าหลังบ้าน — คอกวัวล้อมรั้ว, โรงนา, รางอาหาร, กองฟาง, ประตูบ้าน (แตะเพื่อกลับเข้าบ้าน), ต้นไม้ เนินเขา เมฆ
@@ -32,8 +43,26 @@ const BARN_AT = { x: 0, z: -16 };
 export const PASTURE = { minX: -11, maxX: 11, minZ: -8, maxZ: 8 };
 /** พื้นที่ที่วัวเดินได้ (เว้นจากรั้ว) */
 export const COW_AREA = { minX: PASTURE.minX + 1.5, maxX: PASTURE.maxX - 1.5, minZ: PASTURE.minZ + 1.5, maxZ: PASTURE.maxZ - 1.5 };
+/** จุดผ่านระหว่างคอกหญ้ากับโรงนา (เรียงจากในคอก → ในโรงนา): หน้าช่องรั้วหลัง · ช่องรั้ว · หน้าประตูโรงนา · ในโรงนา */
+export const BARN_ROUTE = [
+  new THREE.Vector3(0, 0, PASTURE.minZ + 1.8),
+  new THREE.Vector3(0, 0, PASTURE.minZ),
+  new THREE.Vector3(0, 0, BARN_FRONT + 0.8),
+  new THREE.Vector3(0, 0, BARN_FRONT - 1.4),
+];
 /** รางน้ำในคอก (กลางราง x, z · กว้างตามแกน X · ลึกตามแกน Z) — วัวที่มีท่ากินน้ำเดินมายืนฝั่ง +Z แล้วก้มดื่ม */
 export const TROUGH = { x: 6, z: -5, width: 2.6, depth: 0.8 };
+
+/** ต้นไม้ใหญ่ให้ร่มเงา (treeC ~14k สามเหลี่ยม สูง 6.5 ม. ในไฟล์) — วางมือที่ที่โล่ง ไม่บังกล้อง ทางเดิน บ่อ บ้าน โรงนา · [x, z, ขนาด, มุมหมุน] */
+const SHADE_TREES = [
+  [16, 4, 1.0, 0.4],
+  [15, -7, 0.9, 2.1],
+  [-17, -12, 1.05, 4.0],
+  [13, -18, 0.95, 5.3],
+];
+
+/** ความสว่างไฟในโรงนาตอนเปิดเต็มที่ */
+const BARN_LIGHT = 26;
 
 const COLORS = {
   sky: '#a9d8f5',
@@ -91,6 +120,30 @@ export class Farm {
     /** กลุ่มของวัว (FarmSystem เพิ่ม/ลบวัวที่นี่) */
     this.animals = new THREE.Group();
     scene.add(this.animals);
+
+    // โรงนา: ประตูบานเลื่อน (จากไฟล์) · จุดแตะประตู · ไฟอุ่นข้างใน (เปิดเมื่อประตูเปิด/กล้องอยู่ข้างใน)
+    /** @type {{ node: THREE.Object3D, dir: number, x0: number }[]} */
+    this.barnDoors = [];
+    this.barnDoorsOpen = 0;
+    this.barnDoorsWant = 0;
+    /** 0..1 = กล้องอยู่ในโรงนา (FarmSystem ตั้ง) */
+    this.barnInside = 0;
+    this.barnDoorHit = new THREE.Sphere(new THREE.Vector3(BARN_AT.x, 1.8, BARN_FRONT), 2.1);
+    this.barnLight = new THREE.PointLight('#ffd9a0', 0, 16, 1.4);
+    this.barnLight.position.set(BARN_AT.x, 3.4, BARN_AT.z);
+    scene.add(this.barnLight);
+
+    /** มุมกล้องในโรงนา: ยืนในทางเดินกลางหลังประตู มองเข้าไปทางคอก (หมุน/ซูมได้ไม่ทะลุผนัง) */
+    this.barnView = {
+      position: new THREE.Vector3(BARN_AT.x, 2.6, BARN_FRONT - 1.4),
+      target: new THREE.Vector3(BARN_AT.x, 1.1, BARN_FRONT - 4.8),
+      center: new THREE.Vector3(BARN_AT.x, 0, BARN_AT.z),
+      // จุดหมุนเลื่อนได้แค่ในทางเดินกลาง · ระยะกล้องไม่เกิน 3.8 ม. → หมุนรอบแล้วไม่ทะลุผนังข้าง (ผนังในห่างกลาง 5.3 ม.)
+      bounds: { w: 2, h: 3, d: 9 },
+      minDistance: 1,
+      maxDistance: 3.8,
+      maxPolar: 1.5,
+    };
 
     /** มุมกล้องหลักของฟาร์ม (SceneManager.frameArea) */
     this.view = {
@@ -166,7 +219,7 @@ export class Farm {
         const t1 = (i + 1) / n;
         const a = [ax + (bx - ax) * t0, az + (bz - az) * t0];
         const b = [ax + (bx - ax) * t1, az + (bz - az) * t1];
-        if (az === maxZ && bz === maxZ && Math.abs((a[0] + b[0]) / 2) < 1.6) continue; // ช่องประตูคอก
+        if (az === bz && (az === maxZ || az === minZ) && Math.abs((a[0] + b[0]) / 2) < GATE_HALF) continue; // ช่องประตูคอก (หน้า) · ทางไปโรงนา (หลัง)
         segs.push({ a, b });
       }
     };
@@ -181,7 +234,7 @@ export class Farm {
     const g = this.#group('fence');
     const { minX, maxX, minZ, maxZ } = PASTURE;
     const posts = [];
-    const gate = (x, z) => z === maxZ && Math.abs(x) < 1.6; // ช่องประตูคอกด้านหน้า
+    const gate = (x, z) => (z === maxZ || z === minZ) && Math.abs(x) < GATE_HALF; // ช่องประตูคอกด้านหน้า + ทางไปโรงนาด้านหลัง
     for (let x = minX; x <= maxX + 0.01; x += 2) {
       for (const z of [minZ, maxZ]) if (!gate(x, z)) posts.push([x, z]);
     }
@@ -201,7 +254,8 @@ export class Farm {
     const w = maxX - minX;
     const d = maxZ - minZ;
     const rails = [
-      [0, minZ, w, 0],
+      [(minX - GATE_HALF) / 2, minZ, -GATE_HALF - minX, 0],
+      [(maxX + GATE_HALF) / 2, minZ, maxX - GATE_HALF, 0],
       [minX, 0, d, Math.PI / 2],
       [maxX, 0, d, Math.PI / 2],
       [(minX - 1.6) / 2, maxZ, -1.6 - minX, 0],
@@ -220,10 +274,10 @@ export class Farm {
 
   #barn() {
     const barn = new THREE.Group();
-    barn.position.set(0, 0, -15);
-    const W = 10;
-    const H = 4.6;
-    const D = 7;
+    barn.position.set(BARN_AT.x, 0, BARN_AT.z);
+    const W = 11;
+    const H = 4.3;
+    const D = 12;
     const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), std(COLORS.barn));
     body.position.y = H / 2;
     barn.add(body);
@@ -419,6 +473,11 @@ export class Farm {
       const barn = shadowed(gltfs.barn.scene.clone());
       barn.position.set(BARN_AT.x, 0, BARN_AT.z);
       swap('barn', barn);
+      // ประตูบานเลื่อน 2 บาน (โหนดแยกในไฟล์) — setBarnDoors() เลื่อนเปิด/ปิด
+      this.barnDoors = ['BarnDoorL', 'BarnDoorR']
+        .map((name, i) => ({ node: barn.getObjectByName(name), dir: i === 0 ? -1 : 1 }))
+        .filter((d) => d.node)
+        .map((d) => ({ ...d, x0: d.node.position.x }));
     }
     if (gltfs.decor) {
       swap('props', null);
@@ -426,6 +485,17 @@ export class Farm {
     }
     if (gltfs.fence) swap('fence', this.#instancedFence(gltfs.fence));
     if (gltfs.treeA || gltfs.treeB) swap('trees', this.#instancedTrees([gltfs.treeA, gltfs.treeB].filter(Boolean)));
+    if (gltfs.treeC) {
+      const shade = new THREE.Group();
+      for (const [x, z, s, yaw] of SHADE_TREES) {
+        const t = shadowed(gltfs.treeC.scene.clone()); // geometry/วัสดุใช้ร่วมกัน
+        t.position.set(x, 0, z);
+        t.scale.setScalar(s);
+        t.rotation.y = yaw;
+        shade.add(t);
+      }
+      swap('shadeTrees', shade);
+    }
   }
 
   /** mesh ทุกชิ้นในไฟล์ (พร้อม matrix ภายในไฟล์) → ไว้ทำ InstancedMesh */
@@ -497,12 +567,27 @@ export class Farm {
     return group;
   }
 
+  /** แตะโดนประตูโรงนาไหม */
+  pickBarnDoor(ray) {
+    return ray.intersectsSphere(this.barnDoorHit);
+  }
+
+  /** เปิด/ปิดประตูโรงนา (เลื่อนนุ่ม ๆ ใน update) · ไฟในโรงนาสว่างตามประตูที่เปิด */
+  setBarnDoors(open) {
+    this.barnDoorsWant = open ? 1 : 0;
+  }
+
   /** แตะโดนประตูบ้านไหม */
   pickDoor(ray) {
     return ray.intersectsSphere(this.doorHit);
   }
 
   update(dt, time = 0) {
+    const k = 1 - Math.exp(-2.2 * dt);
+    this.barnDoorsOpen += (this.barnDoorsWant - this.barnDoorsOpen) * k;
+    const open = smoothstep(0, 1, this.barnDoorsOpen);
+    for (const d of this.barnDoors) d.node.position.x = d.x0 + d.dir * 1.9 * open;
+    this.barnLight.intensity = BARN_LIGHT * Math.max(open, this.barnInside);
     this.grass.update(dt, time);
     this.decor.update(dt, time);
     for (const c of this.clouds.children) {
