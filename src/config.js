@@ -201,9 +201,15 @@ export const CONFIG = {
   gridSize: 0.25,
 };
 
-/** คุณภาพกราฟิก */
+/**
+ * คุณภาพกราฟิก
+ * textureScale / textureMax = ย่อเท็กซ์เจอร์ของโมเดลตอนโหลด (assets/AssetLoader.js) — หน่วยความจำกราฟิกบนมือถือ/แท็บเล็ตมีจำกัด
+ *   ฟาร์มเต็มคุณภาพใช้เท็กซ์เจอร์ ~345 MB → กลาง ~90 MB · ต่ำ ~65 MB (เกินงบ = เบราว์เซอร์ปิดหน้าเกมทิ้ง "เด้งหลุด")
+ * antialias ตั้งได้ตอนสร้าง renderer เท่านั้น (เปลี่ยนคุณภาพระหว่างเล่น = มีผลหลังเปิดเกมใหม่) — MSAA บนแท็บเล็ตกินหน่วยความจำ ~100 MB จึงเปิดเฉพาะ "สูง"
+ * pixelRatio ต่ำ = 1.5: จอมือถือเล็ก ความละเอียดเพิ่มใช้หน่วยความจำนิดเดียว (ตัวกินหน่วยความจำคือเท็กซ์เจอร์) แต่ภาพคมขึ้นมาก
+ */
 export const QUALITY = {
-  high: { pixelRatio: 2, shadows: true, shadowMapSize: 2048, pebbles: 520, fishDetail: 'high' },
-  medium: { pixelRatio: 1.5, shadows: true, shadowMapSize: 1024, pebbles: 300, fishDetail: 'medium' },
-  low: { pixelRatio: 1, shadows: false, shadowMapSize: 512, pebbles: 120, fishDetail: 'low' },
+  high: { pixelRatio: 2, shadows: true, shadowMapSize: 2048, pebbles: 520, fishDetail: 'high', textureScale: 1, textureMax: 4096, antialias: true },
+  medium: { pixelRatio: 1.5, shadows: true, shadowMapSize: 1024, pebbles: 300, fishDetail: 'medium', textureScale: 0.5, textureMax: 1024, antialias: false },
+  low: { pixelRatio: 1.5, shadows: false, shadowMapSize: 512, pebbles: 120, fishDetail: 'low', textureScale: 0.5, textureMax: 512, antialias: false },
 };

@@ -221,6 +221,11 @@ export class Cow {
     this.route = null;
     /** คอกในโรงนาที่ยืนประจำ { x, z, heading } · null = อยู่ในคอกหญ้าข้างนอก */
     this.stall = null;
+    /**
+     * (heading) => { heading, slow } — ทิศเดินที่อ้อมตัวอื่น (FarmSystem ใส่ให้ · entities/bodySpace.js steer)
+     * @type {((heading: number) => { heading: number, slow: number }) | null}
+     */
+    this.avoid = null;
     if (this.mixer) this.#playClip(STATE.graze, 0);
   }
 
@@ -679,11 +684,14 @@ export class Cow {
         else this.#decide(STATE.graze);
       } else {
         const heading = Math.atan2(dx, dz);
-        const off = angleDelta(g.rotation.y, heading);
+        // มีตัวอื่นขวางทาง: เลี้ยวอ้อม (ใกล้ถึงที่หมายแล้วอ้อมน้อยลง ไม่วนรอบจุด) + ชะลอ/หยุดรอ
+        const av = this.avoid?.(heading) ?? { heading, slow: 1 };
+        const off = angleDelta(g.rotation.y, heading + angleDelta(heading, av.heading) * clamp(dist / 1.5, 0.3, 1));
         g.rotation.y += clamp(off, -1.2 * dt, 1.2 * dt);
         const hungry = (this.status?.satiety ?? 100) < 20;
         // ตามเส้นทาง: เดินเร็วขึ้นหน่อย แต่ชะลอตอนต้องเลี้ยวมาก (ไม่ให้วนรอบจุดหรือเฉียดผนัง)
         wantSpeed = onRoute ? 0.9 * clamp(dist, 0.4, 1) * clamp(1 - Math.abs(off) / 1.6, 0.2, 1) : (hungry ? 0.35 : 0.6) * clamp(dist, 0, 1);
+        wantSpeed *= av.slow;
       }
     } else if (this.stall) {
       // ในคอกโรงนา: หันหน้าเข้ารางหญ้าชิดผนัง

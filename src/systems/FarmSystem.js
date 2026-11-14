@@ -3,6 +3,7 @@ import { CONFIG } from '../config.js';
 import { Farm, BARN_ROUTE, BARN_STALLS, COW_AREA, FARM_MODELS, TROUGH } from '../world/Farm.js';
 import { Cow, COW_MODEL } from '../entities/Cow.js';
 import { Farmer, FARMER_MODEL, FARMER_NAME } from '../entities/Farmer.js';
+import { separate, steer } from '../entities/bodySpace.js';
 import { COW_BREEDS, getCowBreed } from '../data/animals.js';
 import {
   COW_NAMES,
@@ -78,6 +79,9 @@ const ACTION_TEXT = {
     'remove-dead': 'นำวัวที่ตายแล้วออกจากคอกก่อน จึงจะคลอดลูกได้',
   },
 };
+/** ขอบที่ตัวในคอกหญ้าถูกดันไปได้ (ในรั้ว เว้นระยะครึ่งตัว) — กันถูกดันทะลุรั้ว */
+const PEN_BOUNDS = { minX: COW_AREA.minX - 1, maxX: COW_AREA.maxX + 1, minZ: COW_AREA.minZ - 1, maxZ: COW_AREA.maxZ + 1 };
+
 /** ตาเหมพูดเมื่อทุกอย่างเรียบร้อย */
 const FARMER_CHAT = [
   'วัวอิ่มกันทุกตัว ลุงชื่นใจจริง ๆ',
@@ -127,6 +131,8 @@ export class FarmSystem {
     this.inBarnView = false;
     /** @type {Farmer | null} ตาเหม (สร้างเมื่อโหลดโมเดลเสร็จ) */
     this.farmer = null;
+    /** ตัวละครทั้งหมดในฉากสำหรับกันเดินทะลุกัน (entities/bodySpace.js) — สร้างใหม่ทุกเฟรมจากวัวที่มีอยู่ */
+    this.bodies = [];
     this.greeted = false;
     this.welcomed = false;
     this.status = this.current();
@@ -256,6 +262,7 @@ export class FarmSystem {
     const f = this.farmer;
     const cow = this.cows.get(cowId);
     if (!f || !cow || !this.active || cow.dead) return;
+    f.focus = cow;
     const V = (x, z) => new THREE.Vector3(x, 0, z);
     const p = f.position;
     const inBarnNow = this.#insideBarn(p);
@@ -362,6 +369,8 @@ export class FarmSystem {
     this.world.useModels(Object.fromEntries(Object.entries(FARM_MODELS).map(([k, url]) => [k, got(url)])));
     if (got(FARMER_MODEL) && !this.farmer) {
       this.farmer = new Farmer(assets.instantiate(got(FARMER_MODEL)), COW_AREA);
+      this.farmer.body = { group: this.farmer.group, kind: 'person' };
+      this.farmer.avoid = (heading) => steer(this.farmer.body, this.bodies, heading);
       this.world.animals.add(this.farmer.group);
     }
     for (const url of cowFiles) if (got(url)) this.cowGltfs.set(url, got(url));
@@ -745,8 +754,10 @@ export class FarmSystem {
       const farmerAtDoor = !!f?.traveling && Math.abs(f.position.z - BARN_ROUTE[2].z) < 4;
       this.world.setBarnDoors(this.inBarnView || farmerAtDoor || [...this.cows.values()].some((c) => c.traveling));
       this.world.update(dt, time);
-      f?.update(dt, time);
+      this.#updateBodies();
       for (const cow of this.cows.values()) cow.update(dt, time, this.game.sceneMgr.camera);
+      f?.update(dt, time);
+      separate(this.bodies);
     }
     this.timer -= dt;
     if (this.timer > 0) return;
@@ -811,9 +822,36 @@ export class FarmSystem {
     }
   }
 
+  /**
+   * อัปเดตสถานะการชนของทุกตัว: ใครขยับไม่ได้ (นอน/ในคอกโรงนา/ตาย/ผสมพันธุ์/ตาเหมกำลังลูบวัว) · ใครมีสิทธิ์ผ่านก่อน (เดินเข้า-ออกโรงนา)
+   * คู่ผสมพันธุ์ไม่กันกัน · ตาเหมไม่หลบวัวตัวที่เดินไปหา
+   */
+  #updateBodies() {
+    const list = [];
+    for (const cow of this.cows.values()) {
+      const b = (cow.body ??= { group: cow.group, kind: 'cow' });
+      b.group = cow.group;
+      b.fixed = cow.dead || cow.state === 'lie' || cow.isMating || (!!cow.stall && !cow.traveling);
+      b.priority = cow.traveling;
+      b.partner = cow.mating?.partner?.body ?? null;
+      b.bounds = !cow.stall && !cow.traveling ? PEN_BOUNDS : null;
+      list.push(b);
+    }
+    const f = this.farmer;
+    if (f) {
+      const b = f.body;
+      b.fixed = f.state === 'tend';
+      b.partner = f.focus?.body ?? null;
+      b.bounds = !f.traveling && !this.#insideBarn(f.position) ? PEN_BOUNDS : null;
+      list.push(b);
+    }
+    this.bodies = list;
+  }
+
   #spawnCow(s, breed, young) {
     const { model, opts } = this.#cowModel(s, young);
     const cow = new Cow(s, breed, COW_AREA, model, opts);
+    cow.avoid = (heading) => (cow.body ? steer(cow.body, this.bodies, heading) : { heading, slow: 1 });
     cow.young = young;
     cow.grazeSpot = () => this.#grazeSpot(s.id);
     this.cows.set(s.id, cow);

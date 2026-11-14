@@ -17,7 +17,22 @@ export class SceneManager {
     this.canvas = canvas;
     this.settings = settings;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    const startQuality = QUALITY[settings.quality] ?? QUALITY.high;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: startQuality.antialias, powerPreference: 'high-performance' });
+    // เครื่องหน่วยความจำกราฟิกไม่พอ/สลับแอป: เบราว์เซอร์ยึด WebGL context คืน → preventDefault ให้คืนกลับมาได้ (three.js โหลดของขึ้นการ์ดจอใหม่เอง)
+    /** เรียกเมื่อ context หลุด / กลับมา (Game ตั้งให้ — แจ้งผู้เล่น) */
+    this.onContextLost = null;
+    this.onContextRestored = null;
+    this.contextLost = false;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.onContextLost?.();
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.onContextRestored?.();
+    });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;

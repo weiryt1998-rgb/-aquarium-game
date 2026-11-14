@@ -56,7 +56,9 @@ export class Game {
     this.sound = new Sound(this.settings);
 
     this.sceneMgr = new SceneManager(canvas, this.settings);
-    this.assets = new AssetLoader();
+    this.assets = new AssetLoader({ textureRule: () => this.sceneMgr.quality });
+    this.sceneMgr.onContextLost = () => this.ui?.toast('⏳ หน่วยความจำกราฟิกเต็ม กำลังโหลดภาพใหม่…', 'warn');
+    this.sceneMgr.onContextRestored = () => this.ui?.toast('✅ ภาพกลับมาแล้ว', 'success');
     this.models = new ModelFactory(this.assets, { detail: () => this.sceneMgr.quality?.fishDetail ?? 'high' });
     // รูปตัวอย่างใช้ renderer หลัก (ไม่เปิด WebGL context แยก — มือถือหน่วยความจำ GPU ไม่พอแล้วเกมเด้งออก)
     this.thumbs = new Thumbnailer(this.models, this.sceneMgr.renderer);

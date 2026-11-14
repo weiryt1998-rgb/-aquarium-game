@@ -60,6 +60,7 @@ export class SettingsPanel extends Panel {
     const game = this.game;
     if (action === 'quality') {
       game.settings.quality = el.dataset.q;
+      game.settings.qualityChosen = true; // เลือกเองแล้ว ไม่ใช้ค่าตามอุปกรณ์อีก
       game.sceneMgr.applyQuality(el.dataset.q);
       game.reloadTankVisuals();
       game.state.save();

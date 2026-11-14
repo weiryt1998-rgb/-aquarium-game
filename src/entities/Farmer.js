@@ -50,6 +50,10 @@ export class Farmer {
     this.route = null;
     /** หันหน้าเข้าหาจุดนี้ระหว่างก้มลูบวัว */
     this.faceAt = null;
+    /** วัวที่กำลังเดินไปหา (ไม่หลบตัวนี้ — ต้องเข้าไปยืนข้าง ๆ) · FarmSystem ใส่ให้ */
+    this.focus = null;
+    /** @type {((heading: number) => { heading: number, slow: number }) | null} ทิศเดินที่อ้อมวัว (bodySpace.steer) */
+    this.avoid = null;
     this.#play('idle', 0);
   }
 
@@ -100,9 +104,11 @@ export class Farmer {
       const last = !this.route || this.route.i >= this.route.points.length - 1;
       if (dist < (last ? 0.25 : 0.5)) this.#arrived();
       else {
-        const off = angleDelta(g.rotation.y, Math.atan2(dx, dz));
+        const want = Math.atan2(dx, dz);
+        const av = this.avoid?.(want) ?? { heading: want, slow: 1 };
+        const off = angleDelta(g.rotation.y, want + angleDelta(want, av.heading) * clamp(dist / 1.2, 0.3, 1));
         g.rotation.y += clamp(off, -TURN * dt, TURN * dt);
-        wantSpeed = SPEED * clamp(dist / 0.8, 0.35, 1) * clamp(1 - Math.abs(off) / 1.8, 0.15, 1);
+        wantSpeed = SPEED * clamp(dist / 0.8, 0.35, 1) * clamp(1 - Math.abs(off) / 1.8, 0.15, 1) * av.slow;
         if (this.stateTime <= 0 && !this.route) this.#idle(); // เดินเล่นไปไม่ถึงในเวลาที่ให้ → พัก
       }
     } else if (this.state === 'tend') {
@@ -115,6 +121,7 @@ export class Farmer {
         const done = this.route?.onDone;
         this.route = null;
         this.faceAt = null;
+        this.focus = null;
         this.#idle(2 + Math.random() * 2);
         done?.();
       }

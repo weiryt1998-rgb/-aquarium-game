@@ -13,8 +13,16 @@ const isExternal = (url) => /^(https?:)?\/\//.test(url);
  * - โหลดเฉพาะไฟล์ที่มีอยู่จริงใน public/models (ดู vite.config.js) หรือ URL ภายนอก
  * - ถ้าโหลดไม่ได้จะคืน null แล้วเกมจะใช้โมเดลชั่วคราวแทน
  */
+/** ช่องเท็กซ์เจอร์ของวัสดุที่ย่อได้ */
+const TEXTURE_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap'];
+
 export class AssetLoader {
-  constructor() {
+  /**
+   * @param {{ textureRule?: () => ({ textureScale: number, textureMax: number } | null) }} [opts]
+   *        textureRule = ขนาดเท็กซ์เจอร์ตามคุณภาพกราฟิกปัจจุบัน (config.js QUALITY) — ย่อตอนโหลดเท่านั้น
+   */
+  constructor({ textureRule = null } = {}) {
+    this.textureRule = textureRule;
     this.loader = new GLTFLoader();
     // ตัวถอดรหัส Draco ถูก bundle มากับเกม (ไม่ต้องต่ออินเทอร์เน็ต) และโหลดเฉพาะตอนเจอไฟล์ที่บีบอัด
     const draco = new DRACOLoader();
@@ -56,12 +64,34 @@ export class AssetLoader {
       const buffer = await res.arrayBuffer();
       const basePath = full.substring(0, full.lastIndexOf('/') + 1);
       const gltf = await this.loader.parseAsync(buffer, basePath);
+      this.#shrinkTextures(gltf);
       console.info(`[models] โหลดสำเร็จ: ${url}`);
       return gltf;
     } catch (err) {
       console.warn(`[models] โหลด ${url} ไม่สำเร็จ จะใช้โมเดลชั่วคราวแทน`, err);
       return null;
     }
+  }
+
+  /**
+   * ย่อเท็กซ์เจอร์ของโมเดลตามคุณภาพกราฟิก (กลาง/ต่ำ = ครึ่งหนึ่ง ไม่เกิน textureMax · ขนาดเป็นกำลังสองเสมอ)
+   * ทำครั้งเดียวตอนโหลด ก่อนส่งขึ้นการ์ดจอ — หน่วยความจำกราฟิกลดลง ~4 เท่าต่อภาพที่ย่อครึ่ง
+   */
+  #shrinkTextures(gltf) {
+    const rule = this.textureRule?.();
+    if (!rule || typeof document === 'undefined') return;
+    const done = new Set();
+    gltf.scene.traverse((o) => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        for (const slot of TEXTURE_SLOTS) {
+          const tex = m[slot];
+          if (!tex?.isTexture || done.has(tex)) continue;
+          done.add(tex);
+          shrinkTexture(tex, rule);
+        }
+      }
+    });
   }
 
   /** โหลดล่วงหน้าหลายไฟล์ (เฉพาะที่มีอยู่จริง) */
@@ -102,6 +132,35 @@ export class AssetLoader {
     });
     return { scene, animations: gltf.animations ?? [] };
   }
+}
+
+/** ขนาดเป้าหมายของภาพกว้าง size ตามกฎคุณภาพ (กำลังสอง · ไม่ต่ำกว่า 64 · ไม่ขยาย) */
+export function shrunkSize(size, { textureScale = 1, textureMax = Infinity } = {}) {
+  const want = Math.min(size * textureScale, textureMax);
+  if (want >= size) return size;
+  return Math.max(64, Math.min(size, 2 ** Math.floor(Math.log2(Math.max(1, want)))));
+}
+
+/** วาดภาพเท็กซ์เจอร์ลงผืนผ้าใบที่เล็กลง แล้วใช้แทนภาพเดิม (ImageBitmap เดิมปิดทิ้งคืนหน่วยความจำ) */
+function shrinkTexture(tex, rule) {
+  const img = tex.image;
+  const w = img?.width ?? 0;
+  const h = img?.height ?? 0;
+  const drawable = [globalThis.ImageBitmap, globalThis.HTMLImageElement, globalThis.HTMLCanvasElement].some((T) => T && img instanceof T);
+  if (!w || !h || !drawable) return;
+  const tw = shrunkSize(w, rule);
+  const th = shrunkSize(h, rule);
+  if (tw >= w && th >= h) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = tw;
+  canvas.height = th;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, tw, th);
+  img.close?.();
+  tex.image = canvas;
+  tex.needsUpdate = true;
 }
 
 /**
