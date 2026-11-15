@@ -43,6 +43,8 @@ export function loadSettings() {
     // ยังไม่เคยเลือกเอง (รวมเซฟเก่าที่บันทึก 'high' ไว้อัตโนมัติ) = ตามอุปกรณ์
     quality: chosen ? s.quality : deviceQuality(),
     qualityChosen: chosen,
+    /** ตัวละครที่บังคับในฟาร์ม ('man' | 'woman') — อีกตัวเดินทำกิจวัตรเอง */
+    character: s.character === 'woman' ? 'woman' : 'man',
   };
 }
 
@@ -50,7 +52,7 @@ export function saveSettings(settings) {
   try {
     localStorage.setItem(
       KEY,
-      JSON.stringify({ sound: !!settings.sound, ambient: !!settings.ambient, quality: settings.quality, qualityChosen: !!settings.qualityChosen }),
+      JSON.stringify({ sound: !!settings.sound, ambient: !!settings.ambient, quality: settings.quality, qualityChosen: !!settings.qualityChosen, character: settings.character }),
     );
   } catch {
     /* เบราว์เซอร์ไม่ให้เขียน (เช่นโหมดส่วนตัว) — ใช้ค่าในหน่วยความจำต่อ */

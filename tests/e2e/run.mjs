@@ -346,9 +346,9 @@ test('9) บันทึกล้มเหลว (เซิร์ฟเวอร
 
 test('10) สองเครื่องซื้อพร้อมกัน → ได้ของครบทั้งคู่ เงินถูกต้อง และทั้งสองเครื่องเห็นตรงกัน', async () => {
   const before = await cloud();
-  await Promise.all([buyFishUI(A, 'molly_golden'), buyFishUI(B, 'crab')]);
+  await Promise.all([buyFishUI(A, 'molly_golden'), buyFishUI(B, 'molly_redhead')]);
   const after = await waitCloud((d) => d.game.tanks[0].fish.length === before.game.tanks[0].fish.length + 2, 'both purchases');
-  assert.equal(after.game.coins, before.game.coins - 150 - 200);
+  assert.equal(after.game.coins, before.game.coins - 150 - 180);
   await waitFor(async () => (await coinsOf(A)) === after.game.coins && (await coinsOf(B)) === after.game.coins, { message: 'both devices converge' });
   await waitFor(async () => JSON.stringify(await fishIdsOf(A)) === JSON.stringify(cloudFishIds(after)) && JSON.stringify(await fishIdsOf(B)) === JSON.stringify(cloudFishIds(after)), { message: 'fish converge' });
 });

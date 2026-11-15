@@ -3,6 +3,12 @@ import { CONFIG } from '../config.js';
 import { Farm, BARN_ROUTE, BARN_STALLS, COW_AREA, FARM_MODELS, TROUGH } from '../world/Farm.js';
 import { Cow, COW_MODEL } from '../entities/Cow.js';
 import { Farmer, FARMER_MODEL, FARMER_NAME } from '../entities/Farmer.js';
+import { PEOPLE, Person, PERSON_RADIUS } from '../entities/Person.js';
+import { PersonAI } from '../entities/PersonAI.js';
+import { FarmNav } from '../world/farmNav.js';
+import { buildFarmColliders, resolveCollisions, WALK_BOUNDS } from '../world/farmColliders.js';
+import { PlayerInput } from './PlayerInput.js';
+import { saveSettings } from '../core/settings.js';
 import { separate, steer } from '../entities/bodySpace.js';
 import { COW_BREEDS, getCowBreed } from '../data/animals.js';
 import {
@@ -81,6 +87,20 @@ const ACTION_TEXT = {
 };
 /** ขอบที่ตัวในคอกหญ้าถูกดันไปได้ (ในรั้ว เว้นระยะครึ่งตัว) — กันถูกดันทะลุรั้ว */
 const PEN_BOUNDS = { minX: COW_AREA.minX - 1, maxX: COW_AREA.maxX + 1, minZ: COW_AREA.minZ - 1, maxZ: COW_AREA.maxZ + 1 };
+/** จุดเกิดผู้เล่น: บนทางเดินดินหน้าประตูสวนหน้าบ้าน หันไปทางคอก (+X) */
+const PLAYER_SPAWN = { x: -11.4, z: 10.4, heading: Math.PI / 2 };
+/** จุดเริ่มของตัวละครอีกตัว (เดินทำกิจวัตรเอง): ในคอกใกล้ประตูหน้า */
+const COMPANION_SPAWN = { x: 2.2, z: 5.5, heading: -2.4 };
+/** กล้องตามผู้เล่น: ถอยหลัง back ม. สูง up ม. จากระดับอก */
+const PLAYER_CAM = { back: 4.6, up: 2.2 };
+/** ขอบเขตจุดหมุนกล้อง/ระยะซูมตอนตามผู้เล่น (ครอบพื้นที่เดินได้ทั้งหมด) */
+const PLAYER_VIEW = {
+  center: new THREE.Vector3((WALK_BOUNDS.minX + WALK_BOUNDS.maxX) / 2, 0, (WALK_BOUNDS.minZ + WALK_BOUNDS.maxZ) / 2),
+  bounds: { w: WALK_BOUNDS.maxX - WALK_BOUNDS.minX, h: 3, d: WALK_BOUNDS.maxZ - WALK_BOUNDS.minZ },
+  minDistance: 2,
+  maxDistance: 16,
+  maxPolar: 1.45,
+};
 
 /** ตาเหมพูดเมื่อทุกอย่างเรียบร้อย */
 const FARMER_CHAT = [
@@ -131,11 +151,38 @@ export class FarmSystem {
     this.inBarnView = false;
     /** @type {Farmer | null} ตาเหม (สร้างเมื่อโหลดโมเดลเสร็จ) */
     this.farmer = null;
+    /** @type {Record<string, Person>} ตัวละครคนทั้งสอง (สร้างเมื่อโหลดโมเดลเสร็จ) — ผู้เล่นบังคับหนึ่งตัว อีกตัวเดินทำกิจวัตรเอง */
+    this.people = {};
+    /** @type {Record<string, PersonAI>} */
+    this.brains = {};
+    /** @type {FarmNav | null} */
+    this.nav = null;
+    /** @type {PlayerInput | null} */
+    this.input = null;
+    /** สิ่งกีดขวางของผู้เล่น (world/farmColliders.js) */
+    this.colliders = null;
+    /** กล้องกำลังบินกลับมาหาผู้เล่น → ตามติดเมื่อบินถึง */
+    this.camToPlayer = false;
     /** ตัวละครทั้งหมดในฉากสำหรับกันเดินทะลุกัน (entities/bodySpace.js) — สร้างใหม่ทุกเฟรมจากวัวที่มีอยู่ */
     this.bodies = [];
     this.greeted = false;
     this.welcomed = false;
     this.status = this.current();
+  }
+
+  /** ตัวละครที่ผู้เล่นบังคับอยู่ (null = โมเดลยังไม่โหลด) */
+  get player() {
+    return this.people[this.controlled] ?? null;
+  }
+
+  /** key ของตัวที่บังคับ ('man' | 'woman') — จำไว้ในการตั้งค่าของเครื่อง */
+  get controlled() {
+    return this.game.settings?.character === 'woman' ? 'woman' : 'man';
+  }
+
+  /** ตัวละครที่ไม่ได้บังคับ (เดินทำกิจวัตรเอง) */
+  get companion() {
+    return this.people[this.controlled === 'man' ? 'woman' : 'man'] ?? null;
   }
 
   /** ข้อมูลในเซฟ (ไม่มี = ยังไม่เคยซื้อวัว) */
@@ -181,7 +228,10 @@ export class FarmSystem {
     this.#refresh();
     sceneMgr.showScene(this.world.scene);
     this.#setBarnView(false);
-    sceneMgr.frameArea(this.world.view);
+    if (this.player) {
+      this.#spawnPlayer();
+      this.#cameraToPlayer(true);
+    } else sceneMgr.frameArea(this.world.view);
     this.#loadModels();
     if (!this.herd.length && !this.welcomed) {
       this.welcomed = true;
@@ -192,6 +242,106 @@ export class FarmSystem {
   leave() {
     this.active = false;
     this.#setBarnView(false);
+    this.input?.reset();
+    this.camToPlayer = false;
+  }
+
+  // ── ตัวละครผู้เล่น ──────────────────────────────────────────
+
+  /** วางผู้เล่นที่หน้าประตูสวนหน้าบ้าน หันไปทางคอก (ทุกครั้งที่ออกนอกบ้าน) */
+  #spawnPlayer() {
+    this.player?.place(PLAYER_SPAWN.x, PLAYER_SPAWN.z, PLAYER_SPAWN.heading);
+    const c = this.companion;
+    if (c) {
+      c.place(COMPANION_SPAWN.x, COMPANION_SPAWN.z, COMPANION_SPAWN.heading);
+      this.brains[c.key]?.reset(1 + Math.random() * 2);
+    }
+  }
+
+  /** สลับไปบังคับอีกตัว — ตัวเดิมเดินทำกิจวัตรต่อจากที่ยืนอยู่ · กล้องบินไปหาตัวใหม่ */
+  swapCharacter() {
+    const next = this.companion;
+    if (!next || !this.active) return;
+    const prev = this.player;
+    this.game.settings.character = next.key;
+    saveSettings(this.game.settings); // เก็บในเครื่อง (ไม่ใช่เซฟกลาง)
+    next.cancelAct();
+    this.brains[prev.key]?.reset(0.8);
+    prev.body.priority = false;
+    next.body.priority = true;
+    this.input?.reset();
+    this.game.sound.play('click');
+    this.game.ui.cowCard.hide();
+    if (this.inBarnView) this.#setBarnView(false);
+    this.#cameraToPlayer(false);
+    this.game.ui.toast(`${next.def.icon} ตอนนี้บังคับ${next.def.label}แล้ว — ${prev.def.label}จะเดินทำงานในฟาร์มเอง`);
+  }
+
+  /**
+   * กล้องกลับมาตามหลังผู้เล่น: มองจากด้านหลังเฉียงสูง (ตามทิศที่ตัวละครหัน) แล้วตามติด (SceneManager.follow) · ลากจอหมุนรอบตัวได้
+   * immediate = วางทันที (ตอนออกนอกบ้าน) · ไม่งั้นบินไปแล้วค่อยตาม
+   */
+  #cameraToPlayer(immediate) {
+    const p = this.player;
+    if (!p) return;
+    const sm = this.game.sceneMgr;
+    const h = p.group.rotation.y;
+    const at = p.anchor.position.clone();
+    const view = {
+      ...PLAYER_VIEW,
+      target: at,
+      position: at.clone().add(new THREE.Vector3(-Math.sin(h) * PLAYER_CAM.back, PLAYER_CAM.up, -Math.cos(h) * PLAYER_CAM.back)),
+    };
+    sm.frameArea(view, { immediate });
+    // ปรับขนาดจอแล้วไม่ต้องดึงกล้องกลับจุดเกิด (frameArea ตั้ง reframe ไว้) — ตามผู้เล่นต่อจากมุมเดิม
+    sm.reframe = null;
+    if (immediate) {
+      sm.follow(p.anchor);
+      this.camToPlayer = false;
+    } else this.camToPlayer = true;
+  }
+
+  /** มุมกล้องหลักของฟาร์ม: มีผู้เล่น = ตามหลังผู้เล่น · ยังไม่มี = มุมกว้างทั้งคอก */
+  #mainView() {
+    if (this.player) this.#cameraToPlayer(false);
+    else this.game.sceneMgr.frameArea(this.world.view, { immediate: false });
+  }
+
+  /** บอกวิธีเดินครั้งแรกที่มีตัวละคร */
+  #controlsHint() {
+    if (this.hinted) return;
+    this.hinted = true;
+    const touch = window.matchMedia?.('(pointer: coarse)').matches;
+    setTimeout(
+      () =>
+        this.game.ui.toast(
+          touch
+            ? '🚶 ใช้จอยซ้ายล่างเดิน (ดันสุดขอบ = วิ่ง) · ลากจอหมุนกล้อง · แตะอีกคนหรือปุ่ม "สลับตัว" เพื่อเปลี่ยนตัวละคร'
+            : '🚶 เดินด้วย W A S D / ลูกศร · Shift ค้าง = วิ่ง · ลากเมาส์หมุนกล้อง · กด C หรือแตะอีกคนเพื่อสลับตัวละคร',
+        ),
+      900,
+    );
+  }
+
+  #updatePlayer(dt) {
+    const p = this.player;
+    const sm = this.game.sceneMgr;
+    const v = this.input.vector;
+    const moving = Math.hypot(v.x, v.y) > 0.08;
+    // เริ่มเดินระหว่างดูโรงนา/ดูวัวตัวไหนอยู่ → กล้องกลับมาหาผู้เล่น
+    if (moving && this.inBarnView) this.leaveBarn();
+    else if (moving && !sm.tween && sm.followTarget !== p.anchor && !this.camToPlayer) this.#cameraToPlayer(false);
+    if (this.camToPlayer && !sm.tween) {
+      sm.follow(p.anchor);
+      this.camToPlayer = false;
+    }
+    if (moving && this.game.ui.cowCard && !this.game.ui.cowCard.root.classList.contains('hidden')) this.game.ui.cowCard.hide();
+    const cam = sm.camera.position;
+    const t = sm.controls.target;
+    const yaw = Math.atan2(t.x - cam.x, t.z - cam.z);
+    p.drive(dt, v, yaw, this.collide);
+    const c = this.companion;
+    if (c) this.brains[c.key].update(dt);
   }
 
   // ── โรงนา ───────────────────────────────────────────────────
@@ -213,7 +363,7 @@ export class FarmSystem {
     this.game.sound.play('click');
     this.game.ui.cowCard.hide();
     this.#setBarnView(false);
-    this.game.sceneMgr.frameArea(this.world.view, { immediate: false });
+    this.#mainView();
   }
 
   #setBarnView(on) {
@@ -363,8 +513,8 @@ export class FarmSystem {
     if (this.modelsRequested) return;
     this.modelsRequested = true;
     const assets = this.game.assets;
-    const cowFiles = [...new Set([COW_MODEL, ...COW_BREEDS.flatMap((b) => [b.model?.file, b.young?.file]).filter(Boolean)])];
-    await assets.preload([...Object.values(FARM_MODELS), ...cowFiles, FARMER_MODEL]);
+    const cowFiles = [...new Set([COW_MODEL, ...COW_BREEDS.flatMap((b) => [b.model?.file, b.model?.fileMale, b.young?.file]).filter(Boolean)])];
+    await assets.preload([...Object.values(FARM_MODELS), ...cowFiles, FARMER_MODEL, ...Object.values(PEOPLE).map((d) => d.model)]);
     const got = (url) => assets.models.get(url) ?? null;
     this.world.useModels(Object.fromEntries(Object.entries(FARM_MODELS).map(([k, url]) => [k, got(url)])));
     if (got(FARMER_MODEL) && !this.farmer) {
@@ -373,11 +523,34 @@ export class FarmSystem {
       this.farmer.avoid = (heading) => steer(this.farmer.body, this.bodies, heading);
       this.world.animals.add(this.farmer.group);
     }
+    if (!this.player && Object.values(PEOPLE).every((d) => got(d.model))) {
+      this.colliders = buildFarmColliders(this.world);
+      this.collide = (pos) => resolveCollisions(this.colliders, pos, PERSON_RADIUS);
+      this.nav = new FarmNav(this.colliders, PERSON_RADIUS);
+      for (const [key, d] of Object.entries(PEOPLE)) {
+        const person = new Person(assets.instantiate(got(d.model)), key);
+        person.body = { group: person.group, kind: 'person', priority: key === this.controlled };
+        this.people[key] = person;
+        this.brains[key] = new PersonAI(person, {
+          nav: this.nav,
+          collide: this.collide,
+          cows: () => [...this.cows.values()].filter((c) => !c.stall && !c.traveling && !c.dead).map((c) => c.group.position),
+          player: () => this.player,
+          avoid: (heading) => steer(person.body, this.bodies, heading),
+        });
+        this.world.animals.add(person.group);
+      }
+      this.input ??= new PlayerInput(this.game.ui.root, () => this.active && this.game.started && !this.game.ui.modalRoot.classList.contains('open'), () => this.swapCharacter());
+      this.game.ui.root.classList.add('has-player');
+      this.#spawnPlayer();
+      if (this.active && !this.inBarnView) this.#cameraToPlayer(false);
+      if (this.active) this.#controlsHint();
+    }
     for (const url of cowFiles) if (got(url)) this.cowGltfs.set(url, got(url));
     if (!this.cowGltfs.size) return;
     const loader = new THREE.TextureLoader();
     await Promise.all(
-      [...new Set(COW_BREEDS.map((b) => b.skin).filter(Boolean))].map(async (url) => {
+      [...new Set(COW_BREEDS.flatMap((b) => [b.skin, b.young?.skin]).filter(Boolean))].map(async (url) => {
         try {
           const tex = await loader.loadAsync(assets.resolve(url));
           tex.flipY = false; // พิกัด UV แบบ glTF
@@ -405,7 +578,9 @@ export class FarmSystem {
     const adult = adultBreedOf(s) ?? getCowBreed(s.breedId);
     const yv = young ? (adult.young ?? null) : null;
     const calf = yv?.file ? (this.cowGltfs.get(yv.file) ?? null) : null;
-    const own = calf ?? (adult.model?.file ? (this.cowGltfs.get(adult.model.file) ?? null) : null);
+    // ตัวผู้ที่โตแล้วใช้ไฟล์ตัวผู้ของสายพันธุ์ (ถ้ามีและโหลดได้) ไม่งั้นใช้ไฟล์หลัก
+    const male = canBreed(s) && s.sex === 'm' && adult.model?.fileMale ? (this.cowGltfs.get(adult.model.fileMale) ?? null) : null;
+    const own = calf ?? male ?? (adult.model?.file ? (this.cowGltfs.get(adult.model.file) ?? null) : null);
     const gltf = own ?? this.cowGltfs.get(COW_MODEL);
     const size = calf ? (yv.scale ?? 1) : (adult.model?.scale ?? 1) * (yv ? (yv.file ? CALF_FALLBACK_SCALE : (yv.scale ?? 1)) : 1);
     const opts = {
@@ -415,7 +590,9 @@ export class FarmSystem {
     };
     if (!gltf) return { model: null, opts };
     const model = this.game.assets.instantiate(gltf);
-    return { model: { ...model, skin: !own && adult.skin ? (this.skins.get(adult.skin) ?? null) : null }, opts };
+    // ภาพผิว: ลูกวัวที่ใช้ไฟล์ลูกวัวร่วมกัน → young.skin · วัวที่ไม่มีไฟล์ของตัวเอง → breed.skin
+    const skinUrl = calf ? yv.skin : !own ? adult.skin : null;
+    return { model: { ...model, skin: skinUrl ? (this.skins.get(skinUrl) ?? null) : null }, opts };
   }
 
   /** ของที่แตะได้ในฟาร์ม: วัว หรือประตูบ้าน */
@@ -436,6 +613,8 @@ export class FarmSystem {
     if (best) return best;
     const f = this.farmer;
     if (f && this.#insideBarn(f.position) === this.inBarnView && f.pick(ray)) return 'farmer';
+    // แตะตัวละครอีกตัว = สลับไปบังคับตัวนั้น
+    if (this.companion?.pick(ray)) return 'companion';
     if (this.inBarnView) return null;
     return this.world.pickDoor(ray) ? 'door' : this.world.pickBarnDoor(ray) ? 'barn' : null;
   }
@@ -454,6 +633,10 @@ export class FarmSystem {
     if (hit === 'farmer') {
       game.ui.cowCard.hide();
       this.#talk();
+      return;
+    }
+    if (hit === 'companion') {
+      this.swapCharacter();
       return;
     }
     if (!hit) {
@@ -757,6 +940,7 @@ export class FarmSystem {
       this.#updateBodies();
       for (const cow of this.cows.values()) cow.update(dt, time, this.game.sceneMgr.camera);
       f?.update(dt, time);
+      if (this.player) this.#updatePlayer(dt);
       separate(this.bodies);
     }
     this.timer -= dt;
@@ -845,6 +1029,7 @@ export class FarmSystem {
       b.bounds = !f.traveling && !this.#insideBarn(f.position) ? PEN_BOUNDS : null;
       list.push(b);
     }
+    for (const person of Object.values(this.people)) list.push(person.body);
     this.bodies = list;
   }
 

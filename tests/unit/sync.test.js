@@ -153,13 +153,13 @@ test('สองเครื่องซื้อพร้อมกัน: ไม
   const A = device(server, 'a');
   const B = device(server, 'b');
   await settle();
-  const fa = buyFish(A, 'crab');
+  const fa = buyFish(A, 'molly_redhead');
   const fb = buyFish(B, 'molly_golden');
   await Promise.all([A.sync.flushNow(), B.sync.flushNow()]);
   await settle();
   const ids = server.doc.game.tanks[0].fish.map((f) => f.id).sort();
   assert.deepEqual(ids, [fa.id, fb.id].sort());
-  assert.equal(server.doc.game.coins, 1000 - 200 - 150);
+  assert.equal(server.doc.game.coins, 1000 - 180 - 150);
   for (const d of [A, B]) {
     assert.equal(d.state.data.coins, server.doc.game.coins);
     assert.deepEqual(d.state.activeTank.fish.map((f) => f.id).sort(), ids);
@@ -246,14 +246,14 @@ test('คำสั่งที่ยังไม่ส่งไม่หาย�
   const B = device(server, 'b');
   await settle();
   const fa = buyFish(A, 'molly_golden'); // A ยังไม่ส่ง
-  buyFish(B, 'crab');
+  buyFish(B, 'molly_redhead');
   await B.sync.flushNow();
   await settle();
   // A ได้ข้อมูลของ B แล้ว แต่ปลาที่ A เพิ่งซื้อยังอยู่ และเงินคิดรวมทั้งสองการซื้อ
   assert.ok(A.state.activeTank.fish.some((f) => f.id === fa.id));
-  assert.equal(A.state.data.coins, 1000 - 150 - 200);
+  assert.equal(A.state.data.coins, 1000 - 150 - 180);
   await A.sync.flushNow();
-  assert.equal(server.doc.game.coins, 650);
+  assert.equal(server.doc.game.coins, 670);
   assert.equal(server.doc.game.tanks[0].fish.length, 2);
   A.sync.dispose();
   B.sync.dispose();

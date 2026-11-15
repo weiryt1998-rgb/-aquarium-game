@@ -7,8 +7,10 @@
  * look = สีของโมเดลชั่วคราว (entities/Cow.js) · model.scale = ขนาดเทียบวัวโฮลสไตน์
  * skin = ภาพผิวแทนลายในไฟล์โมเดล (ใช้ mesh/ท่าทางของ models/farm/cow.glb)
  * model.file = ไฟล์โมเดลของสายพันธุ์นั้นเอง (มีโครงกระดูก/ท่าทางของตัวเอง เช่นบราห์มัน: Walk Graze Drink LieDown Lie StandUp Idle)
+ * model.fileMale = ไฟล์โมเดลตัวผู้ (ไม่มี = ใช้ model.file ทั้งสองเพศ) — ใช้กับสายพันธุ์ canBreed ที่โตแล้ว
  * young = หน้าตาตอนเป็นลูกวัวของสายพันธุ์ตัวเต็มวัย (ใช้กับลูกวัวที่เกิดในฟาร์ม และสายพันธุ์ลูกวัวที่ซื้อซึ่งโตเป็นสายพันธุ์นี้ — ดู shared/farm.js adultBreedOf):
- *   { file?, scale, drinkReach, walkClipSpeed } — ไม่มี file = ใช้โมเดลตัวเต็มวัยย่อขนาดตาม scale · มี file = โมเดลลูกวัวโดยเฉพาะ (ขนาดลูกวัวในไฟล์อยู่แล้ว)
+ *   { file?, skin?, scale, drinkReach, walkClipSpeed } — ไม่มี file = ใช้โมเดลตัวเต็มวัยย่อขนาดตาม scale · มี file = โมเดลลูกวัวโดยเฉพาะ (ขนาดลูกวัวในไฟล์อยู่แล้ว)
+ *   skin = ภาพผิวแทนสีในไฟล์ลูกวัว (ใช้โมเดลลูกวัวไฟล์เดียวกันได้หลายสายพันธุ์ เช่นลูกวัวขาวลำพูน)
  * calf = สายพันธุ์ลูกวัวที่ขายในร้าน: { growsInto, growHours } — โตตามเวลาจริงนับจากวันซื้อ (shared/farm.js isCalf) · หน้าตาใช้ young ของ growsInto
  * canBreed = มีเพศผู้/เมียและผสมพันธุ์ได้ (ตอนนี้เฉพาะบราห์มัน — โฮลสไตน์/เจอร์ซีย์ยังเป็นโมเดลชั่วคราว ซื้อได้แต่ตัวเมีย)
  */
@@ -41,12 +43,13 @@ export const COW_BREEDS = [
   {
     id: 'brahman',
     name: 'วัวบราห์มัน',
-    description: 'บราห์มันเลือด 100% ตัวโต มีโหนก ทนร้อน นมน้อยแต่ราคาดี ชอบเดินไปกินน้ำที่รางและลงนอนพัก',
-    price: { coins: 2500 },
+    description: 'บราห์มันแดงเลือด 100% ขนสีแดงอิฐ หูยาวตก มีโหนก ทนร้อน นมน้อยแต่ราคาดี ชอบเดินไปกินน้ำที่รางและลงนอนพัก',
+    price: { coins: 3000 },
     milkPerHour: 9,
     milkReward: { coins: 300 },
-    look: { base: '#c9c6c0', patch: null, nose: '#1b1a1a', horn: '#3a3734' },
-    model: { scale: 1, file: 'models/farm/brahman.glb' },
+    look: { base: '#c26a35', patch: null, nose: '#2a1d18', horn: '#5a4a3e' },
+    // ตัวเมีย = brahman.glb (มีเต้านม) · ตัวผู้ = brahman_bull.glb (หนอกใหญ่ หุ้มลึงค์ ไม่มีเต้านม) — โครงกระดูก/คลิปชุดเดียวกัน
+    model: { scale: 1, file: 'models/farm/brahman.glb', fileMale: 'models/farm/brahman_bull.glb' },
     young: { file: 'models/farm/brahman_calf.glb', scale: 1, drinkReach: 0.72, walkClipSpeed: 0.4 },
     canBreed: true,
   },
@@ -59,7 +62,8 @@ export const COW_BREEDS = [
     milkReward: { coins: 160 },
     look: { base: '#9a7a62', patch: null, nose: '#2a2220', horn: '#d9c9a8' },
     model: { scale: 1, file: 'models/farm/cow_brown.glb' },
-    young: { scale: 0.55, drinkReach: 0.7, walkClipSpeed: 0.32 },
+    // ลูกวัวพื้นเมืองมีเขา (Meshy → Fish/farm/build_calf_red.py) ใช้ร่วมกับวัวขาวลำพูน
+    young: { file: 'models/farm/cow_calf.glb', scale: 1, drinkReach: 0.7, walkClipSpeed: 0.4 },
   },
   {
     id: 'lamphun_white',
@@ -70,7 +74,7 @@ export const COW_BREEDS = [
     milkReward: { coins: 240 },
     look: { base: '#ece9e2', patch: null, nose: '#2c2a28', horn: '#4a4038' },
     model: { scale: 1, file: 'models/farm/cow_white.glb' },
-    young: { scale: 0.55, drinkReach: 0.7, walkClipSpeed: 0.32 },
+    young: { file: 'models/farm/cow_calf.glb', skin: 'models/farm/cow_calf_white.webp', scale: 1, drinkReach: 0.7, walkClipSpeed: 0.4 },
   },
   {
     id: 'brahman_calf',
@@ -79,7 +83,7 @@ export const COW_BREEDS = [
     price: { coins: 1200 },
     milkPerHour: 9,
     milkReward: { coins: 300 },
-    look: { base: '#ddd7cb', patch: null, nose: '#262222', horn: '#3a3734' },
+    look: { base: '#cf7f4c', patch: null, nose: '#2a1d18', horn: '#5a4a3e' },
     model: { scale: 1, file: 'models/farm/brahman.glb' },
     /** โตเป็น growsInto เมื่ออยู่ฟาร์มครบ growHours ชม. · ระหว่างนั้นใช้หน้าตา young ของ growsInto (brahman.young) */
     calf: { growsInto: 'brahman', growHours: 48 },

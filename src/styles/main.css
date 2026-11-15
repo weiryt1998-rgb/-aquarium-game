@@ -2808,3 +2808,60 @@ input:checked + .switch::after {
     top: 60px;
   }
 }
+
+/* ───────────────────────── จอยสติ๊กเดิน (ฟาร์ม · จอสัมผัส) ───────────────────────── */
+/* แสดงเมื่อ: อยู่นอกบ้าน + มีตัวละครแล้ว (.has-player) + ไม่ได้อยู่ในโรงนา + อุปกรณ์จอสัมผัส · ซ่อนตอนเปิดการ์ดวัว (บนมือถือการ์ดอยู่มุมเดียวกัน) */
+.player-stick {
+  display: none;
+  position: absolute;
+  left: calc(22px + env(safe-area-inset-left));
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0 58%, rgba(255, 255, 255, 0.2) 59% 100%);
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.player-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s ease-out;
+}
+.player-stick.held .player-stick-knob {
+  transition: none;
+  background: #fff;
+}
+@media (pointer: coarse) {
+  #ui.at-farm.has-player:not(.in-barn) .player-stick {
+    display: block;
+  }
+  #ui:has(.cow-card:not(.hidden)) .player-stick {
+    display: none;
+  }
+}
+/* จอเตี้ย (มือถือแนวนอน): แถบปุ่มซ้ายยาวเกือบเต็มความสูง → ย้ายจอยไปทางขวาของแถบ */
+@media (pointer: coarse) and (max-height: 560px) {
+  .player-stick {
+    left: calc(122px + env(safe-area-inset-left));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    width: 112px;
+    height: 112px;
+  }
+}
+/* ปุ่มสลับตัวละคร: แสดงเมื่อโหลดตัวละครแล้ว และไม่อยู่ในโรงนา */
+#ui:not(.has-player) .swap-character,
+.in-barn .swap-character {
+  display: none;
+}

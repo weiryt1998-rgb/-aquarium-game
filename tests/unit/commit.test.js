@@ -28,11 +28,11 @@ test('ส่ง commit เดิมซ้ำ (seq เดิม) ไม่ถู�
 test('สองเครื่องซื้อพร้อมกันจากข้อมูลชุดเดียวกัน: transaction ทำต่อกัน ได้ปลาทั้งคู่ เงินถูกหักครบ', () => {
   const base = makeDoc({ coins: 1000 });
   // ทั้งสองเครื่องเห็น revision เดียวกัน — เซิร์ฟเวอร์ประมวลผลทีละ commit บนข้อมูลล่าสุดเสมอ
-  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'crab')]), { now: T0 });
+  const a = processCommit(base, commit('w_a', 1, [buy(base, 'fish_a1', 'molly_redhead')]), { now: T0 });
   const b = processCommit(a.doc, commit('w_b', 1, [buy(base, 'fish_b1', 'molly_golden')]), { now: T0 + 5 });
   const fish = b.doc.game.tanks[0].fish.map((f) => f.id);
   assert.ok(fish.includes('fish_a1') && fish.includes('fish_b1'));
-  assert.equal(b.doc.game.coins, 1000 - getSpecies('crab').price.coins - getSpecies('molly_golden').price.coins);
+  assert.equal(b.doc.game.coins, 1000 - getSpecies('molly_redhead').price.coins - getSpecies('molly_golden').price.coins);
   assert.equal(b.doc.revision, base.revision + 2);
 });
 

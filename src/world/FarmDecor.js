@@ -25,7 +25,7 @@ export const POND = { x: -18.6, z: -2.8, r: 3.2 };
 
 const HOUSE_BOX = { minX: -28.4, maxX: -16.2, minZ: 4.4, maxZ: 16.0 };
 const BARN_BOX = { minX: -6, maxX: 6, minZ: -22.8, maxZ: -8.4 };
-const YARD = { minX: -16.3, maxX: -12.6, minZ: 5.0, maxZ: 16.0, gate: [9.6, 11.4] };
+export const YARD = { minX: -16.3, maxX: -12.6, minZ: 5.0, maxZ: 16.0, gate: [9.6, 11.4] };
 const GARDEN = [[-21.2, 3.2], [-24.6, 3.2]];
 
 const HALF_PI = Math.PI / 2;

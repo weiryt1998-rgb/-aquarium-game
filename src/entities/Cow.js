@@ -292,7 +292,8 @@ export class Cow {
     group.add(scene);
     if (skin) {
       scene.traverse((o) => {
-        if (o.isMesh && /CowHide/i.test(o.material.name)) {
+        // ผิววัวมาตรฐาน (CowHide) หรือลูกวัวพื้นเมือง (M_CowCalf — ลูกวัวขาวลำพูนใช้ภาพผิวขาว)
+        if (o.isMesh && /CowHide|CowCalf/i.test(o.material.name)) {
           o.material.map = skin;
           o.material.needsUpdate = true;
         }

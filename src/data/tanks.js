@@ -23,7 +23,7 @@ export const TANK_TYPES = [
     price: null,
     theme: '#2a8fd6',
     style: { name: 'โอเชียนบลู', frame: 'black', trim: null, led: '#cfefff', backdrop: 'ocean', sand: '#ffffff' },
-    showcase: { fish: ['molly_dalmatian', 'molly_golden', 'molly_redhead', 'molly_redhead', 'molly_calico', 'molly_golddust', 'crab'] },
+    showcase: { fish: ['molly_dalmatian', 'molly_golden', 'molly_redhead', 'molly_redhead', 'molly_calico', 'molly_golddust', 'molly_long_sakura'] },
   },
   {
     id: 'classic',
@@ -35,7 +35,7 @@ export const TANK_TYPES = [
     theme: '#1fa6a0',
     style: { name: 'วอลนัทการ์เดน', frame: 'walnut', trim: 'brass', led: '#ffe2b0', backdrop: 'planted', sand: '#d8c8a8' },
     showcase: {
-      fish: ['molly_redhead', 'molly_calico', 'molly_golddust', 'molly_golden', 'molly_dalmatian', 'molly_dalmatian', 'seahorse', 'betta_galaxy', 'crab'],
+      fish: ['molly_redhead', 'molly_calico', 'molly_golddust', 'molly_golden', 'molly_dalmatian', 'molly_dalmatian', 'molly_long_darkcalico', 'molly_long_redzebra', 'molly_long_sakura'],
       extraDecor: [['plant_vallis', -0.25, -0.85, 0.4], ['plant_red', 0.05, -0.6, 1], ['plant_fern', 0.55, 0.45, 0.3]],
     },
   },
@@ -49,7 +49,7 @@ export const TANK_TYPES = [
     theme: '#3a6fd8',
     style: { name: 'คอรัลรีฟ', frame: 'white', trim: 'chrome', led: '#9fb8ff', backdrop: 'reef', sand: '#fff6e8' },
     showcase: {
-      fish: ['betta_galaxy', 'molly_redhead', 'seahorse', 'molly_golden', 'molly_golddust', 'molly_calico', 'molly_dalmatian', 'eagleray', 'crab'],
+      fish: ['molly_long_redzebra', 'molly_redhead', 'molly_long_darkcalico', 'molly_golden', 'molly_golddust', 'molly_calico', 'molly_dalmatian', 'molly_long_zebra', 'molly_long_sakura'],
       extraDecor: [['coral', -0.3, -0.75, 0.6], ['coral', 0.75, -0.75, 2], ['seashell', 0.1, 0.4, 0.5]],
     },
   },
@@ -63,7 +63,7 @@ export const TANK_TYPES = [
     theme: '#7a4fd8',
     style: { name: 'รอยัลอะบิส', frame: 'lacquer', trim: 'gold', led: '#8ff3ff', backdrop: 'abyss', sand: '#b9b4c4' },
     showcase: {
-      fish: ['molly_long_zebra', 'molly_dalmatian', 'eagleray', 'rune_guardian', 'seahorse', 'betta_galaxy', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_redhead', 'crab'],
+      fish: ['molly_long_zebra', 'molly_dalmatian', 'molly_long_zebra', 'molly_golden', 'molly_long_darkcalico', 'molly_long_redzebra', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_redhead', 'molly_long_sakura'],
       extraDecor: [['temple_ruin', -0.45, -0.45, 0.3], ['coral', 0.45, -0.8, 1.2], ['seashell', -0.15, 0.5, 2]],
     },
   },
@@ -79,7 +79,7 @@ export const TANK_TYPES = [
     // ขอบมุกประกายรุ้ง ไฟชมพู กลีบซากุระร่วงในน้ำ
     style: { name: 'ซากุระบลอสซัม', frame: 'pearl', trim: 'rosegold', led: '#ffc2dc', backdrop: 'sakura', sand: '#fff0f5', ambient: 'petals' },
     showcase: {
-      fish: ['betta_galaxy', 'molly_calico', 'betta_galaxy', 'seahorse', 'molly_redhead', 'molly_redhead', 'molly_dalmatian', 'molly_dalmatian', 'seahorse', 'crab'],
+      fish: ['molly_long_redzebra', 'molly_calico', 'molly_long_redzebra', 'molly_long_darkcalico', 'molly_redhead', 'molly_redhead', 'molly_dalmatian', 'molly_dalmatian', 'molly_long_darkcalico', 'molly_long_sakura'],
       extraDecor: [['plant_red', -0.3, -0.75, 0.4], ['plant_red', 0.7, -0.5, 1.8], ['rock_arch', 0.2, 0.35, 0.1], ['plant_sword', -0.75, -0.2, 0], ['seashell', 0.75, 0.6, 2.2]],
     },
   },
@@ -94,7 +94,7 @@ export const TANK_TYPES = [
     // ขอบโลหะเหลือบแสงเหนือ ไฟเปลี่ยนสีเอง นีออนตามขอบ ดวงแสงเรืองลอยขึ้น
     style: { name: 'แสงเหนือ', frame: 'aurora', trim: 'platinum', led: '#5dffc0', ledAnim: 'aurora', neon: true, backdrop: 'aurora', sand: '#e4f2ff', ambient: 'aurora' },
     showcase: {
-      fish: ['molly_long_sakura', 'seahorse', 'betta_galaxy', 'eagleray', 'rune_guardian', 'molly_golden', 'molly_golddust', 'molly_calico', 'molly_calico', 'crab'],
+      fish: ['molly_long_sakura', 'molly_long_darkcalico', 'molly_long_redzebra', 'molly_long_zebra', 'molly_golden', 'molly_golden', 'molly_golddust', 'molly_calico', 'molly_calico', 'molly_long_sakura'],
       extraDecor: [['rock_crystal', -0.35, -0.6, 0.5], ['rock_crystal', 0.6, 0.45, 2], ['greek_ruin', 0.35, -0.55, -0.3], ['snail_coral', -0.7, 0.5, 0.6], ['plant_stem', 0.85, -0.7, 0]],
     },
   },
@@ -120,7 +120,7 @@ export const TANK_TYPES = [
       ambient: 'stars',
     },
     showcase: {
-      fish: ['rune_guardian', 'betta_galaxy', 'eagleray', 'molly_golddust', 'molly_dalmatian', 'molly_long_darkcalico', 'betta_galaxy', 'seahorse', 'crab'],
+      fish: ['molly_golden', 'molly_long_redzebra', 'molly_long_zebra', 'molly_golddust', 'molly_dalmatian', 'molly_long_darkcalico', 'molly_long_redzebra', 'molly_long_darkcalico', 'molly_long_sakura'],
       extraDecor: [['rock_volcano', 0.55, -0.6, 0.3], ['rock_crystal', -0.55, -0.55, 1.2], ['rock_crystal', 0.15, 0.55, 2.4], ['rock_arch', -0.2, -0.3, 0.2], ['snail_coral', 0.8, 0.45, 1]],
     },
   },

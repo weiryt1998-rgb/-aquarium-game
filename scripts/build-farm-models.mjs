@@ -24,15 +24,23 @@ const ASSETS = [
   { name: 'tree_a', texture: 512 },
   { name: 'tree_b', texture: 512 },
   { name: 'cow', texture: 2048, normal: 1024, anim: true },
-  // วัวบราห์มัน (Fish/farm/build_brahman.py จากโมเดล Meshy): คลิป Walk Graze Drink LieDown Lie StandUp Idle
+  // วัวบราห์มันแดงตัวเมีย (Meshy → Fish/farm/meshy_import.blend ยืดลำตัว + fit_zebu.py): คลิป Walk Graze Drink LieDown Lie StandUp Idle
   { name: 'brahman', texture: 2048, normal: 1024, anim: true },
-  // ลูกวัวบราห์มัน (Fish/farm/build_brahman_calf.py ดัดจากตัวพ่อ) — คลิปชุดเดียวกัน
-  { name: 'brahman_calf', texture: 2048, normal: 1024, anim: true },
+  // บราห์มันแดงตัวผู้ (ดัดจากตัวเมียใน meshy_import.blend: ไม่มีเต้านม มีหนอกใหญ่ + หุ้มลึงค์) — model.fileMale ใน animals.js
+  { name: 'brahman_bull', texture: 2048, normal: 1024, anim: true },
+  // ลูกวัวบราห์มันแดง (Meshy → Fish/farm/build_calf_red.py + fit_zebu.py) — คลิปชุดเดียวกัน ไม่มี Mount
+  { name: 'brahman_calf', texture: 2048, normal: 1024, anim: true, dropClips: ['Mount'] },
+  // ลูกวัวพื้นเมืองมีเขา (วัวพื้นเมืองสีน้ำตาล + วัวขาวลำพูน · build_calf_red.py) — ลำพูนใช้ภาพผิว cow_calf_white.webp
+  { name: 'cow_calf', texture: 2048, normal: 1024, anim: true, dropClips: ['Mount'] },
   // วัวเซบูจาก Meshy (Fish/farm/fit_zebu.py) — ยืมโครงกระดูก + คลิปทั้งหมดของวัวบราห์มัน
   { name: 'cow_brown', texture: 2048, normal: 1024, anim: true },
   { name: 'cow_white', texture: 2048, normal: 1024, anim: true },
   // ตาเหม คนเลี้ยงวัว (Fish/farm/build_tahem.py) — คลิป HemIdle / HemWalk / HemTend
   { name: 'tahem', texture: 2048, anim: true },
+  // ตัวละครคน 2 ตัว (Meshy → Fish/farm/build_player.py · ท่าทาง motion capture CMU ผ่าน mocap_retarget.py)
+  // คลิป Idle Walk Run Tend Stretch Wave (ขึ้นต้น Pl = ผู้ชาย · Wm = ผู้หญิง)
+  { name: 'player', texture: 2048, normal: 1024, anim: true },
+  { name: 'woman', texture: 2048, normal: 1024, anim: true },
   // ต้นไม้ใหญ่ให้ร่มเงา (Meshy ลดเหลือ ~14k สามเหลี่ยม) — ใบเป็นเรขาคณิต ไม่ใช่ภาพตัดขอบ
   { name: 'tree_c', texture: 1024 },
   // ของตกแต่งรอบบ้าน/โรงนา (Fish/farm/build_decor.py) — วัตถุแยกชื่อ เกมวางซ้ำด้วย InstancedMesh (world/FarmDecor.js)
@@ -53,6 +61,9 @@ for (const a of ASSETS) {
     else m.setAlphaMode('OPAQUE');
   }
   if (!a.anim) for (const anim of root.listAnimations()) anim.dispose();
+  // คลิปของตาเหม (HemIdle/HemWalk/HemTend) อยู่ใน meshy_import.blend เดียวกับวัว → ไฟล์วัวที่ส่งออกจากไฟล์นั้นติดมาด้วย (ไม่มีกระดูกให้ขยับ) ตัดทิ้ง
+  if (a.name !== 'tahem') for (const anim of root.listAnimations()) if (/^Hem/.test(anim.getName())) anim.dispose();
+  for (const anim of root.listAnimations()) if (a.dropClips?.includes(anim.getName())) anim.dispose();
   await doc.transform(
     weld(),
     prune({ keepAttributes: true }),
@@ -69,5 +80,7 @@ for (const a of ASSETS) {
 }
 
 // ลายวัวเจอร์ซีย์ (สลับ map ของผิววัวในเกม)
-await sharp(`${SRC}/cow_jersey_base.png`).resize(2048, 2048).webp({ quality: 86 }).toFile(`${OUT}/cow_jersey.webp`);
-console.log(`${OUT}/cow_jersey.webp  ${(fs.statSync(`${OUT}/cow_jersey.webp`).size / 1024).toFixed(0)} KB`);
+for (const [src, out] of [['cow_jersey_base.png', 'cow_jersey.webp'], ['cow_calf_white_base.png', 'cow_calf_white.webp']]) {
+  await sharp(`${SRC}/${src}`).resize(2048, 2048).webp({ quality: 86 }).toFile(`${OUT}/${out}`);
+  console.log(`${OUT}/${out}  ${(fs.statSync(`${OUT}/${out}`).size / 1024).toFixed(0)} KB`);
+}

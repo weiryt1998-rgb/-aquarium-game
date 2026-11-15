@@ -54,7 +54,7 @@ export const BARN_ROUTE = [
 export const TROUGH = { x: 6, z: -5, width: 2.6, depth: 0.8 };
 
 /** ต้นไม้ใหญ่ให้ร่มเงา (treeC ~14k สามเหลี่ยม สูง 6.5 ม. ในไฟล์) — วางมือที่ที่โล่ง ไม่บังกล้อง ทางเดิน บ่อ บ้าน โรงนา · [x, z, ขนาด, มุมหมุน] */
-const SHADE_TREES = [
+export const SHADE_TREES = [
   [16, 4, 1.0, 0.4],
   [15, -7, 0.9, 2.1],
   [-17, -12, 1.05, 4.0],

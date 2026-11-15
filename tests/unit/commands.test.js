@@ -34,7 +34,7 @@ test('ซื้อปลา: เงินไม่พอ/ตู้เต็ม/�
   const before = JSON.stringify(game);
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: newFish() }), 'insufficient-funds');
   game.coins = 99999;
-  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'eagleray', fish: newFish() }), 'tank-too-small');
+  rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'eagleray', fish: newFish() }), 'invalid'); // เลิกขายแล้ว (retired) — ร้านเหลือแค่ปลาสอด
   rejects(() => run(game, { type: 'buyFish', tankId: tank.id, speciesId: 'molly_golden', fish: { ...newFish(), gender: 'x' } }), 'invalid');
   rejects(() => run(game, { type: 'buyFish', tankId: 'tank_nope', speciesId: 'molly_golden', fish: newFish() }), 'not-found');
   game.coins = 10;

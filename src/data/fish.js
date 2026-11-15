@@ -256,6 +256,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'crab',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     name: 'ปู',
     nameEn: 'Red Crab',
     description: 'ปูสีแดงสด เดินตะแคงไปมาบนพื้นทราย คอยเก็บเศษอาหารที่ตกถึงพื้น ช่วยให้ตู้สะอาด',
@@ -283,6 +284,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'eagleray',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     name: 'ปลากระเบนนก',
     nameEn: 'Spotted Eagle Ray',
     description: 'กระเบนลายจุดขาว ครีบกว้างเหมือนปีกนก กระพือว่ายอย่างสง่างาม ต้องใช้ตู้ขนาดใหญ่',
@@ -363,6 +365,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'betta_galaxy',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     name: 'ปลากัดกาแล็กซี',
     nameEn: 'Galaxy Betta',
     description: 'ปลากัดสีน้ำเงินเข้ม ครีบยาวพลิ้วไล่เป็นสีม่วงเหมือนผืนฟ้ายามค่ำ มีจุดเรืองแสงสีชมพูกระจายเหมือนดวงดาว',
@@ -387,6 +390,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'seahorse',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     name: 'ม้าน้ำภูตแก้ว',
     nameEn: 'Crystal Sprite Seahorse',
     description: 'ม้าน้ำลำตัวสีเขียวมุก ครีบระบายโปร่งแสงเหลือบรุ้งเหมือนปีกภูต ว่ายตัวตั้งตรงอย่างช้า ๆ',
@@ -583,6 +587,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'rune_guardian',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     legendary: true,
     name: 'ปลาผู้พิทักษ์รูน',
     nameEn: 'Rune Guardian',
@@ -608,6 +613,7 @@ export const FISH_SPECIES = [
   },
   {
     id: 'pumpkin_angler',
+    retired: true, // เลิกขาย — ร้านค้าเหลือแค่ปลาสอด เพื่อลดทรัพยากร (ตัวที่มีในเซฟยังอยู่)
     legendary: true,
     name: 'ปลาตกเบ็ดฟักทอง',
     nameEn: 'Pumpkin Angler',

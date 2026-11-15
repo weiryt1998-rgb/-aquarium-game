@@ -30,7 +30,7 @@ export const STARTER_DECOR = [
   ['bubbler', 0.08, -0.78, 0],
 ];
 
-const STARTER_FISH = ['molly_golddust', 'crab', 'molly_redhead', 'molly_redhead', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_dalmatian', 'molly_dalmatian', 'molly_dalmatian'];
+const STARTER_FISH = ['molly_golddust', 'molly_calico', 'molly_redhead', 'molly_redhead', 'molly_golden', 'molly_golden', 'molly_calico', 'molly_dalmatian', 'molly_dalmatian', 'molly_dalmatian'];
 
 // สร้าง record ปลาอยู่ใน Simulation Engine (คลอดลูกต้องใช้ด้วย) — ส่งต่อชื่อเดิมให้โค้ดส่วนอื่น
 export { createFishRecord };

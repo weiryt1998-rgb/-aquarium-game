@@ -46,6 +46,7 @@ const TEMPLATE = /* html */ `
       <button data-action="goFarm" data-at="home" title="ออกไปฟาร์มนอกบ้าน"><span class="ico">🚪</span><span>นอกบ้าน</span><i class="badge" data-ref="farmBadge"></i></button>
       <button data-action="barn" data-at="farm" class="barn-enter" title="เข้าไปดูวัวในโรงนา"><span class="ico">🏚️</span><span>โรงนา</span></button>
       <button data-action="leaveBarn" data-at="barn" title="ออกจากโรงนา กลับไปที่คอกหญ้า"><span class="ico">🌿</span><span>ออกโรงนา</span></button>
+      <button data-action="swapCharacter" data-at="farm" class="swap-character" title="สลับตัวละครที่บังคับ (คีย์ C)"><span class="ico">🔄</span><span>สลับตัว</span></button>
       <button data-action="goHome" data-at="farm" title="กลับเข้าบ้าน (ตู้ปลา)"><span class="ico">🏠</span><span>เข้าบ้าน</span></button>
     </nav>
 
@@ -163,6 +164,9 @@ export class UI {
         break;
       case 'leaveBarn':
         game.farm.leaveBarn();
+        break;
+      case 'swapCharacter':
+        game.farm.swapCharacter();
         break;
       case 'cows':
         this.cowCard.hide();
