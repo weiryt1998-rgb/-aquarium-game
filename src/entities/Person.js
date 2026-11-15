@@ -56,6 +56,11 @@ export class Person {
       }
     });
     this.clip = null;
+    /** ชื่อท่าที่เล่นอยู่ + ลำดับการเริ่มท่า (เล่นท่าเดิมซ้ำก็นับ) — ส่งให้อีกเครื่องตอนเล่นด้วยกัน */
+    this.clipName = 'idle';
+    this.clipSerial = 0;
+    /** ตัวนี้ถูกบังคับจากอีกเครื่อง (เล่นด้วยกันสองคน) */
+    this.remote = false;
     /** ท่าที่เล่นครั้งเดียวอยู่ { name, done } — ระหว่างนี้ไม่เดิน */
     this.once = null;
     this.speed = 0;
@@ -190,6 +195,48 @@ export class Person {
     this.#move(dt, 0, collide);
   }
 
+  /** สถานะสำหรับส่งให้อีกเครื่อง (เล่นด้วยกันสองคน) */
+  netState() {
+    const g = this.group;
+    return { x: g.position.x, y: g.position.y, z: g.position.z, h: g.rotation.y, s: this.speed, c: this.clipName, n: this.clipSerial };
+  }
+
+  /**
+   * ตัวที่อีกเครื่องบังคับ: ไหลตามตำแหน่ง/ทิศที่ได้รับ (เกลี่ยให้นุ่ม · ห่างเกิน 4 ม. = วางทันที)
+   * ท่าเดิน/วิ่ง/ยืนเลือกจากความเร็วแบบเดียวกับตัวเอง · ท่าอื่น (นั่ง นอน โบกมือ …) เล่นตามชื่อที่ได้รับ
+   * @param {{ x: number, y: number, z: number, h: number, s: number, c: string, n: number }} st
+   */
+  puppet(dt, st) {
+    const g = this.group;
+    const dx = st.x - g.position.x;
+    const dz = st.z - g.position.z;
+    if (Math.hypot(dx, dz) > 4) {
+      g.position.set(st.x, st.y ?? 0, st.z);
+      g.rotation.y = st.h;
+    } else {
+      const k = 1 - Math.exp(-8 * dt);
+      g.position.x += dx * k;
+      g.position.z += dz * k;
+      g.position.y += ((st.y ?? 0) - g.position.y) * k;
+      g.rotation.y += angleDelta(g.rotation.y, st.h) * (1 - Math.exp(-12 * dt));
+    }
+    this.anchor.position.set(g.position.x, 1.1, g.position.z);
+    this.speed = damp(this.speed, st.s ?? 0, 8, dt);
+    const loco = st.c === 'idle' || st.c === 'walk' || st.c === 'run' || !this.actions[st.c];
+    this.once = null;
+    if (loco) {
+      this.netClip = null;
+      this.#animate(dt);
+      return;
+    }
+    // ท่าใหม่ (หรือท่าเดิมที่เริ่มใหม่) → เล่นตั้งแต่ต้น
+    if (this.netClip !== `${st.c}:${st.n}`) {
+      this.netClip = `${st.c}:${st.n}`;
+      this.#play(st.c, FADE, true);
+    }
+    this.mixer.update(dt);
+  }
+
   #move(dt, want, collide) {
     const g = this.group;
     if (this.once) want = 0;
@@ -198,6 +245,11 @@ export class Person {
     g.position.z += Math.cos(g.rotation.y) * this.speed * dt;
     collide?.(g.position);
     this.anchor.position.set(g.position.x, 1.1, g.position.z);
+    this.#animate(dt);
+  }
+
+  /** เลือกท่าตามความเร็ว + จบท่าครั้งเดียวที่หมดเวลา แล้วเดินแอนิเมชัน */
+  #animate(dt) {
 
     if (this.once?.until != null) {
       this.once.until -= dt;
@@ -231,6 +283,8 @@ export class Person {
     if (!next) return;
     const once = !LOOPED.has(name);
     if (next === this.clip && !once && !restart) return;
+    this.clipName = this.actions[name] ? name : 'idle';
+    this.clipSerial++;
     next.reset();
     next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     next.clampWhenFinished = once;

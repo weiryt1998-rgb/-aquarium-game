@@ -157,11 +157,11 @@ export class SocialSystem {
       icon: this.#icon(key),
       title: this.#name(key),
       // ระดับความสัมพันธ์อยู่ในป้ายของแถบแล้ว — บรรทัดรองบอกแค่ว่าเป็นใคร
-      level: couple ? 'แฟนของคุณ' : key === 'tahem' ? 'คนเลี้ยงวัวประจำฟาร์ม' : key === 'pen' ? 'ภรรยาตาเหม' : '',
+      level: key === this.farm.remoteKey ? 'เพื่อนที่เล่นด้วยกัน' + (couple ? ' · แฟนของคุณ' : '') : couple ? 'แฟนของคุณ' : key === 'tahem' ? 'คนเลี้ยงวัวประจำฟาร์ม' : key === 'pen' ? 'ภรรยาตาเหม' : '',
       mood: mood ? MOODS[mood] : null,
       bars,
       categories,
-      extras: PLAYABLE.includes(key) ? [{ id: '__swap', icon: '🔄', label: 'สลับไปเล่นตัวนี้' }] : [],
+      extras: PLAYABLE.includes(key) && key !== this.farm.remoteKey ? [{ id: '__swap', icon: '🔄', label: 'สลับไปเล่นตัวนี้' }] : [],
       onPick: (id) => (id === '__swap' ? this.farm.swapCharacter() : this.start(actor, key, getSocial(id))),
       onLocked: (reason) => this.game.ui.toast(`🔒 ${reason}`),
     });
@@ -173,18 +173,24 @@ export class SocialSystem {
 
   // ── การสนทนา ───────────────────────────────────────────────
 
-  /** เริ่มคุย: a (คนพูด — คนที่ผู้เล่นบังคับ หรือตัวละครอีกคนที่เดินมาคุยเอง) → b · auto = ตัวละครเริ่มเอง */
-  start(a, b, def, { auto = false } = {}) {
+  /**
+   * เริ่มคุย: a (คนพูด — คนที่ผู้เล่นบังคับ หรือตัวละครอีกคนที่เดินมาคุยเอง) → b · auto = ตัวละครเริ่มเอง
+   * เล่นด้วยกันสองคน: คุยกับตัวที่เพื่อนบังคับ → ส่งให้เครื่องเพื่อนเล่นฉากเดียวกัน (ผลสำเร็จ ok เดียวกัน)
+   * remote = ฉากที่เพื่อนเริ่ม (เครื่องเพื่อนบันทึกผลลงเซฟ เครื่องนี้แค่แสดง)
+   */
+  start(a, b, def, { auto = false, ok: forced = null, remote = false } = {}) {
     if (!def) return;
     this.#ui();
-    this.cancel();
+    this.cancel({ fromPeer: remote });
     const actor = this.#who(a);
     const target = this.#who(b);
     if (!actor || !target) return;
     const rel = this.#rel(a, b);
     if (socialBlock(def, a, b, rel)) return;
-    const ok = Math.random() < successChance(def, rel, this.moodOf(b), Date.now());
-    this.job = { a, b, def, ok, auto, phase: 'approach', t: 0, route: null };
+    const ok = forced ?? Math.random() < successChance(def, rel, this.moodOf(b), Date.now());
+    this.job = { a, b, def, ok, auto, remote, phase: 'approach', t: 0, route: null };
+    const rk = this.farm.remoteKey;
+    if (!remote && rk && (a === rk || b === rk)) this.farm.coop?.sendEvent({ k: 'social', a, b, id: def.id, ok });
     this.#engage(b, a);
     if (a !== this.farm.controlled) this.#engage(a, b);
     // ท่าชิดตัว (กอด จูบ): เดินไปหยุดห่างกว่านิดหน่อย (ระบบชนตัวยังทำงาน) แล้วค่อยขยับเข้าชิดตอนหันหน้า
@@ -198,11 +204,13 @@ export class SocialSystem {
     this.job.timeout = 6 + (len / speed) * 1.6;
   }
 
-  /** ยกเลิก (ผู้เล่นเดิน/สลับตัว/ออกจากฟาร์ม) */
-  cancel() {
+  /** ยกเลิก (ผู้เล่นเดิน/สลับตัว/ออกจากฟาร์ม) · fromPeer = เพื่อนยกเลิกมา (ไม่ต้องส่งกลับ) */
+  cancel({ fromPeer = false } = {}) {
     const j = this.job;
     if (!j) return;
     this.job = null;
+    const rk = this.farm.remoteKey;
+    if (!fromPeer && rk && (j.a === rk || j.b === rk)) this.farm.coop?.sendEvent({ k: 'cancel' });
     for (const k of [j.a, j.b]) this.#release(k);
     this.bubbles?.clear(j.a);
     this.bubbles?.clear(j.b);
@@ -396,9 +404,12 @@ export class SocialSystem {
     const rel = relAt(state.data.social, a, b, now);
     const pair = pairKey(a, b);
     const { rel: next, df, dr } = applySocial(rel, def, ok, now, pair);
-    state.data.social = withRel(state.data.social, a, b, next);
-    state.record({ type: 'social', a, b, socialId: def.id, ok, at: now });
-    state.save();
+    // ฉากที่เพื่อนเริ่ม: เครื่องเพื่อนบันทึก (ผลมาถึงทางเซฟกลาง) — ไม่บันทึกซ้ำ
+    if (!this.job.remote) {
+      state.data.social = withRel(state.data.social, a, b, next);
+      state.record({ type: 'social', a, b, socialId: def.id, ok, at: now });
+      state.save();
+    }
     const hb = this.#head(b);
     const head = () => hb().addScaledVector(new THREE.Vector3(0, 1, 0), -0.3);
     const both = Math.abs(dr) >= 0.5 && Math.abs(df) >= 0.5;
@@ -428,7 +439,8 @@ export class SocialSystem {
     if (this.job) return;
     const c = this.farm.companion;
     const p = this.farm.player;
-    if (!c || !p || this.farm.inBarnView || this.menu?.isOpen) return;
+    // ตัวละครอีกตัวเป็นของเพื่อน (เล่นด้วยกัน) → ไม่เดินมาคุยเอง
+    if (!c || !p || c.remote || this.farm.inBarnView || this.menu?.isOpen) return;
     this.autoIn -= dt;
     if (this.autoIn > 0) return;
     this.autoIn = 8; // ยังไม่พร้อม — ลองใหม่อีกครู่

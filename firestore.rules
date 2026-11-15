@@ -175,6 +175,20 @@ service cloud.firestore {
           && request.resource.data.game is map;
         allow update, delete: if false;
       }
+
+      // เล่นด้วยกันสองคน (src/cloud/coop.js): แต่ละหน้าเกมมีเอกสารของตัวเอง — ตัวละครที่บังคับ + สัญญาณเชื่อมต่อ WebRTC
+      // + ตำแหน่งสำรอง (ใช้เมื่อเชื่อมต่อตรงไม่ได้) · ไม่ใช่เซฟ ไม่กระทบงบนิพจน์ของเซฟกลาง
+      match /coop/{peerId} {
+        allow read: if saveId == 'global' && isPlayer();
+        allow create, update: if saveId == 'global' && isPlayer()
+          && peerId.size() <= 64
+          && request.resource.data.keys().hasOnly(['char', 'since', 'at', 'sig', 'st', 'ev'])
+          && request.resource.data.char in ['man', 'woman']
+          && request.resource.data.at is int
+          && (!('sig' in request.resource.data) || request.resource.data.sig == null
+              || (request.resource.data.sig is map && request.resource.data.sig.sdp is string && request.resource.data.sig.sdp.size() < 20000));
+        allow delete: if saveId == 'global' && isPlayer();
+      }
     }
 
     match /{document=**} {

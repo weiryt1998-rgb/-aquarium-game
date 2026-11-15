@@ -3125,3 +3125,25 @@ button.sm-center {
     font-size: 0.85rem;
   }
 }
+
+/* ───────────────────────── เล่นด้วยกันสองคน (FarmSystem #coopBadge) ───────────────────────── */
+.coop-badge {
+  position: absolute;
+  top: 108px;
+  right: 16px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: rgba(8, 25, 55, 0.7);
+  border: 1px solid rgba(255, 140, 200, 0.6);
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.coop-badge.hidden {
+  display: none;
+}

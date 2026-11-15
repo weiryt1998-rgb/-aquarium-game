@@ -42,6 +42,10 @@ async function boot() {
   window.game = game; // สำหรับดีบักใน DevTools
   game.notices = session.notices; // แสดงหลังกดเริ่มเล่น
   await game.init();
+
+  // 3) เล่นด้วยกันสองคน: เครื่องอื่นที่เปิดเกมอยู่ (เซฟเดียวกัน) บังคับตัวละครอีกตัวในฟาร์ม
+  const { CoopLink } = await import('./cloud/coop.js');
+  game.farm.attachCoop(new CoopLink({ db: session.fb.db, selfId: session.writer, char: () => game.farm.controlled }));
 }
 
 if (!WebGL.isWebGL2Available()) {

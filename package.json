@@ -22,6 +22,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test:rules": "npm run firebase -- emulators:exec --project demo-aquarium --only firestore \"node --test --test-concurrency=1 tests/rules/*.test.js\"",
     "test:e2e": "npm run firebase -- emulators:exec --project demo-aquarium --only auth,firestore \"node tests/e2e/run.mjs --mode rules\"",
+    "test:e2e:coop": "npm run firebase -- emulators:exec --project demo-aquarium --only auth,firestore \"node --test --test-concurrency=1 tests/e2e/coop.mjs\"",
     "test:functions": "npm run build:functions && npm run firebase -- emulators:exec --project demo-aquarium --config firebase.blaze.json --only auth,firestore,functions \"node --test --test-concurrency=1 tests/integration/*.test.js\"",
     "test:e2e:blaze": "npm run build:functions && npm run firebase -- emulators:exec --project demo-aquarium --config firebase.blaze.json --only auth,firestore,functions \"node tests/e2e/run.mjs --mode functions\"",
     "deploy": "npm run firebase -- deploy --only firestore",

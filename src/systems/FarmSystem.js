@@ -12,6 +12,8 @@ import { HouseLife, ACTIVITIES } from './HouseLife.js';
 import { HOUSE_NAV } from '../world/House.js';
 import { PlayerInput } from './PlayerInput.js';
 import { saveSettings } from '../core/settings.js';
+import { otherChar, resolveCharacter } from '../cloud/coop.js';
+import { getSocial } from '../data/socials.js';
 import { separate, steer } from '../entities/bodySpace.js';
 import { COW_BREEDS, getCowBreed } from '../data/animals.js';
 import {
@@ -191,6 +193,120 @@ export class FarmSystem {
     this.greeted = false;
     this.welcomed = false;
     this.status = this.current();
+    /** @type {import('../cloud/coop.js').CoopLink | null} เล่นด้วยกันสองคน (ตั้งจาก main.js เมื่อมีเซฟกลาง) */
+    this.coop = null;
+    /** key ของตัวที่อีกเครื่องบังคับอยู่ (ตอนเฟรมล่าสุด) — ใช้จับจังหวะเปลี่ยน */
+    this.remoteWas = null;
+    this.netTimer = 0;
+  }
+
+  // ── เล่นด้วยกันสองคน ────────────────────────────────────────
+
+  /**
+   * เชื่อมกับอีกเครื่อง: เพื่อนบังคับตัวละครอีกตัว (ผู้ชาย/ผู้หญิง) แทน AI · เห็นการเดิน ท่าทาง นั่ง/นอนในบ้าน และคุยกันได้
+   * @param {import('../cloud/coop.js').CoopLink} link
+   */
+  attachCoop(link) {
+    this.coop = link;
+    link.on((e) => {
+      if (e.type === 'peer') this.#onPeer(e.peer, e.prev);
+      else if (e.type === 'event') this.#onPeerEvent(e.event);
+      else if (e.type === 'link') this.#coopBadge();
+    });
+    link.start();
+  }
+
+  /** key ของตัวที่อีกเครื่องบังคับ (null = ไม่มีเพื่อนออนไลน์ → ตัวละครอีกตัวเดินทำกิจวัตรเอง) */
+  get remoteKey() {
+    const peer = this.coop?.peer;
+    return peer && peer.char !== this.controlled ? peer.char : null;
+  }
+
+  #onPeer(peer, prev) {
+    const ui = this.game.ui;
+    if (peer) {
+      // เลือกตัวเดียวกัน → เครื่องที่เปิดทีหลังเปลี่ยนไปอีกตัว
+      const mine = resolveCharacter({ id: this.coop.selfId, char: this.controlled, since: this.coop.since }, peer);
+      if (mine !== this.controlled) {
+        this.#switchTo(mine);
+        ui?.toast(`👥 อีกเครื่องเล่น${PEOPLE[peer.char].label}อยู่ — คุณได้เล่น${PEOPLE[mine].icon} ${PEOPLE[mine].label}`);
+      } else if (!prev && peer.char !== this.controlled) {
+        ui?.toast(`👥 เพื่อนเข้ามาเล่นด้วยแล้ว — เพื่อนเล่น${PEOPLE[peer.char].icon} ${PEOPLE[peer.char].label}`);
+        this.game.sound?.play('click');
+      }
+    } else if (prev) {
+      ui?.toast(`👋 เพื่อนออกจากเกมแล้ว — ${PEOPLE[prev.char]?.label ?? 'ตัวละครอีกตัว'}จะทำกิจวัตรเอง`);
+    }
+    this.#coopBadge();
+  }
+
+  /** เหตุการณ์จากเพื่อน: เริ่มคุย / เลิกคุย (ทั้งสองเครื่องเล่นฉากเดียวกัน · เครื่องที่เริ่มเป็นคนบันทึกผลลงเซฟ) */
+  #onPeerEvent(e) {
+    if (!e || !this.active || !this.player) return;
+    const rk = this.remoteKey;
+    if (e.k === 'social' && rk && e.a === rk && e.b === this.controlled) {
+      this.social.start(e.a, e.b, getSocial(e.id), { ok: !!e.ok, remote: true });
+    } else if (e.k === 'cancel' && rk && this.social.drives(rk)) {
+      this.social.cancel({ fromPeer: true });
+    }
+  }
+
+  /** ป้ายมุมจอ: เล่นด้วยกันอยู่กับใคร · เชื่อมต่อตรง/ผ่านคลาวด์ */
+  #coopBadge() {
+    const root = this.game.ui?.root;
+    if (!root) return;
+    this.badge ??= Object.assign(document.createElement('div'), { className: 'coop-badge hidden' });
+    if (!this.badge.isConnected) root.appendChild(this.badge);
+    const rk = this.remoteKey;
+    this.badge.classList.toggle('hidden', !rk);
+    if (!rk) return;
+    const d = PEOPLE[rk];
+    const direct = this.coop?.direct;
+    this.badge.textContent = `👥 เล่นด้วยกัน · เพื่อน ${d.icon} ${d.label}${direct ? '' : ' · ☁️'}`;
+    this.badge.title = direct ? 'เชื่อมต่อตรงกับอีกเครื่อง' : 'เชื่อมต่อตรงไม่ได้ — ส่งตำแหน่งผ่านคลาวด์ (ช้ากว่า)';
+  }
+
+  /** ทุกเฟรม: จับจังหวะเพื่อนเข้า/ออก · ส่งสถานะตัวเอง ~10 ครั้ง/วินาที */
+  #updateCoop(dt) {
+    const rk = this.remoteKey;
+    for (const [key, person] of Object.entries(this.people)) {
+      person.remote = key === rk;
+      if (person.body) person.body.priority = key === this.controlled || key === rk;
+    }
+    if (rk !== this.remoteWas) {
+      const was = this.remoteWas;
+      this.remoteWas = rk;
+      if (rk && this.people[rk]) {
+        // เพื่อนเข้ามาบังคับ → เลิกกิจวัตร/คุยที่ AI ทำค้างอยู่
+        if (this.social.drives(rk)) this.social.cancel({ fromPeer: true });
+        this.life.cancel(rk, true);
+        this.people[rk].cancelAct();
+      }
+      if (was && this.people[was]) this.brains[was]?.reset(1.5);
+      this.#coopBadge();
+    }
+    if (!this.coop?.peer || !this.player) return;
+    this.netTimer -= dt;
+    if (this.netTimer > 0) return;
+    this.netTimer = 0.1;
+    const st = this.active ? this.player.netState() : { ...(this.lastNet ?? this.player.netState()), s: 0, c: 'idle' };
+    this.lastNet = st;
+    this.coop.sendState({ ...st, loc: this.active ? 'farm' : 'home' });
+  }
+
+  /** จุดยืนหน้าตู้ปลาในห้องนั่งเล่น (หันเข้าตู้) — เพื่อนที่อยู่หน้าตู้ปลา (ในบ้าน) ยืนตรงนี้ */
+  #tankStand() {
+    const tank = this.world?.house?.furniture.get('F_FishTank_0')?.spots[0];
+    if (!tank) return null;
+    return { x: tank.pos.x - Math.sin(tank.heading) * 0.4, y: 0, z: tank.pos.z - Math.cos(tank.heading) * 0.4, h: tank.heading, s: 0, c: 'idle', n: 0 };
+  }
+
+  /** ตัวที่เพื่อนบังคับ: ตามสถานะล่าสุดที่ได้รับ */
+  #updateRemote(dt, person) {
+    let st = this.coop?.peerState;
+    if (st?.loc === 'home') st = this.#tankStand() ?? st;
+    if (st && Number.isFinite(st.x) && Number.isFinite(st.z)) person.puppet(dt, st);
+    else person.stand(dt, this.collide);
   }
 
   /** ตัวละครที่ผู้เล่นบังคับอยู่ (null = โมเดลยังไม่โหลด) */
@@ -292,7 +408,8 @@ export class FarmSystem {
     if (tank) this.player?.place(tank.pos.x - Math.sin(tank.heading) * 0.4, tank.pos.z - Math.cos(tank.heading) * 0.4, tank.heading + Math.PI);
     else this.player?.place(PLAYER_SPAWN.x, PLAYER_SPAWN.z, PLAYER_SPAWN.heading);
     const c = this.companion;
-    if (c) {
+    // ตัวที่เพื่อนบังคับ: ยืนตามตำแหน่งที่เพื่อนส่งมา (ไม่วางใหม่)
+    if (c && !c.remote) {
       c.place(COMPANION_SPAWN.x, COMPANION_SPAWN.z, COMPANION_SPAWN.heading);
       this.brains[c.key]?.reset(1 + Math.random() * 2);
     }
@@ -307,10 +424,25 @@ export class FarmSystem {
   swapCharacter() {
     const next = this.companion;
     if (!next || !this.active) return;
-    const prev = this.player;
-    this.social.cancel();
-    this.game.settings.character = next.key;
+    // เล่นด้วยกันอยู่: อีกตัวเป็นของเพื่อน
+    if (this.remoteKey) return this.#denied(`👥 ${next.def.label}เป็นตัวที่เพื่อนเล่นอยู่ — สลับตัวไม่ได้ระหว่างเล่นด้วยกัน`);
+    const prevLabel = this.player?.def.label ?? '';
+    this.#switchTo(next.key);
+    this.game.ui.toast(`${next.def.icon} ตอนนี้บังคับ${next.def.label}แล้ว — ${prevLabel}จะทำกิจวัตรเอง`);
+  }
+
+  /** เปลี่ยนตัวที่เครื่องนี้บังคับ (ปุ่มสลับตัว / ถูกเปลี่ยนเพราะเพื่อนเลือกตัวเดียวกัน) */
+  #switchTo(key) {
+    if (key === this.controlled) return;
+    this.game.settings.character = key;
     saveSettings(this.game.settings); // เก็บในเครื่อง (ไม่ใช่เซฟกลาง)
+    this.coop?.announce();
+    const next = this.people[key];
+    const prev = this.people[otherChar(key)];
+    if (!next || !prev) return;
+    this.social.cancel();
+    this.life.cancel(key, true);
+    next.remote = false;
     next.cancelAct();
     this.brains[prev.key]?.reset(0.8);
     prev.body.priority = false;
@@ -320,8 +452,7 @@ export class FarmSystem {
     this.game.ui.cowCard.hide();
     if (this.inBarnView) this.#setBarnView(false);
     this.walkTarget = null;
-    this.#syncHouseView(false, true);
-    this.game.ui.toast(`${next.def.icon} ตอนนี้บังคับ${next.def.label}แล้ว — ${prev.def.label}จะทำกิจวัตรเอง`);
+    if (this.active) this.#syncHouseView(false, true);
   }
 
   /**
@@ -449,7 +580,8 @@ export class FarmSystem {
     } else if (!this.social.drives(p.key) && !this.life.drives(p.key)) p.drive(dt, v, yaw, this.collide);
     this.life.update(dt);
     const c = this.companion;
-    if (c && !this.social.drives(c.key) && !this.life.drives(c.key)) this.brains[c.key].update(dt);
+    if (c?.remote && !this.social.drives(c.key)) this.#updateRemote(dt, c);
+    else if (c && !c.remote && !this.social.drives(c.key) && !this.life.drives(c.key)) this.brains[c.key].update(dt);
     // ตัวละครที่ผู้เล่นบังคับไม่ได้ (ยายเพ็ญ) ทำกิจวัตรของตัวเอง
     for (const [key, person] of Object.entries(this.people)) {
       if (person.def.npc && !this.social.drives(key) && !this.life.drives(key)) this.brains[key].update(dt);
@@ -1134,6 +1266,7 @@ export class FarmSystem {
       if (this.player) this.#updatePlayer(dt);
       separate(this.bodies);
     }
+    this.#updateCoop(dt);
     this.social.update(dt);
     this.timer -= dt;
     if (this.timer > 0) return;
@@ -1224,7 +1357,8 @@ export class FarmSystem {
     for (const [key, person] of Object.entries(this.people)) {
       // นั่ง/นอน/ทำงานอยู่ = ไม่ถูกดันออก (ตัวอยู่ในกล่องเฟอร์นิเจอร์)
       // ยืนคุยอยู่ (กอด/จูบตัวชิดกัน) = ไม่ถูกดันแยก
-      person.body.fixed = this.life.drives(key) || this.social.holds(key);
+      // ตัวที่เพื่อนบังคับ = ตำแหน่งจากอีกเครื่อง ไม่ถูกดัน
+      person.body.fixed = this.life.drives(key) || this.social.holds(key) || (person.remote && !this.social.drives(key));
       list.push(person.body);
     }
     this.bodies = list;
