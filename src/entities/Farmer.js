@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { angleDelta, clamp, damp, lerp } from '../utils/math.js';
 
-/** ตาเหม คนเลี้ยงวัว (Fish/farm/build_tahem.py): คลิป HemIdle · HemWalk · HemTend */
+/** ตาเหม คนเลี้ยงวัว (Fish/farm/build_tahem.py): คลิป HemIdle · HemWalk · HemTend + ท่าคุย HemTalk HemLaugh HemShrug HemWave */
 export const FARMER_MODEL = 'models/farm/tahem.glb';
 export const FARMER_NAME = 'ตาเหม';
 
@@ -10,6 +10,10 @@ const WALK_CLIP_SPEED = 0.94;
 const SPEED = 0.95;
 const TURN = 3.2;
 const FADE = 0.35;
+/** ท่าที่เล่นวน (ที่เหลือเล่นครั้งเดียว) */
+const LOOPED = new Set(['idle', 'walk', 'talk']);
+/** ความสูงหัว (ม.) — วางฟองคำพูด */
+export const FARMER_HEAD = 1.9;
 
 /**
  * จุดในเส้นทาง: Vector3 คงที่ หรือฟังก์ชันที่คืน Vector3 (คำนวณใหม่ทุกเฟรม — ใช้ตามวัวที่ยังเดินอยู่)
@@ -54,6 +58,15 @@ export class Farmer {
     this.focus = null;
     /** @type {((heading: number) => { heading: number, slow: number }) | null} ทิศเดินที่อ้อมวัว (bodySpace.steer) */
     this.avoid = null;
+    /** @type {{ face: () => THREE.Vector3, once: { done: Function | null, until: number | null } | null } | null} กำลังคุยกับผู้เล่น (SocialSystem) */
+    this.convo = null;
+    this.mixer.addEventListener('finished', (e) => {
+      if (this.convo?.once && e.action === this.clip) {
+        const done = this.convo.once.done;
+        this.convo.once = null;
+        done?.();
+      }
+    });
     this.#play('idle', 0);
   }
 
@@ -72,6 +85,7 @@ export class Farmer {
    * @param {(() => void) | null} [onDone] เรียกเมื่อลูบเสร็จ
    */
   visit(points, face, onDone = null) {
+    this.convo = null;
     this.route = { points, i: 0, face, onDone };
     this.faceAt = null;
     this.#walkTo(this.#point(points[0]));
@@ -82,6 +96,44 @@ export class Farmer {
     this.route = { points, i: 0, face: null, onDone: null };
     this.faceAt = null;
     this.#walkTo(this.#point(points[0]));
+  }
+
+  get key() {
+    return 'tahem';
+  }
+
+  hasClip(name) {
+    return !!this.actions[name];
+  }
+
+  clipDuration(name, fallback = 2.5) {
+    const a = this.actions[name];
+    return a && !LOOPED.has(name) ? a.getClip().duration : fallback;
+  }
+
+  /** หยุดงานแล้วหันมาคุยกับคนที่ face() ชี้ (เส้นทางเดิมยกเลิก) */
+  talkTo(face) {
+    this.route = null;
+    this.focus = null;
+    this.faceAt = null;
+    this.state = 'convo';
+    this.convo = { face, once: null };
+  }
+
+  /** เล่นท่าระหว่างคุย — 'talk' วนนาน duration วินาที · ท่าอื่นเล่นครั้งเดียว */
+  act(name, done = null, { duration = 2.5 } = {}) {
+    if (!this.convo) return done?.();
+    const n = this.actions[name] ? name : 'talk';
+    this.convo.once = { done, until: LOOPED.has(n) ? duration : null };
+    this.#play(n, FADE, true);
+  }
+
+  /** คุยจบ กลับไปทำงานต่อ */
+  release() {
+    if (!this.convo) return;
+    this.convo = null;
+    // ถูกสั่งงานใหม่ระหว่างคุย (เช่นผู้เล่นให้ฟางวัว → visit) = ทำงานนั้นต่อ ไม่ต้องกลับไปยืน
+    if (this.state === 'convo') this.#idle(1.5 + Math.random() * 2);
   }
 
   /** แตะโดนตาเหมไหม */
@@ -96,6 +148,20 @@ export class Farmer {
     this.stateTime -= dt;
     let wantSpeed = 0;
 
+    if (this.state === 'convo' && this.convo) {
+      const f = this.convo.face();
+      const off = angleDelta(g.rotation.y, Math.atan2(f.x - g.position.x, f.z - g.position.z));
+      g.rotation.y += clamp(off, -TURN * dt, TURN * dt);
+      const o = this.convo.once;
+      if (o?.until != null && (o.until -= dt) <= 0) {
+        this.convo.once = null;
+        o.done?.();
+      }
+      if (!this.convo?.once) this.#play('idle');
+      this.speed = damp(this.speed, 0, 8, dt);
+      this.mixer.update(dt);
+      return;
+    }
     if (this.state === 'walk') {
       if (this.route) this.target.copy(this.#point(this.route.points[this.route.i]));
       const dx = this.target.x - g.position.x;
@@ -178,11 +244,11 @@ export class Farmer {
     this.#walkTo(new THREE.Vector3(x, 0, z));
   }
 
-  #play(name, fade = FADE) {
+  #play(name, fade = FADE, restart = false) {
     const next = this.actions[name] ?? this.actions.idle;
-    if (!next || next === this.clip) return;
+    if (!next || (next === this.clip && !restart)) return;
     next.reset();
-    const once = name === 'tend';
+    const once = !LOOPED.has(name);
     next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     next.clampWhenFinished = once;
     next.setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play();
@@ -191,8 +257,8 @@ export class Farmer {
   }
 }
 
-/** ป้ายชื่อลอยเหนือหัว (พื้นเข้มโปร่ง ตัวอักษรขาว) */
-function nameLabel(text) {
+/** ป้ายชื่อลอยเหนือหัว (พื้นเข้มโปร่ง ตัวอักษรขาว) · icon = อีโมจิหน้าชื่อ */
+export function nameLabel(text, icon = '👴') {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 72;
@@ -205,7 +271,7 @@ function nameLabel(text) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fff';
-  ctx.fillText(`👴 ${text}`, 128, 38);
+  ctx.fillText(`${icon} ${text}`, 128, 38);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));

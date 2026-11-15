@@ -43,11 +43,11 @@ const TEMPLATE = /* html */ `
       <button data-action="cows" data-at="farm" title="ซื้อและดูแลวัว"><span class="ico">🐄</span><span>วัว</span><i class="badge" data-ref="cowsBadge"></i></button>
       <button data-action="shop"><span class="ico">🏪</span><span>ร้านค้า</span></button>
       <button data-action="garden" data-at="home" title="กระถางทานตะวันข้างตู้"><span class="ico">🌻</span><span>ต้นไม้</span><i class="badge" data-ref="gardenBadge"></i></button>
-      <button data-action="goFarm" data-at="home" title="ออกไปฟาร์มนอกบ้าน"><span class="ico">🚪</span><span>นอกบ้าน</span><i class="badge" data-ref="farmBadge"></i></button>
+      <button data-action="goFarm" data-at="home" title="ลุกจากตู้ปลา เดินในบ้าน/ฟาร์ม"><span class="ico">🏡</span><span>เดินเล่น</span><i class="badge" data-ref="farmBadge"></i></button>
       <button data-action="barn" data-at="farm" class="barn-enter" title="เข้าไปดูวัวในโรงนา"><span class="ico">🏚️</span><span>โรงนา</span></button>
       <button data-action="leaveBarn" data-at="barn" title="ออกจากโรงนา กลับไปที่คอกหญ้า"><span class="ico">🌿</span><span>ออกโรงนา</span></button>
       <button data-action="swapCharacter" data-at="farm" class="swap-character" title="สลับตัวละครที่บังคับ (คีย์ C)"><span class="ico">🔄</span><span>สลับตัว</span></button>
-      <button data-action="goHome" data-at="farm" title="กลับเข้าบ้าน (ตู้ปลา)"><span class="ico">🏠</span><span>เข้าบ้าน</span></button>
+      <button data-action="goHome" data-at="farm" title="ดูตู้ปลา (ในห้องนั่งเล่น)"><span class="ico">🐠</span><span>ตู้ปลา</span></button>
     </nav>
 
     <div class="tank-label" data-ref="tankLabel"></div>

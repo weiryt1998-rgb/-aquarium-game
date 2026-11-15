@@ -220,11 +220,14 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
     }
   });
 
-  test('ฟาร์มวัว: บันทึกวัวเต็ม 8 ตัว + 7 ตู้เต็มความจุ + ทานตะวันได้ (งบนิพจน์ของ Rules) และปฏิเสธโครงผิด/เกิน 8 ตัว', async () => {
+  test('ฟาร์มวัว: บันทึกวัวเต็ม 8 ตัว + 7 ตู้เต็มความจุ + ทานตะวัน + ความสัมพันธ์ได้ (งบนิพจน์ของ Rules) และปฏิเสธโครงผิด/เกิน 8 ตัว', async () => {
     await seed(env);
     const cow = (i) => ({ id: `cow_${i}`, breedId: i % 2 ? 'brahman_calf' : 'brahman', name: 'มะลิ', sex: i % 2 ? 'm' : 'f', boughtAt: 1, at: 2, satiety: 80, health: 100, milk: 10, preg: 0, bredAt: 0, born: 0 });
     const grass = { at: 2, g: Array(24).fill(100), w: Array(24).fill(40) };
     const farm = { cows: Array.from({ length: 8 }, (_, i) => cow(i)), grass };
+    // ความสัมพันธ์ครบ 3 คู่ (src/shared/social.js) — ต้องไม่ทำให้เกินงบนิพจน์ตอนเซฟเต็มที่สุด
+    const rel = (f, r = 0) => ({ f, r, at: 2, last: 'chat', rep: 1 });
+    const social = { rel: { 'man|woman': rel(60, 75), 'man|tahem': rel(25), 'tahem|woman': rel(30) } };
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = { cows: [cow(0)] }), d))));
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => ((d.game.farm = { cows: [], grass }), d))));
     await assertSucceeds(setDoc(saveRef(), await nextDoc((d) => {
@@ -238,6 +241,7 @@ describe('firestore.rules (แผน Spark: เว็บเขียนเอง
       d.game.activeTankId = d.game.tanks[0].id;
       d.game.sunflower = { plantedAt: 1, at: 2, water: 50, food: 20, growth: 0.5, health: 90, seedsAt: 0 };
       d.game.farm = farm;
+      d.game.social = social;
       return d;
     })));
     const bads = [

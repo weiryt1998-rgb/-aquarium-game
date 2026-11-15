@@ -23,7 +23,8 @@ export const PATH_WIDTH = 1.5;
 /** บ่อน้ำข้างคอก (ซ้ายมือ ระหว่างบ้านกับโรงนา) */
 export const POND = { x: -18.6, z: -2.8, r: 3.2 };
 
-const HOUSE_BOX = { minX: -28.4, maxX: -16.2, minZ: 4.4, maxZ: 16.0 };
+/** บ้านหลังใหม่ (world/House.js HOUSE_RECT) + ระเบียงหน้า */
+const HOUSE_BOX = { minX: -31.5, maxX: -15.6, minZ: 4.2, maxZ: 17.8 };
 const BARN_BOX = { minX: -6, maxX: 6, minZ: -22.8, maxZ: -8.4 };
 export const YARD = { minX: -16.3, maxX: -12.6, minZ: 5.0, maxZ: 16.0, gate: [9.6, 11.4] };
 const GARDEN = [[-21.2, 3.2], [-24.6, 3.2]];
@@ -31,7 +32,7 @@ const GARDEN = [[-21.2, 3.2], [-24.6, 3.2]];
 const HALF_PI = Math.PI / 2;
 
 /** ตำแหน่งของตกแต่งแต่ละชนิด { x, z, rot?, y?, s? (ขนาด หรือ [sx, sy, sz]) } */
-function placements() {
+export function placements() {
   const P = {
     HayBale: [
       { x: 7.2, z: -11.6 }, { x: 8.7, z: -11.6 }, { x: 7.95, z: -11.6, y: 1.3 },
@@ -52,7 +53,7 @@ function placements() {
     GardenBed: GARDEN.map(([x, z]) => ({ x, z })),
     GardenVeg: GARDEN.map(([x, z]) => ({ x, z })),
     // พุ่มไม้ชิดอาคารเท่านั้น (ทุ่งโล่ง)
-    BushA: [{ x: -28.3, z: 5.3 }, { x: -28.3, z: 15.4, s: 1.2 }, { x: -6.8, z: -21.5, s: 1.3 }, { x: 6.9, z: -21.0, s: 1.1 }],
+    BushA: [{ x: -31.9, z: 5.2 }, { x: -31.9, z: 16.8, s: 1.2 }, { x: -6.8, z: -21.5, s: 1.3 }, { x: 6.9, z: -21.0, s: 1.1 }],
     BushB: [{ x: -15.7, z: 5.6 }, { x: -15.7, z: 15.4 }],
     RockA: [],
     RockB: [],

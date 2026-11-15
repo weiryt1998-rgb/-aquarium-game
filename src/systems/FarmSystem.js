@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { Farm, BARN_ROUTE, BARN_STALLS, COW_AREA, FARM_MODELS, TROUGH } from '../world/Farm.js';
 import { Cow, COW_MODEL } from '../entities/Cow.js';
-import { Farmer, FARMER_MODEL, FARMER_NAME } from '../entities/Farmer.js';
+import { Farmer, FARMER_MODEL } from '../entities/Farmer.js';
 import { PEOPLE, Person, PERSON_RADIUS } from '../entities/Person.js';
-import { PersonAI } from '../entities/PersonAI.js';
+import { PEN_SPOTS, PEN_STROLL, PersonAI, PEN_HOUSE, MATE_HOUSE } from '../entities/PersonAI.js';
 import { FarmNav } from '../world/farmNav.js';
-import { buildFarmColliders, resolveCollisions, WALK_BOUNDS } from '../world/farmColliders.js';
+import { blockedAt, buildFarmColliders, resolveCollisions, WALK_BOUNDS } from '../world/farmColliders.js';
+import { SocialSystem } from './SocialSystem.js';
+import { HouseLife, ACTIVITIES } from './HouseLife.js';
+import { HOUSE_NAV } from '../world/House.js';
 import { PlayerInput } from './PlayerInput.js';
 import { saveSettings } from '../core/settings.js';
 import { separate, steer } from '../entities/bodySpace.js';
@@ -51,6 +54,7 @@ import { pick, uid } from '../utils/math.js';
 const COMMANDS = { feed: 'feedCow', milk: 'milkCow' };
 const GROUND = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hit = new THREE.Vector3();
+const _rc = new THREE.Raycaster();
 
 const BREEDING = CONFIG.farm.breeding;
 /** ข้อความเมื่อทำไม่ได้ (เหตุผลจาก shared/farm.js) */
@@ -91,8 +95,12 @@ const PEN_BOUNDS = { minX: COW_AREA.minX - 1, maxX: COW_AREA.maxX + 1, minZ: COW
 const PLAYER_SPAWN = { x: -11.4, z: 10.4, heading: Math.PI / 2 };
 /** จุดเริ่มของตัวละครอีกตัว (เดินทำกิจวัตรเอง): ในคอกใกล้ประตูหน้า */
 const COMPANION_SPAWN = { x: 2.2, z: 5.5, heading: -2.4 };
+/** ยายเพ็ญเริ่มที่แปลงผักข้างบ้าน */
+const PEN_SPAWN = { x: -21.2, z: 1.75, heading: 0 };
 /** กล้องตามผู้เล่น: ถอยหลัง back ม. สูง up ม. จากระดับอก */
 const PLAYER_CAM = { back: 4.6, up: 2.2 };
+/** กล้องในบ้าน (แบบเกมจำลองชีวิต): มุมสูง ~52° จากแนวตั้ง ระยะ 11 ม. · ลากหมุนรอบได้ · ซูม 5..18 ม. */
+const HOUSE_CAM = { dist: 11, polar: 0.92 };
 /** ขอบเขตจุดหมุนกล้อง/ระยะซูมตอนตามผู้เล่น (ครอบพื้นที่เดินได้ทั้งหมด) */
 const PLAYER_VIEW = {
   center: new THREE.Vector3((WALK_BOUNDS.minX + WALK_BOUNDS.maxX) / 2, 0, (WALK_BOUNDS.minZ + WALK_BOUNDS.maxZ) / 2),
@@ -163,6 +171,21 @@ export class FarmSystem {
     this.colliders = null;
     /** กล้องกำลังบินกลับมาหาผู้เล่น → ตามติดเมื่อบินถึง */
     this.camToPlayer = false;
+    /** ระบบคุยกัน (แตะตัวละครอีกคน/ตาเหม → เมนูวงกลม) */
+    this.social = new SocialSystem(this);
+    /** กิจกรรมในบ้าน (นั่ง นอน ทำกับข้าว อาบน้ำ …) */
+    this.life = new HouseLife({
+      house: () => this.world?.house ?? null,
+      nav: () => this.nav,
+      collide: (pos) => this.collide?.(pos),
+      blocked: (pos) => this.blocked(pos),
+      bubble: (key, text, duration) => this.social.say(key, text, duration),
+      onTank: (person) => {
+        if (person.key === this.controlled) this.game.goTo('home');
+      },
+    });
+    /** มุมกล้องในบ้าน (หลังคาซ่อน ผนังบังกล้องลดลง) */
+    this.inHouseView = false;
     /** ตัวละครทั้งหมดในฉากสำหรับกันเดินทะลุกัน (entities/bodySpace.js) — สร้างใหม่ทุกเฟรมจากวัวที่มีอยู่ */
     this.bodies = [];
     this.greeted = false;
@@ -230,7 +253,7 @@ export class FarmSystem {
     this.#setBarnView(false);
     if (this.player) {
       this.#spawnPlayer();
-      this.#cameraToPlayer(true);
+      this.#syncHouseView(true);
     } else sceneMgr.frameArea(this.world.view);
     this.#loadModels();
     if (!this.herd.length && !this.welcomed) {
@@ -244,17 +267,39 @@ export class FarmSystem {
     this.#setBarnView(false);
     this.input?.reset();
     this.camToPlayer = false;
+    this.social.cancel();
+    this.social.menu?.close();
+    this.social.bubbles?.clear();
+  }
+
+  /** จุดนี้อยู่ในโรงนาไหม */
+  insideBarnAt(p) {
+    return this.#insideBarn(p);
+  }
+
+  /** จุดนี้คนยืนไม่ได้ (ชนรั้ว/บ้าน/ของ) */
+  blocked(p) {
+    return !this.colliders || blockedAt(this.colliders, p.x, p.z, PERSON_RADIUS);
   }
 
   // ── ตัวละครผู้เล่น ──────────────────────────────────────────
 
   /** วางผู้เล่นที่หน้าประตูสวนหน้าบ้าน หันไปทางคอก (ทุกครั้งที่ออกนอกบ้าน) */
   #spawnPlayer() {
-    this.player?.place(PLAYER_SPAWN.x, PLAYER_SPAWN.z, PLAYER_SPAWN.heading);
+    // ออกจากโหมดตู้ปลา = ยืนหน้าตู้ปลาในห้องนั่งเล่น (ตู้ปลาอยู่ในบ้าน) · ยังไม่มีบ้าน = หน้าประตูสวน
+    for (const k of Object.keys(this.people)) this.life.cancel(k, true);
+    const tank = this.world?.house?.furniture.get('F_FishTank_0')?.spots[0];
+    if (tank) this.player?.place(tank.pos.x - Math.sin(tank.heading) * 0.4, tank.pos.z - Math.cos(tank.heading) * 0.4, tank.heading + Math.PI);
+    else this.player?.place(PLAYER_SPAWN.x, PLAYER_SPAWN.z, PLAYER_SPAWN.heading);
     const c = this.companion;
     if (c) {
       c.place(COMPANION_SPAWN.x, COMPANION_SPAWN.z, COMPANION_SPAWN.heading);
       this.brains[c.key]?.reset(1 + Math.random() * 2);
+    }
+    const pen = this.people.pen;
+    if (pen) {
+      pen.place(PEN_SPAWN.x, PEN_SPAWN.z, PEN_SPAWN.heading);
+      this.brains.pen?.reset(2 + Math.random() * 3);
     }
   }
 
@@ -263,6 +308,7 @@ export class FarmSystem {
     const next = this.companion;
     if (!next || !this.active) return;
     const prev = this.player;
+    this.social.cancel();
     this.game.settings.character = next.key;
     saveSettings(this.game.settings); // เก็บในเครื่อง (ไม่ใช่เซฟกลาง)
     next.cancelAct();
@@ -273,19 +319,21 @@ export class FarmSystem {
     this.game.sound.play('click');
     this.game.ui.cowCard.hide();
     if (this.inBarnView) this.#setBarnView(false);
-    this.#cameraToPlayer(false);
-    this.game.ui.toast(`${next.def.icon} ตอนนี้บังคับ${next.def.label}แล้ว — ${prev.def.label}จะเดินทำงานในฟาร์มเอง`);
+    this.walkTarget = null;
+    this.#syncHouseView(false, true);
+    this.game.ui.toast(`${next.def.icon} ตอนนี้บังคับ${next.def.label}แล้ว — ${prev.def.label}จะทำกิจวัตรเอง`);
   }
 
   /**
    * กล้องกลับมาตามหลังผู้เล่น: มองจากด้านหลังเฉียงสูง (ตามทิศที่ตัวละครหัน) แล้วตามติด (SceneManager.follow) · ลากจอหมุนรอบตัวได้
    * immediate = วางทันที (ตอนออกนอกบ้าน) · ไม่งั้นบินไปแล้วค่อยตาม
    */
-  #cameraToPlayer(immediate) {
+  #cameraToPlayer(immediate, keepAngle = false) {
     const p = this.player;
     if (!p) return;
     const sm = this.game.sceneMgr;
-    const h = p.group.rotation.y;
+    // keepAngle = มองจากทิศเดิมของกล้อง (เดินออกจากบ้าน: ไม่หมุนไปด้านหลังตัวซึ่งเป็นในตัวบ้าน)
+    const h = keepAngle ? Math.atan2(p.position.x - sm.camera.position.x, p.position.z - sm.camera.position.z) : p.group.rotation.y;
     const at = p.anchor.position.clone();
     const view = {
       ...PLAYER_VIEW,
@@ -301,9 +349,53 @@ export class FarmSystem {
     } else this.camToPlayer = true;
   }
 
+  /**
+   * เข้า/ออกบ้าน: ในบ้าน = กล้องมุมสูงแบบเกมจำลองชีวิต (มุมหมุนเดิม) + ซ่อนหลังคา + ลดผนังบังกล้อง · นอกบ้าน = ตามหลังผู้เล่น
+   * immediate = วางกล้องทันที (ตอนออกจากโหมดตู้ปลา)
+   */
+  #syncHouseView(immediate = false, force = false) {
+    const p = this.player;
+    const house = this.world?.house;
+    if (!p) return;
+    const inside = !!house && (this.inHouseView ? house.contains(p.position, 0.35) : house.contains(p.position, -0.15));
+    if (inside === this.inHouseView && !immediate && !force) return;
+    this.inHouseView = inside;
+    house?.setInterior(inside);
+    this.game.ui.root.classList.toggle('in-house', inside);
+    if (!inside) return this.#cameraToPlayer(immediate, !!house && house.contains(p.position, 2.5));
+    const sm = this.game.sceneMgr;
+    const at = p.anchor.position.clone();
+    // มุมหมุนรอบเดิมของกล้อง (เข้าทางประตูหน้า = มองจากฝั่งทุ่งหญ้า)
+    const cam = sm.camera.position;
+    let az = Math.atan2(cam.x - at.x, cam.z - at.z);
+    // เข้ามุมแรก (ออกจากตู้ปลา): มองจากฝั่งใต้เฉียงตะวันออก — เห็นห้องนั่งเล่นเต็ม ตู้ปลาไม่บังตัว
+    if (immediate) az = Math.atan2(0.45, 1);
+    // จอแนวตั้ง (มือถือ) มุมกว้างแนวนอนแคบ → ถอยกล้องออกให้เห็นทั้งห้อง
+    const r = HOUSE_CAM.dist * Math.max(1, Math.sqrt(1.3 / sm.camera.aspect));
+    const view = {
+      ...PLAYER_VIEW,
+      minDistance: 5,
+      maxDistance: Math.max(18, r + 4),
+      maxPolar: 1.15,
+      target: at,
+      position: at.clone().add(new THREE.Vector3(Math.sin(az) * Math.sin(HOUSE_CAM.polar) * r, Math.cos(HOUSE_CAM.polar) * r, Math.cos(az) * Math.sin(HOUSE_CAM.polar) * r)),
+    };
+    sm.frameArea(view, { immediate });
+    sm.reframe = null;
+    if (immediate) {
+      sm.follow(p.anchor);
+      this.camToPlayer = false;
+    } else this.camToPlayer = true;
+  }
+
+  /** กล้องกลับมาหาผู้เล่น: ในบ้าน = มุมสูง · นอกบ้าน = ตามหลัง */
+  #playerCam() {
+    this.#syncHouseView(false, true);
+  }
+
   /** มุมกล้องหลักของฟาร์ม: มีผู้เล่น = ตามหลังผู้เล่น · ยังไม่มี = มุมกว้างทั้งคอก */
   #mainView() {
-    if (this.player) this.#cameraToPlayer(false);
+    if (this.player) this.#playerCam();
     else this.game.sceneMgr.frameArea(this.world.view, { immediate: false });
   }
 
@@ -316,8 +408,8 @@ export class FarmSystem {
       () =>
         this.game.ui.toast(
           touch
-            ? '🚶 ใช้จอยซ้ายล่างเดิน (ดันสุดขอบ = วิ่ง) · ลากจอหมุนกล้อง · แตะอีกคนหรือปุ่ม "สลับตัว" เพื่อเปลี่ยนตัวละคร'
-            : '🚶 เดินด้วย W A S D / ลูกศร · Shift ค้าง = วิ่ง · ลากเมาส์หมุนกล้อง · กด C หรือแตะอีกคนเพื่อสลับตัวละคร',
+            ? '🚶 จอยซ้ายล่าง = เดิน (ดันสุด = วิ่ง) · ลากจอหมุนกล้อง · แตะคนเพื่อคุย · ในบ้านแตะเฟอร์นิเจอร์/พื้นห้อง · ปุ่ม "สลับตัว" เปลี่ยนตัวละคร'
+            : '🚶 W A S D / ลูกศร = เดิน · Shift = วิ่ง · ลากเมาส์หมุนกล้อง · คลิกคนเพื่อคุย · ในบ้านคลิกเฟอร์นิเจอร์/พื้นห้อง · C = สลับตัวละคร',
         ),
       900,
     );
@@ -330,7 +422,7 @@ export class FarmSystem {
     const moving = Math.hypot(v.x, v.y) > 0.08;
     // เริ่มเดินระหว่างดูโรงนา/ดูวัวตัวไหนอยู่ → กล้องกลับมาหาผู้เล่น
     if (moving && this.inBarnView) this.leaveBarn();
-    else if (moving && !sm.tween && sm.followTarget !== p.anchor && !this.camToPlayer) this.#cameraToPlayer(false);
+    else if (moving && !sm.tween && sm.followTarget !== p.anchor && !this.camToPlayer) this.#playerCam();
     if (this.camToPlayer && !sm.tween) {
       sm.follow(p.anchor);
       this.camToPlayer = false;
@@ -339,9 +431,64 @@ export class FarmSystem {
     const cam = sm.camera.position;
     const t = sm.controls.target;
     const yaw = Math.atan2(t.x - cam.x, t.z - cam.z);
-    p.drive(dt, v, yaw, this.collide);
+    // กำลังคุยกันอยู่: ระบบคุยบังคับตัวละครเอง · ผู้เล่นขยับ = เลิกคุย
+    if (moving && this.social.drives(p.key)) this.social.cancel();
+    // กำลังทำกิจกรรมในบ้าน: ขยับ = เลิก (นั่ง/นอนอยู่ = ลุกก่อน)
+    if (moving && this.life.drives(p.key)) this.life.requestExit(p.key);
+    if (moving) this.walkTarget = null;
+    const wt = this.walkTarget;
+    if (wt && !this.social.drives(p.key) && !this.life.drives(p.key)) {
+      // แตะพื้นในบ้าน: เดินตามเส้นทางไปจุดนั้น
+      const last = wt.i >= wt.points.length - 1;
+      wt.t += dt;
+      if (p.walkToward(dt, wt.points[wt.i], this.collide, { reach: last ? 0.2 : 0.45 })) {
+        if (last) this.walkTarget = null;
+        else wt.i++;
+      }
+      if (wt.t > 30) this.walkTarget = null;
+    } else if (!this.social.drives(p.key) && !this.life.drives(p.key)) p.drive(dt, v, yaw, this.collide);
+    this.life.update(dt);
     const c = this.companion;
-    if (c) this.brains[c.key].update(dt);
+    if (c && !this.social.drives(c.key) && !this.life.drives(c.key)) this.brains[c.key].update(dt);
+    // ตัวละครที่ผู้เล่นบังคับไม่ได้ (ยายเพ็ญ) ทำกิจวัตรของตัวเอง
+    for (const [key, person] of Object.entries(this.people)) {
+      if (person.def.npc && !this.social.drives(key) && !this.life.drives(key)) this.brains[key].update(dt);
+    }
+    this.#syncHouseView();
+    if (this.world.house) {
+      const ppl = Object.values(this.people).map((x) => x.position);
+      if (this.farmer) ppl.push(this.farmer.position);
+      this.world.house.update(dt, sm.camera, sm.controls.target, ppl);
+    }
+  }
+
+  /** แตะเฟอร์นิเจอร์ในบ้าน → เมนูกิจกรรม */
+  #openFurniture(name) {
+    const info = this.life.info(name);
+    const acts = this.life.actionsFor(name);
+    if (!info || !acts.length) return;
+    const p = this.player;
+    this.game.sound.play('click');
+    this.social.menuOpen({
+      icon: info.icon,
+      title: info.label,
+      level: 'แตะเพื่อเลือกสิ่งที่จะทำ',
+      anchor: this.world.house.furniture.get(name).node.getWorldPosition(new THREE.Vector3()).setY(1.0),
+      actions: acts,
+      onPick: (id) => {
+        this.social.cancel();
+        if (!this.life.start(p, name, id)) this.game.ui.toast('ตอนนี้มีคนใช้อยู่ — รอสักครู่นะ');
+      },
+    });
+  }
+
+  /** แตะพื้นในบ้าน → เดินไปตรงนั้น */
+  #walkTo(point) {
+    const p = this.player;
+    if (!p || !this.nav) return;
+    this.social.cancel();
+    this.life.cancel(p.key, false);
+    this.walkTarget = { points: this.nav.path(p.position, point.clone().setY(0)) ?? [point.clone().setY(0)], i: 0, t: 0 };
   }
 
   // ── โรงนา ───────────────────────────────────────────────────
@@ -447,9 +594,9 @@ export class FarmSystem {
   }
 
   /** แตะตาเหม: บอกเรื่องที่ควรทำตอนนี้ (เรียงตามความด่วน) */
-  #talk() {
+  /** ตาเหมตอบเรื่องที่ควรทำตอนนี้ (เรียงตามความด่วน) — ใช้ในบทสนทนา "ถามงานในฟาร์ม" (SocialSystem) */
+  farmStatusLine() {
     const f = CONFIG.farm;
-    this.game.sound.play('click');
     const alive = this.herd.filter((c) => !isCowDead(c));
     const dead = this.herd.filter((c) => isCowDead(c));
     const names = (list) => list.slice(0, 2).map((c) => `"${c.name}"`).join(' กับ ') + (list.length > 2 ? ` และอีก ${list.length - 2} ตัว` : '');
@@ -465,7 +612,30 @@ export class FarmSystem {
     else if (full.length) msg = `นมของ${names(full)} เต็มเต้าแล้ว มารีดได้เลย`;
     else if (grass < 30) msg = 'หญ้าในคอกเหลือน้อยแล้ว แตะพื้นในคอกรดน้ำหน่อย หญ้าจะได้งอกขึ้นมาใหม่';
     else msg = pick(FARMER_CHAT);
-    this.game.ui.toast(`👴 ${FARMER_NAME}: ${msg}`);
+    return msg;
+  }
+
+  /** ยายเพ็ญตอบว่าตาเหมอยู่ไหน (จากตำแหน่งจริง) */
+  tahemWhereLine() {
+    const f = this.farmer;
+    if (!f) return 'ไม่รู้สิจ้ะ ออกไปตั้งแต่เช้าแล้ว';
+    const p = f.position;
+    if (f.state === 'tend') return 'นั่นไง กำลังดูวัวอยู่ในคอกโน่นแน่ะหลาน';
+    if (this.#insideBarn(p)) return 'อยู่ในโรงนาจ้ะ ไปดูวัวที่พักอยู่ข้างในน่ะ';
+    if (Math.abs(p.x) < 11 && Math.abs(p.z) < 8) return 'อยู่ในคอกวัวจ้ะ เดินวนดูวัวทั้งวันแหละตาคนนี้';
+    return 'เดินอยู่แถว ๆ นี้แหละจ้ะ ตะโกนเรียกดูสิ';
+  }
+
+  /** "ขอให้ช่วยดูวัว": ตาเหมเดินไปดูตัวที่ต้องการที่สุด (ครบคลอด → หิว → นมเต็ม → ตัวไหนก็ได้) */
+  sendFarmerToNeediest() {
+    const f = CONFIG.farm;
+    const alive = this.herd.filter((c) => !isCowDead(c) && this.cows.has(c.id));
+    const cow =
+      alive.find((c) => this.isDue(c)) ??
+      alive.find((c) => c.satiety < f.hungryBelow) ??
+      alive.find((c) => !isBull(c) && c.milk >= f.milkFullAbove) ??
+      pick(alive);
+    if (cow) this.#sendFarmer(cow.id);
   }
 
   /** คอกในโรงนาของวัวตัวนี้ (จองไว้ตลอดที่อยู่ในโรงนา) · null = เต็ม */
@@ -526,7 +696,7 @@ export class FarmSystem {
     if (!this.player && Object.values(PEOPLE).every((d) => got(d.model))) {
       this.colliders = buildFarmColliders(this.world);
       this.collide = (pos) => resolveCollisions(this.colliders, pos, PERSON_RADIUS);
-      this.nav = new FarmNav(this.colliders, PERSON_RADIUS);
+      this.nav = new FarmNav(this.colliders, PERSON_RADIUS, this.world.house ? HOUSE_NAV : []);
       for (const [key, d] of Object.entries(PEOPLE)) {
         const person = new Person(assets.instantiate(got(d.model)), key);
         person.body = { group: person.group, kind: 'person', priority: key === this.controlled };
@@ -537,13 +707,19 @@ export class FarmSystem {
           cows: () => [...this.cows.values()].filter((c) => !c.stall && !c.traveling && !c.dead).map((c) => c.group.position),
           player: () => this.player,
           avoid: (heading) => steer(person.body, this.bodies, heading),
+          // ยายเพ็ญ: งานบ้าน/แปลงผัก ไม่ไปดูแลวัว (เป็นงานของตาเหม)
+          ...(d.npc ? { spots: PEN_SPOTS, stroll: PEN_STROLL, cowChance: 0 } : {}),
+          // งานในบ้าน (ระบบกิจกรรมพาเดินเข้าไปใช้เฟอร์นิเจอร์)
+          ...(this.world.house
+            ? { house: { ...(d.npc ? PEN_HOUSE : MATE_HOUSE), start: (who, furn, act, opts) => this.life.start(who, furn, act, opts) } }
+            : {}),
         });
         this.world.animals.add(person.group);
       }
       this.input ??= new PlayerInput(this.game.ui.root, () => this.active && this.game.started && !this.game.ui.modalRoot.classList.contains('open'), () => this.swapCharacter());
       this.game.ui.root.classList.add('has-player');
       this.#spawnPlayer();
-      if (this.active && !this.inBarnView) this.#cameraToPlayer(false);
+      if (this.active && !this.inBarnView) this.#syncHouseView(true, true);
       if (this.active) this.#controlsHint();
     }
     for (const url of cowFiles) if (got(url)) this.cowGltfs.set(url, got(url));
@@ -613,8 +789,18 @@ export class FarmSystem {
     if (best) return best;
     const f = this.farmer;
     if (f && this.#insideBarn(f.position) === this.inBarnView && f.pick(ray)) return 'farmer';
-    // แตะตัวละครอีกตัว = สลับไปบังคับตัวนั้น
+    // แตะตัวละครอีกตัว = เมนูคุย (มีปุ่มสลับไปเล่นตัวนั้นด้วย)
     if (this.companion?.pick(ray)) return 'companion';
+    // ในบ้าน: เฟอร์นิเจอร์ / พื้นห้อง
+    if (this.inHouseView && this.world.house) {
+      _rc.ray.copy(ray);
+      for (const [key, person] of Object.entries(this.people)) if (person.def.npc && person.pick(ray)) return `npc:${key}`;
+      const f = this.world.house.pickFurniture(_rc);
+      if (f && this.life.actionsFor(f.name).length) return `furn:${f.name}`;
+      const fl = this.world.house.pickFloor(_rc);
+      if (fl) return { floor: fl };
+    }
+    for (const [key, person] of Object.entries(this.people)) if (person.def.npc && person.pick(ray)) return `npc:${key}`;
     if (this.inBarnView) return null;
     return this.world.pickDoor(ray) ? 'door' : this.world.pickBarnDoor(ray) ? 'barn' : null;
   }
@@ -630,13 +816,18 @@ export class FarmSystem {
       this.enterBarn();
       return;
     }
-    if (hit === 'farmer') {
+    if (typeof hit === 'string' && hit.startsWith('furn:')) {
       game.ui.cowCard.hide();
-      this.#talk();
+      this.#openFurniture(hit.slice(5));
       return;
     }
-    if (hit === 'companion') {
-      this.swapCharacter();
+    if (hit?.floor) {
+      this.#walkTo(hit.floor);
+      return;
+    }
+    if (hit === 'farmer' || hit === 'companion' || (typeof hit === 'string' && hit.startsWith('npc:'))) {
+      game.ui.cowCard.hide();
+      this.social.open(hit === 'farmer' ? 'tahem' : hit === 'companion' ? this.companion.key : hit.slice(4));
       return;
     }
     if (!hit) {
@@ -943,6 +1134,7 @@ export class FarmSystem {
       if (this.player) this.#updatePlayer(dt);
       separate(this.bodies);
     }
+    this.social.update(dt);
     this.timer -= dt;
     if (this.timer > 0) return;
     this.timer = 1;
@@ -1029,7 +1221,12 @@ export class FarmSystem {
       b.bounds = !f.traveling && !this.#insideBarn(f.position) ? PEN_BOUNDS : null;
       list.push(b);
     }
-    for (const person of Object.values(this.people)) list.push(person.body);
+    for (const [key, person] of Object.entries(this.people)) {
+      // นั่ง/นอน/ทำงานอยู่ = ไม่ถูกดันออก (ตัวอยู่ในกล่องเฟอร์นิเจอร์)
+      // ยืนคุยอยู่ (กอด/จูบตัวชิดกัน) = ไม่ถูกดันแยก
+      person.body.fixed = this.life.drives(key) || this.social.holds(key);
+      list.push(person.body);
+    }
     this.bodies = list;
   }
 

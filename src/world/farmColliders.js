@@ -16,7 +16,7 @@ const BARN_HALF_W = 5.5;
 const BARN_HALF_D = 6;
 const BARN_DOOR_HALF = 1.8;
 /** ขอบเขตที่เดินได้ (อยู่ในพื้นราบและในกรอบเงาแดด) */
-export const WALK_BOUNDS = { minX: -32, maxX: 30, minZ: -27, maxZ: 24 };
+export const WALK_BOUNDS = { minX: -36, maxX: 30, minZ: -27, maxZ: 24 };
 
 /** รัศมีของตกแต่งแต่ละชนิด (ชื่อ object ใน decor.glb) — ไม่อยู่ในรายการ = เดินผ่านได้ (ทางเดิน ดอกไม้ หิน) */
 const DECOR_RADIUS = {
@@ -59,7 +59,8 @@ export function buildFarmColliders(world) {
   seg(BARN_AT.x + BARN_DOOR_HALF, bz1, bx1, bz1);
 
   const boxes = [
-    HOUSE,
+    // บ้านเดินเข้าได้: ผนังทุกท่อน + เฟอร์นิเจอร์จากโมเดล (world/House.js) · ยังไม่มีโมเดล = กล่องทั้งหลัง
+    ...(world.house ? world.house.colliderBoxes() : [HOUSE]),
     { minX: TROUGH.x - TROUGH.width / 2, maxX: TROUGH.x + TROUGH.width / 2, minZ: TROUGH.z - TROUGH.depth / 2, maxZ: TROUGH.z + TROUGH.depth / 2 },
   ];
 

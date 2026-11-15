@@ -3,10 +3,12 @@ import { fbm2 } from '../utils/noise.js';
 import { seededRandom, smoothstep } from '../utils/math.js';
 import { GrassField } from './Grass.js';
 import { FarmDecor } from './FarmDecor.js';
+import { House, HOUSE_RECT } from './House.js';
 
 /** โมเดลจริงจาก Blender (Fish/farm/ → scripts/build-farm-models.mjs) — ไม่มีไฟล์ = ใช้โมเดลชั่วคราวจากรูปทรงพื้นฐาน */
 export const FARM_MODELS = {
-  house: 'models/farm/house.glb',
+  // บ้านหลังใหม่เดินเข้าได้ (Fish/farm/build_home.py) — ห้องนั่งเล่น(ตู้ปลา) ครัว ห้องน้ำ ห้องนอน 2 ห้อง
+  house: 'models/farm/home.glb',
   barn: 'models/farm/barn.glb',
   fence: 'models/farm/fence.glb',
   treeA: 'models/farm/tree_a.glb',
@@ -187,7 +189,10 @@ export class Farm {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       // พื้นราบในบริเวณฟาร์ม แล้วค่อย ๆ เป็นเนินออกไปไกล ๆ
-      const far = smoothstep(30, 70, Math.hypot(x, z));
+      // บ้านหลังใหม่ล้ำเข้าเขตเนิน → ทำพื้นราบใต้บ้าน + รอบบ้าน 1.5 ม. (ไม่งั้นพื้นหญ้าโผล่ทะลุพื้นห้อง)
+      const hx = Math.max(HOUSE_RECT.minX - x, 0, x - HOUSE_RECT.maxX);
+      const hz = Math.max(HOUSE_RECT.minZ - z, 0, z - HOUSE_RECT.maxZ);
+      const far = smoothstep(30, 70, Math.hypot(x, z)) * smoothstep(1.5, 6, Math.hypot(hx, hz));
       pos.setY(i, fbm2(x * 0.025, z * 0.025, 3) * 6 * far);
       // หญ้าเขียวสด + หย่อมหญ้าแห้งอ่อน ๆ + โทนเขียวเข้มเป็นแอ่ง (ทางเดินเป็น mesh แยกใน FarmDecor)
       c.copy(grass).lerp(dry, smoothstep(-0.1, 0.6, fbm2(x * 0.08 + 7, z * 0.08, 2)) * 0.8);
@@ -460,14 +465,12 @@ export class Farm {
       return root;
     };
     if (gltfs.house) {
-      const house = shadowed(gltfs.house.scene.clone());
-      house.position.set(HOUSE_AT.x, 0, HOUSE_AT.z);
-      house.rotation.y = HOUSE_AT.rotY;
-      swap('house', house);
-      house.updateMatrixWorld(true);
-      // ประตูหน้าบ้านในไฟล์: กลางหน้าบ้าน สูงจากพื้น ~1.6 ม. ห่างแนวกลางบ้าน 3.5 ม.
-      this.doorHit.center.copy(house.localToWorld(new THREE.Vector3(0, 1.6, 3.55)));
-      this.doorHit.radius = 1.7;
+      // home.glb สร้างตรงพิกัดในฉากแล้ว (ไม่ย้าย/หมุน) · ประตูหน้าเดินเข้าได้จริง → ไม่มีจุดแตะประตูอีกต่อไป
+      const root = shadowed(gltfs.house.scene.clone());
+      swap('house', root);
+      /** @type {House} */
+      this.house = new House(root);
+      this.doorHit.radius = 0;
     }
     if (gltfs.barn) {
       const barn = shadowed(gltfs.barn.scene.clone());

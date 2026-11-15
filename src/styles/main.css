@@ -2865,3 +2865,263 @@ input:checked + .switch::after {
 .in-barn .swap-character {
   display: none;
 }
+
+/* ───────────────────────── คุยกันในฟาร์ม: ฟองคำพูด (src/ui/SpeechBubbles.js) ───────────────────────── */
+.speech-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 4;
+}
+.speech-bubble,
+.speech-pop,
+.speech-mood {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+.speech-bubble {
+  /* จุดอ้างอิง = ปลายหางฟอง (ตรงเหนือหัว) */
+  translate: -50% calc(-100% - 12px);
+  max-width: min(260px, 70vw);
+  padding: 9px 14px;
+  border-radius: 16px;
+  background: #fffdf7;
+  color: #2b2116;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(30, 20, 10, 0.25);
+  border: 2px solid #f1e3c4;
+  animation: bubble-in 0.22s ease-out;
+  transition: opacity 0.25s;
+}
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  translate: -50% 0;
+  border: 9px solid transparent;
+  border-top-color: #fffdf7;
+  border-bottom: 0;
+}
+.speech-bubble.tone-yes {
+  border-color: #b9e9c4;
+}
+.speech-bubble.tone-no {
+  border-color: #f4c2c2;
+  background: #fff7f6;
+}
+.speech-bubble.out,
+.speech-pop.out,
+.speech-mood.out {
+  opacity: 0;
+}
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    scale: 0.7;
+  }
+}
+.speech-pop {
+  /* ข้างหัว ไม่ทับฟองคำพูด */
+  translate: calc(-50% + 46px) -50%;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.3s;
+  animation: bubble-in 0.2s ease-out;
+}
+.speech-pop.good {
+  color: #9effb5;
+}
+.speech-pop.bad {
+  color: #ff9ca3;
+}
+.speech-mood {
+  /* ข้างหัวฝั่งซ้าย (ฟองคำพูดอยู่เหนือหัว) */
+  translate: calc(-50% - 46px) -50%;
+  font-size: 1.6rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  transition: opacity 0.3s, margin-top 0.2s;
+  animation: mood-bob 2.4s ease-in-out infinite;
+}
+@keyframes mood-bob {
+  50% {
+    translate: calc(-50% - 46px) calc(-50% - 6px);
+  }
+}
+
+/* ───────────────────────── เมนูวงกลมเลือกบทสนทนา (src/ui/SocialMenu.js) ───────────────────────── */
+.social-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: radial-gradient(circle at center, rgba(5, 15, 35, 0.05), rgba(5, 15, 35, 0.35));
+  pointer-events: auto;
+}
+.social-menu {
+  position: absolute;
+  z-index: 31;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.social-backdrop.hidden,
+.social-menu.hidden {
+  display: none;
+}
+.sm-center {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  width: 150px;
+  padding: 12px 10px 10px;
+  border-radius: 22px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  pointer-events: auto;
+  animation: sm-pop 0.18s ease-out;
+}
+button.sm-center {
+  cursor: pointer;
+}
+.sm-center b {
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+.sm-center small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.sm-big {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+.sm-mood {
+  color: var(--gold) !important;
+}
+.sm-bar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 4px;
+  align-items: center;
+  font-size: 0.7rem;
+}
+.sm-bar span {
+  grid-row: span 2;
+}
+.sm-bar i {
+  height: 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+.sm-bar i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: var(--v);
+  border-radius: 6px;
+  background: linear-gradient(90deg, #ffd34f, #ffb02e);
+}
+.sm-bar.love i::after {
+  background: linear-gradient(90deg, #ff8fb1, #ff4f86);
+}
+.sm-bar em {
+  font-style: normal;
+  color: var(--muted);
+  text-align: left;
+}
+.sm-item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px 6px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.88rem;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0, 10, 40, 0.3);
+  cursor: pointer;
+  pointer-events: auto;
+  animation: sm-pop 0.2s ease-out backwards;
+  animation-delay: calc(var(--i) * 25ms);
+  transition: background 0.15s, scale 0.15s;
+}
+.sm-item:hover,
+.sm-item:focus-visible {
+  background: var(--accent-2);
+  scale: 1.06;
+}
+.sm-ico {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.sm-cat {
+  background: rgba(31, 127, 224, 0.82);
+}
+.sm-extra {
+  background: rgba(242, 158, 12, 0.85);
+}
+.sm-item.locked {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+.sm-lock {
+  font-size: 0.8rem;
+}
+@keyframes sm-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+/* เมนูเปิดอยู่ = ซ่อนจอยเดิน (อยู่ใต้วงเมนูพอดี) */
+#ui.social-open .player-stick {
+  display: none !important;
+}
+@media (max-width: 560px), (max-height: 560px) {
+  .sm-center {
+    width: 118px;
+    padding: 7px 7px 6px;
+    gap: 1px;
+  }
+  .sm-big {
+    font-size: 1.4rem;
+  }
+  .sm-center b {
+    font-size: 0.82rem;
+  }
+  .sm-item {
+    font-size: 0.8rem;
+    padding: 5px 10px 5px 7px;
+    min-height: 40px;
+  }
+  .speech-bubble {
+    font-size: 0.85rem;
+  }
+}

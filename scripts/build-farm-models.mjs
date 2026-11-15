@@ -41,10 +41,15 @@ const ASSETS = [
   // คลิป Idle Walk Run Tend Stretch Wave (ขึ้นต้น Pl = ผู้ชาย · Wm = ผู้หญิง)
   { name: 'player', texture: 2048, normal: 1024, anim: true },
   { name: 'woman', texture: 2048, normal: 1024, anim: true },
+  // ยายเพ็ญ เมียตาเหม (build_player.py 'pen' · ผ้าถุง fix_skirt_weights) — คลิปขึ้นต้น Pn
+  { name: 'pen', texture: 2048, normal: 1024, anim: true },
   // ต้นไม้ใหญ่ให้ร่มเงา (Meshy ลดเหลือ ~14k สามเหลี่ยม) — ใบเป็นเรขาคณิต ไม่ใช่ภาพตัดขอบ
   { name: 'tree_c', texture: 1024 },
   // ของตกแต่งรอบบ้าน/โรงนา (Fish/farm/build_decor.py) — วัตถุแยกชื่อ เกมวางซ้ำด้วย InstancedMesh (world/FarmDecor.js)
   { name: 'decor', texture: 512 },
+  // บ้านหลังใหม่เดินเข้าได้ (Fish/farm/build_home.py) — ผนังแยกท่อน · เฟอร์นิเจอร์ F_* · จุดใช้งาน Use_* (โหนดเปล่า ต้องเก็บไว้)
+  // กระจก/น้ำในตู้ปลาโปร่งใส (alpha: วัสดุที่ชื่อตรงนี้คงโหมดโปร่งใสไว้)
+  { name: 'home', texture: 1024, normal: 512, keepLeaves: true, alpha: /Glass|Water/ },
 ];
 
 await MeshoptEncoder.ready;
@@ -58,6 +63,7 @@ for (const a of ASSETS) {
     const leaves = /leaves/i.test(m.getName());
     m.setDoubleSided(leaves);
     if (leaves) m.setAlphaMode('MASK').setAlphaCutoff(0.5);
+    else if (a.alpha?.test(m.getName())) m.setAlphaMode('BLEND').setDoubleSided(true);
     else m.setAlphaMode('OPAQUE');
   }
   if (!a.anim) for (const anim of root.listAnimations()) anim.dispose();
@@ -66,7 +72,7 @@ for (const a of ASSETS) {
   for (const anim of root.listAnimations()) if (a.dropClips?.includes(anim.getName())) anim.dispose();
   await doc.transform(
     weld(),
-    prune({ keepAttributes: true }),
+    prune({ keepAttributes: true, keepLeaves: !!a.keepLeaves }),
     dedup(),
     textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^(?!normalTexture).*$/, resize: [a.texture, a.texture], quality: 86 }),
     textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^normalTexture$/, resize: [a.normal ?? a.texture, a.normal ?? a.texture], quality: 90 }),

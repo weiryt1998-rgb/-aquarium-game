@@ -92,6 +92,8 @@ service cloud.firestore {
       return f.keys().hasOnly(['cows', 'grass']) && f.cows is list && f.cows.size() <= 8;
     }
 
+    // social = ความสัมพันธ์ของคนในฟาร์ม (src/shared/social.js) — อนุญาตแค่ชื่อคีย์ ไม่ตรวจข้างใน (งบนิพจน์เต็มแล้ว แบบเดียวกับ grass)
+    // sanitizeSocial ตัดค่าที่ผิดรูปแบบทิ้งทุกครั้งที่อ่านเซฟ · ผลต่อความสัมพันธ์คิดใหม่จากตารางทุกครั้งที่เล่นคำสั่งซ้ำ
     function validGame(g) {
       let tanks = g.tanks;
       let tankCount = tanks.size();
@@ -100,7 +102,7 @@ service cloud.firestore {
       // รวมเงื่อนไขเป็นลิสต์ (แบบเดียวกับ validTank) แทน && ยาว ๆ — ประหยัดงบนิพจน์ 1000 ตอนมีครบ 7 ตู้
       // ค่าใดผิด/ขาด/ผิดชนิด → ได้ false หรือ Rules error → ถูกปฏิเสธเหมือนเดิม
       return [g.keys().hasOnly(['version', 'coins', 'gems', 'inventory', 'selectedFood', 'collection', 'tanks', 'activeTankId',
-          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved', 'sunflower', 'farm']),
+          'missions', 'dailyRewardDay', 'lastCleanAt', 'stats', 'lastSaved', 'sunflower', 'farm', 'social']),
         g.version == 1,
         isCount(g.coins, 1000000000),
         isCount(g.gems, 10000000),

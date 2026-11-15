@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { angleDelta, clamp, damp } from '../utils/math.js';
+import { nameLabel } from './Farmer.js';
 
 /**
  * ตัวละครคน 2 ตัวในฟาร์ม (Fish/farm/build_player.py · ท่าทาง motion capture จริงจาก CMU)
@@ -7,17 +8,21 @@ import { angleDelta, clamp, damp } from '../utils/math.js';
  */
 export const PEOPLE = {
   // ผู้ชาย: เดินแบบ "Relaxed" ก้าวกว้างสบาย ๆ · walk = ความเร็วตอนผู้เล่นบังคับ (เร็วกว่าคลิปไม่เกิน ~30% ยังดูเป็นธรรมชาติ)
-  man: { model: 'models/farm/player.glb', prefix: 'Pl', label: 'ผู้ชาย', icon: '👨', clip: { walk: 0.809, run: 3.409 }, walk: 1.05, run: 3.4 },
+  man: { model: 'models/farm/player.glb', prefix: 'Pl', label: 'ผู้ชาย', icon: '👨', clip: { walk: 0.809, run: 3.409 }, walk: 1.05, run: 3.4, head: 1.84 },
   // ผู้หญิง: เดินแบบ "Cool" ตัวตรง ก้าวเท้าเกือบเป็นเส้นเดียว
-  woman: { model: 'models/farm/woman.glb', prefix: 'Wm', label: 'ผู้หญิง', icon: '👩', clip: { walk: 1.337, run: 3.225 }, walk: 1.4, run: 3.2 },
+  woman: { model: 'models/farm/woman.glb', prefix: 'Wm', label: 'ผู้หญิง', icon: '👩', clip: { walk: 1.337, run: 3.225 }, walk: 1.4, run: 3.2, head: 1.74, sitLift: 0.04 },
+  // ยายเพ็ญ เมียตาเหม — เดินทำกิจวัตรเอง (npc: ผู้เล่นบังคับไม่ได้) · ก้าวสั้นเพราะนุ่งผ้าถุง · ไม่มีท่าวิ่ง
+  pen: { model: 'models/farm/pen.glb', prefix: 'Pn', label: 'ยายเพ็ญ', icon: '👵', clip: { walk: 0.637, run: 99 }, walk: 0.64, run: 0.64, head: 1.6, npc: true, sitLift: 0.08, sitFwd: 0.08 },
 };
+/** คนที่ผู้เล่นบังคับได้ */
+export const PLAYABLE_PEOPLE = Object.keys(PEOPLE).filter((k) => !PEOPLE[k].npc);
 /** รัศมีลำตัวสำหรับชนสิ่งของ (ม.) */
 export const PERSON_RADIUS = 0.3;
 const TURN = 9;
 const AI_TURN = 4.5;
 const FADE = 0.3;
-/** ท่าที่เล่นครั้งเดียวแล้วกลับไปยืน */
-const ONCE = new Set(['tend', 'stretch', 'wave']);
+/** ท่าที่เล่นวน — ท่าอื่นทั้งหมด (tend stretch wave laugh angry shrug highfive shake hug dance) เล่นครั้งเดียวแล้วกลับไปยืน */
+const LOOPED = new Set(['idle', 'walk', 'run', 'talk', 'sit', 'sleep', 'work']);
 
 /**
  * คนในฟาร์ม — ผู้เล่นบังคับ (drive) หรือเดินทำกิจวัตรเอง (FarmSystem ส่งคำสั่ง goTo / act ผ่าน PersonAI)
@@ -57,6 +62,12 @@ export class Person {
     /** เวลาที่เหลือของการก้าวหมุนตัวอยู่กับที่ */
     this.turning = 0;
     this.hitSphere = new THREE.Sphere(new THREE.Vector3(), 0.55);
+    // ตัวละครที่ผู้เล่นบังคับไม่ได้: ป้ายชื่อเหนือหัว (แบบตาเหม)
+    if (this.def.npc) {
+      this.label = nameLabel(this.def.label, this.def.icon);
+      this.label.position.y = this.def.head + 0.32;
+      this.group.add(this.label);
+    }
     /** จุดที่กล้องเล็ง (ระดับอก) */
     this.anchor = new THREE.Object3D();
     this.#play('idle', 0);
@@ -83,15 +94,28 @@ export class Person {
     return ray.intersectsSphere(this.hitSphere);
   }
 
-  /** เล่นท่าครั้งเดียว ('tend' ก้มดูแล · 'stretch' บิดขี้เกียจ · 'wave' โบกมือ) แล้วเรียก done */
-  act(name, done = null) {
+  hasClip(name) {
+    return !!this.actions[name];
+  }
+
+  /**
+   * เล่นท่า ('tend' ก้มดูแล · 'wave' โบกมือ · 'laugh' หัวเราะ · 'talk' พูด ฯลฯ) แล้วเรียก done
+   * ท่าวน ('talk') เล่นนาน duration วินาที · ท่าครั้งเดียวจบเองตามความยาวคลิป
+   */
+  act(name, done = null, { duration = 2.5 } = {}) {
     if (!this.actions[name]) {
       done?.();
       return;
     }
-    this.once = { name, done };
+    this.once = { name, done, until: LOOPED.has(name) ? duration : null };
     this.speed = 0;
-    this.#play(name);
+    this.#play(name, FADE, true);
+  }
+
+  /** ความยาวท่า (วินาที) — ท่าวนคืน fallback */
+  clipDuration(name, fallback = 2.5) {
+    const a = this.actions[name];
+    return a && !LOOPED.has(name) ? a.getClip().duration : fallback;
   }
 
   /** เลิกท่าครั้งเดียวกลางคัน (ผู้เล่นเริ่มเดิน) */
@@ -175,6 +199,15 @@ export class Person {
     collide?.(g.position);
     this.anchor.position.set(g.position.x, 1.1, g.position.z);
 
+    if (this.once?.until != null) {
+      this.once.until -= dt;
+      if (this.once.until <= 0) {
+        const done = this.once.done;
+        this.once = null;
+        this.#play('idle');
+        done?.();
+      }
+    }
     if (!this.once && this.turning > 0 && this.speed < 0.2) {
       // ก้าวหมุนตัวอยู่กับที่: ใช้ท่าเดินช้า ๆ
       this.#play('walk');
@@ -193,12 +226,12 @@ export class Person {
     this.mixer.update(dt);
   }
 
-  #play(name, fade = FADE) {
+  #play(name, fade = FADE, restart = false) {
     const next = this.actions[name] ?? this.actions.idle;
     if (!next) return;
-    if (next === this.clip && !ONCE.has(name)) return;
+    const once = !LOOPED.has(name);
+    if (next === this.clip && !once && !restart) return;
     next.reset();
-    const once = ONCE.has(name);
     next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     next.clampWhenFinished = once;
     // ท่ายืนเริ่มจุดสุ่ม — สองคนไม่ขยับพร้อมกัน

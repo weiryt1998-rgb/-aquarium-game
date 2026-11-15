@@ -12,6 +12,7 @@ import { sanitizeFetus } from './breeding.js';
 import { sanitizeGenes } from '../models/molly/genetics.js';
 import { sanitizeSunflower } from './garden.js';
 import { sanitizeFarm } from './farm.js';
+import { sanitizeSocial } from './social.js';
 
 /**
  * ทำความสะอาดข้อมูลเกมที่มาจากภายนอก (เซฟเก่าใน localStorage, จุดสำรอง) ให้อยู่ในรูปที่ถูกต้องเสมอ
@@ -152,6 +153,7 @@ export function sanitizeGame(raw, { now = Date.now() } = {}) {
 
   const sunflower = sanitizeSunflower(src.sunflower, now);
   const farm = sanitizeFarm(src.farm, now);
+  const social = sanitizeSocial(src.social, now);
 
   return {
     version: CONFIG.saveVersion,
@@ -171,6 +173,8 @@ export function sanitizeGame(raw, { now = Date.now() } = {}) {
     ...(sunflower ? { sunflower } : {}),
     // ฟาร์มวัวนอกบ้าน (ไม่มี = ยังไม่เคยซื้อวัว)
     ...(farm ? { farm } : {}),
+    // ความสัมพันธ์ของคนในฟาร์ม (ไม่มี = ค่าเริ่มต้น — src/shared/social.js)
+    ...(social ? { social } : {}),
   };
 }
 

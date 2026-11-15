@@ -33,6 +33,8 @@ import {
   waterPatch,
 } from './farm.js';
 import { getCowBreed } from '../data/animals.js';
+import { getSocial } from '../data/socials.js';
+import { BASE, PEOPLE_KEYS, PLAYABLE, applySocial, pairKey, relAt, socialBlock, withRel } from './social.js';
 import {
   addItem,
   atDecorLimit,
@@ -436,6 +438,27 @@ const HANDLERS = {
     Object.assign(cow, applyBarn(cow, c.in, t));
   },
 
+  /**
+   * คนในฟาร์มคุยกัน (ระบบสนทนา · src/systems/SocialSystem.js): a = คนที่ผู้เล่นบังคับ · b = คนฟัง · ok = สำเร็จไหม (สุ่มในเครื่อง)
+   * ผลต่อความสัมพันธ์คิดฝั่งนี้จากตาราง data/socials.js เสมอ (ไม่รับตัวเลขจากเครื่อง) · เวลา = ตอนที่คุยในเครื่อง (c.at)
+   */
+  social(game, meta, c, ctx) {
+    const a = PEOPLE_KEYS.includes(c.a) ? c.a : fail('invalid', 'a');
+    const b = PEOPLE_KEYS.includes(c.b) && c.b !== a ? c.b : fail('invalid', 'b');
+    // ต้องมีคนที่ผู้เล่นบังคับได้อยู่ในคู่ (ยายเพ็ญ/ตัวละครอีกคนเดินมาคุยกับผู้เล่นเองได้) · คู่ตาเหม↔ยายเพ็ญไม่บันทึก
+    const pairDef = BASE[pairKey(a, b)];
+    if (!pairDef || pairDef.npc || (!PLAYABLE.includes(a) && !PLAYABLE.includes(b))) fail('invalid', 'pair');
+    if (a === 'tahem') fail('invalid', 'a'); // ตาเหมไม่เริ่มบทสนทนาที่บันทึก
+    const def = getSocial(c.socialId) ?? fail('invalid', 'social');
+    if (typeof c.ok !== 'boolean') fail('invalid', 'ok');
+    const prev = game.social?.rel?.[pairKey(a, b)];
+    const t = actionTime({ at: prev?.at ?? 0 }, c.at, ctx.now);
+    const rel = relAt(game.social, a, b, t);
+    const block = socialBlock(def, a, b, rel);
+    if (block) fail(block === 'pair' ? 'invalid' : 'locked', block);
+    game.social = withRel(game.social, a, b, applySocial(rel, def, c.ok, t, pairKey(a, b)).rel);
+  },
+
   /** รดน้ำแปลงหญ้าในคอก (ฟรี · ได้เมื่อดินยังชื้นไม่ถึง CONFIG.farm.grass.wetAbove) */
   waterGrass(game, meta, c, ctx) {
     const patch = needInt(c.patch, 0, GRASS_PATCHES - 1, 'patch');
@@ -625,7 +648,7 @@ export const URGENT_COMMANDS = new Set([
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */
-export const SILENT_REJECTIONS = new Set(['fishDied', 'fishMated', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'selectFood', 'offlineIncome']);
+export const SILENT_REJECTIONS = new Set(['fishDied', 'fishMated', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'selectFood', 'offlineIncome', 'social']);
 
 export function applyCommand(game, meta, cmd, ctx) {
   const handler = Object.prototype.hasOwnProperty.call(HANDLERS, cmd?.type) ? HANDLERS[cmd.type] : null;
