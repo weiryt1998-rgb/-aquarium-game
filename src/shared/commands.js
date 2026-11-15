@@ -477,6 +477,12 @@ const HANDLERS = {
     return careCow(game, 'milk', c, ctx);
   },
 
+  /** ตั้งชื่อวัว (เหมือนตั้งชื่อปลา: ไม่เกิน 16 ตัวอักษร ว่าง = ชื่อสายพันธุ์) — ไม่ต้องเดินเวลาฟาร์ม */
+  renameCow(game, meta, c) {
+    const cow = needCow(game, c.cowId);
+    cow.name = cleanName(c.name, getCowBreed(cow.breedId)?.name ?? cow.name);
+  },
+
   /** ขายวัว (ตัวที่ตายแล้ว = นำออกจากคอก ได้ 0 เหรียญ) */
   sellCow(game, meta, c, ctx) {
     needCow(game, c.cowId);
@@ -648,7 +654,7 @@ export const URGENT_COMMANDS = new Set([
 ]);
 
 /** คำสั่งที่ถ้าถูกปฏิเสธไม่ต้องแจ้งผู้เล่น (เกิดจากการจำลองซ้อนกันหลายเครื่อง เช่น ปลาตายไปแล้วจากอีกเครื่อง) */
-export const SILENT_REJECTIONS = new Set(['fishDied', 'fishMated', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'selectFood', 'offlineIncome', 'social']);
+export const SILENT_REJECTIONS = new Set(['fishDied', 'fishMated', 'fishBorn', 'collectCoins', 'moveDecor', 'switchTank', 'renameFish', 'renameCow', 'selectFood', 'offlineIncome', 'social']);
 
 export function applyCommand(game, meta, cmd, ctx) {
   const handler = Object.prototype.hasOwnProperty.call(HANDLERS, cmd?.type) ? HANDLERS[cmd.type] : null;

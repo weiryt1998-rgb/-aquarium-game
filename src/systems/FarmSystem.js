@@ -13,6 +13,7 @@ import { HOUSE_NAV } from '../world/House.js';
 import { PlayerInput } from './PlayerInput.js';
 import { saveSettings } from '../core/settings.js';
 import { otherChar, resolveCharacter } from '../cloud/coop.js';
+import { cleanName } from '../shared/economy.js';
 import { getSocial } from '../data/socials.js';
 import { separate, steer } from '../entities/bodySpace.js';
 import { COW_BREEDS, getCowBreed } from '../data/animals.js';
@@ -654,6 +655,19 @@ export class FarmSystem {
   /** เหตุผลที่พาวัวเข้า (into = true) / ออกโรงนาไม่ได้ (null = ได้) */
   barnBlockOf(cowId, into) {
     return barnBlock(this.status, this.cowStatus(cowId), into);
+  }
+
+  /** ตั้งชื่อวัว (การ์ดวัว) — กฎเดียวกับฝั่งตรวจ (cleanName) · คืนชื่อที่ใช้จริง */
+  rename(cowId, name) {
+    const rec = findCow(this.record, cowId);
+    if (!rec) return null;
+    const next = cleanName(name, getCowBreed(rec.breedId)?.name ?? rec.name);
+    if (next === rec.name) return next;
+    rec.name = next;
+    this.status = this.current();
+    this.game.state.record({ type: 'renameCow', cowId, name: next });
+    this.game.state.save();
+    return next;
   }
 
   /** สลับ: อยู่ข้างนอก → พาเข้าโรงนา · อยู่ในโรงนา → ปล่อยออกคอกหญ้า (ฟรี) */

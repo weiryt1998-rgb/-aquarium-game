@@ -3147,3 +3147,18 @@ button.sm-center {
 .coop-badge.hidden {
   display: none;
 }
+
+/* การ์ดวัว: ช่องตั้งชื่อ (แบบการ์ดปลา) + เพศ */
+.cc-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 34px; /* เว้นที่ให้ปุ่มปิด */
+}
+
+.cc-title .fc-name {
+  flex: 1 1 auto;
+  width: 0;
+  max-width: 150px;
+  min-width: 0;
+}

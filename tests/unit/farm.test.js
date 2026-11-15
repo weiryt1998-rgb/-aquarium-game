@@ -496,3 +496,17 @@ test('โรงนา: พาเข้า/ปล่อยออก · ในโ�
   const clean = sanitizeFarm({ cows: [{ ...cow({ id: 'z' }), barn: 'x' }, { ...cow({ id: 'y' }), barn: 1 }] }, T0);
   assert.deepEqual(clean.cows.map((c) => c.barn), [0, 1]);
 });
+
+test('คำสั่งตั้งชื่อวัว: ตัดช่องว่าง/ยาวเกิน 16 · ว่าง = ชื่อสายพันธุ์ · ไม่มีวัว = not-found · ไม่เสียเงิน', () => {
+  const game = makeGame({ coins: 5000 });
+  run(game, { type: 'buyCow', breedId: 'brahman', cowId: 'cow_a', name: 'มะลิ' }, T0);
+  const coins = game.coins;
+  run(game, { type: 'renameCow', cowId: 'cow_a', name: '  ดอกแก้ว  ' }, T0 + 1000);
+  assert.equal(game.farm.cows[0].name, 'ดอกแก้ว');
+  run(game, { type: 'renameCow', cowId: 'cow_a', name: 'ก'.repeat(30) }, T0 + 2000);
+  assert.equal(game.farm.cows[0].name, 'ก'.repeat(16));
+  run(game, { type: 'renameCow', cowId: 'cow_a', name: '   ' }, T0 + 3000);
+  assert.equal(game.farm.cows[0].name, getCowBreed('brahman').name);
+  assert.equal(game.coins, coins);
+  rejects(() => run(game, { type: 'renameCow', cowId: 'cow_x', name: 'ใคร' }, T0), 'not-found');
+});

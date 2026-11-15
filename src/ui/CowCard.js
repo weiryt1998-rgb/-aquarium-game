@@ -40,6 +40,15 @@ export class CowCard {
         if (farm[action](this.cowId)) this.update();
       } else if (farm.act(action, this.cowId)) this.update();
     });
+    // ตั้งชื่อ (แบบการ์ดปลา): แตะชื่อแล้วพิมพ์ · Enter/แตะที่อื่น = บันทึก
+    root.addEventListener('change', (e) => {
+      if (!e.target.matches('.fc-name') || !this.cowId) return;
+      const name = this.game.farm.rename(this.cowId, e.target.value);
+      if (name) e.target.value = name;
+    });
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('.fc-name')) e.target.blur();
+    });
   }
 
   get isOpen() {
@@ -90,7 +99,7 @@ export class CowCard {
       <button class="btn-close" data-action="close" title="ปิด">${ICONS.close}</button>
       <div class="fc-head">
         <span class="gc-icon cow-icon" data-ref="icon">🐄</span>
-        <div><b class="gc-title" data-ref="name"></b><small data-ref="sub"></small></div>
+        <div><div class="cc-title"><input class="fc-name" data-ref="name" maxlength="16" title="แตะเพื่อเปลี่ยนชื่อ"><span data-ref="sex"></span></div><small data-ref="sub"></small></div>
       </div>
       ${body}`;
     this.refs = collectRefs(this.root);
@@ -113,7 +122,9 @@ export class CowCard {
     const now = Date.now();
     const breed = breedNow(s, now) ?? getCowBreed(s.breedId);
     const sexed = canBreed(s);
-    r.name.innerHTML = !sexed ? escapeHtml(s.name) : `${escapeHtml(s.name)} <span class="gender ${bull ? 'm' : 'f'}" title="${bull ? 'ตัวผู้' : 'ตัวเมีย'}">${bull ? '♂' : '♀'}</span>`;
+    // กำลังพิมพ์ชื่ออยู่ = ไม่ทับ (การ์ดอัปเดตทุกวินาที)
+    if (document.activeElement !== r.name) r.name.value = s.name;
+    r.sex.innerHTML = !sexed ? '' : `<span class="gender ${bull ? 'm' : 'f'}" title="${bull ? 'ตัวผู้' : 'ตัวเมีย'}">${bull ? '♂' : '♀'}</span>`;
     const age = s.born > 0 ? `เกิดในฟาร์มเมื่อ ${formatDuration((now - s.born) / 1000)} ที่แล้ว` : `อยู่ฟาร์มมา ${formatDuration((now - s.boughtAt) / 1000)}`;
     r.sub.textContent = `${breed?.name ?? ''} · ${age}`;
     const sellLabel = (text) => (r.sellLabel.textContent = this.confirmSell ? 'ยืนยัน?' : text);

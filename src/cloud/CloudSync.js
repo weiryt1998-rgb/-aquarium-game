@@ -200,7 +200,7 @@ export class CloudSync {
       last.at = cmd.at;
       return true;
     }
-    if ((cmd.type === 'moveDecor' && last.decorId === cmd.decorId) || cmd.type === 'selectFood' || (cmd.type === 'renameFish' && last.fishId === cmd.fishId)) {
+    if ((cmd.type === 'moveDecor' && last.decorId === cmd.decorId) || cmd.type === 'selectFood' || (cmd.type === 'renameFish' && last.fishId === cmd.fishId) || (cmd.type === 'renameCow' && last.cowId === cmd.cowId)) {
       Object.assign(last, cmd);
       return true;
     }
